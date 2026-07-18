@@ -48,6 +48,13 @@ module Hcode
         CommandInfo.new("/reload", "Reload config.toml and session state"),
         CommandInfo.new("/web", "Print session URL for the Web UI"),
         CommandInfo.new("/settings", "Show current configuration"),
+        CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md"),
+        CommandInfo.new("/export-debug-zip", "Export session debug bundle (.tar.gz)"),
+        CommandInfo.new("/experiments", "Show experimental feature flags"),
+        CommandInfo.new("/mcp", "Show MCP server status"),
+        CommandInfo.new("/plugins", "Show plugin status"),
+        CommandInfo.new("/login", "Show how to configure credentials"),
+        CommandInfo.new("/logout", "Clear credentials from config"),
       ]
 
       def self.names : Array(String)

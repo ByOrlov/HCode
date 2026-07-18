@@ -2,6 +2,7 @@ require "json"
 require "http/client"
 require "uri"
 require "file"
+require "file_utils"
 require "dir"
 require "io"
 require "regex"
@@ -588,6 +589,19 @@ module Hcode
         todo_tool = agent.tools.get("TodoList")
         return nil unless todo_tool.is_a?(Hcode::Tools::TodoList)
         todo_tool.todos.clear
+        nil
+      end
+
+      # `/export-debug-zip` reads wire.jsonl/state.json from the session dir.
+      app.on_session_dir = -> : String? do
+        dir = store.session_dir
+        dir.empty? ? nil : dir
+      end
+      # `/logout` clears the configured API keys and re-saves config.toml.
+      app.on_logout = -> : Nil do
+        config.api_key = ""
+        config.zai_api_key = ""
+        config.save
         nil
       end
 

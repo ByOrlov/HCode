@@ -208,6 +208,13 @@ module Hcode
       # Reload `config.toml` + session state without restarting the process.
       @on_reload : (-> Nil)? = nil
       property on_reload : (-> Nil)?
+      # Returns the on-disk directory for the current session (where
+      # `wire.jsonl` / `state.json` live). Used by `/export-debug-zip`.
+      @on_session_dir : (-> String?)? = nil
+      property on_session_dir : (-> String?)?
+      # Logout: clear stored credentials (API key from config.toml).
+      @on_logout : (-> Nil)? = nil
+      property on_logout : (-> Nil)?
       # Persist a queued message to JSONL (so drain survives resume). The
       # wire event type is the argument: "turn.prompt" or "turn.steer".
       property on_persist_queued : (String, String -> Nil)?
@@ -977,6 +984,59 @@ module Hcode
         nil
       end
 
+      # Bundle the current session (wire.jsonl, state.json) plus a manifest
+      # (hcode version, provider, model, session id) into a tar.gz the user
+      # can share for debugging. Output goes to the OS temp dir. Returns nil
+      # when `tar` is unavailable or the session dir is unknown. Mirrors TS
+      # `handleExportDebugZipCommand` (which additionally includes the global
+      # log — we add the ~/.hcode log file too when it exists).
+      private def export_debug_bundle : String?
+        return nil if @session_id.empty?
+        return nil unless session_dir = @on_session_dir.try(&.call)
+        return nil unless Process.find_executable("tar")
+
+        tmp_dir = ENV["TMPDIR"]? || "/tmp"
+        bundle_dir = File.join(tmp_dir, "hcode-debug-#{Random::Secure.hex(4)}")
+        Dir.mkdir_p(bundle_dir)
+
+        # Manifest with version / provider / model / timestamps.
+        manifest_path = File.join(bundle_dir, "manifest.txt")
+        manifest = String.build do |s|
+          s << "hcode_version=#{Hcode::VERSION}\n"
+          s << "build=#{Hcode.build_date || "dev"}\n"
+          s << "crystal=#{Crystal::VERSION}\n"
+          s << "session_id=#{@session_id}\n"
+          s << "provider=#{@provider_name}\n"
+          s << "model=#{@model}\n"
+          s << "permission=#{@permission_mode}\n"
+          s << "exported_at=#{Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")}\n"
+        end
+        File.write(manifest_path, manifest)
+
+        # Copy session records if present.
+        wire_src = File.join(session_dir, "wire.jsonl")
+        File.copy(wire_src, File.join(bundle_dir, "wire.jsonl")) if File.exists?(wire_src)
+        state_src = File.join(session_dir, "state.json")
+        File.copy(state_src, File.join(bundle_dir, "state.json")) if File.exists?(state_src)
+
+        # Copy the global log when present.
+        global_log = File.join(@home, ".hcode", "hcode.log")
+        if File.exists?(global_log)
+          File.copy(global_log, File.join(bundle_dir, "hcode.log"))
+        end
+
+        out_path = File.join(tmp_dir, "hcode-debug-#{Time.utc.to_unix}.tar.gz")
+        begin
+          Process.run("tar", ["-czf", out_path, "-C", File.dirname(bundle_dir), File.basename(bundle_dir)],
+                      output: Process::Redirect::Close, error: Process::Redirect::Close)
+          out_path if File.exists?(out_path)
+        rescue
+          nil
+        ensure
+          FileUtils.rm_r(bundle_dir) rescue nil
+        end
+      end
+
       private def handle_slash_command(input : String) : Nil
         parsed = CommandRegistry.parse(input)
         unless parsed
@@ -1215,6 +1275,97 @@ module Hcode
             s << "Git branch: #{@git_branch.empty? ? "(none)" : @git_branch}\n"
           end
           @messages << Message.new("system", settings.strip)
+        when "/init"
+          # Mirrors TS `handleInitCommand` → `session.init()`: defer any
+          # user messages typed during the run, then send the AGENTS.md
+          # generation prompt as a regular turn. The agent walks the repo
+          # (Bash, Read, Glob) and writes AGENTS.md to the project root.
+          if @agent_busy
+            @messages << Message.new("error", "Cannot /init while a turn is running. Wait or interrupt first.")
+          else
+            @defer_user_messages = true
+            @messages << Message.new("system", "Analyzing codebase and generating AGENTS.md...")
+            @dirty = true
+            spawn do
+              begin
+                start_turn(INIT_PROMPT)
+              ensure
+                @defer_user_messages = false
+              end
+            end
+          end
+        when "/export-debug-zip"
+          # Mirrors TS `handleExportDebugZipCommand`: bundle the session
+          # records (wire.jsonl, state.json), a small manifest (version /
+          # provider / model / timestamps), and the global log into a
+          # tar.gz the user can share for debugging. Falls back to printing
+          # the session dir path if tar is unavailable.
+          path = export_debug_bundle
+          if path
+            @messages << Message.new("system", "Debug bundle exported to: #{path}")
+          else
+            @messages << Message.new("error", "Failed to export debug bundle (tar not available?).")
+          end
+        when "/experiments"
+          # Mirrors TS `showExperimentsPanel`: enumerate experimental flags
+          # and their current state. hcode has no registry yet — flags are
+          # env-driven (HCODE_EXPERIMENTAL_<NAME>) plus the master switch
+          # HCODE_EXPERIMENTAL_FLAG=1. Surface the env so the user knows
+          # what is on.
+          master = ENV["HCODE_EXPERIMENTAL_FLAG"]?
+          env_flags = ENV.keys.select { |k|
+            k.starts_with?("HCODE_EXPERIMENTAL_") && k != "HCODE_EXPERIMENTAL_FLAG"
+          }.sort
+          body = String.build do |s|
+            s << "Master switch (HCODE_EXPERIMENTAL_FLAG): #{master || "off"}\n"
+            if env_flags.empty?
+              s << "No individual experimental flags set.\n"
+            else
+              s << "Active flags:\n"
+              env_flags.each do |k|
+                s << "  #{k} = #{ENV[k]}\n"
+              end
+            end
+            s << "\nFlags are read at startup; restart hcode after changing them."
+          end
+          @messages << Message.new("system", body.strip)
+        when "/mcp"
+          # Mirrors TS `showMcpServers`. hcode.cr has no MCP client yet —
+          # surface that clearly rather than silently no-op'ing.
+          @messages << Message.new("system",
+            "MCP servers: not supported in this build.\n" \
+            "MCP client support is tracked as future work; use the TS version if you need it now.")
+        when "/plugins"
+          # Mirrors TS `handlePluginsCommand`. hcode.cr has no plugin runtime.
+          @messages << Message.new("system",
+            "Plugins: not supported in this build.\n" \
+            "Plugin runtime is tracked as future work.")
+        when "/login"
+          # hcode has no in-process OAuth device-code flow (no src/auth/
+          # yet). Surface the manual config options so the user can still
+          # authenticate.
+          cfg_path = File.join(@home, ".hcode", "config.toml")
+          cred_path = File.join(@home, ".kimi-code", "credentials", "kimi-code.json")
+          body = String.build do |s|
+            s << "Authentication options:\n"
+            s << "  1. API key in config.toml:\n"
+            s << "       [provider.moonshot]\n"
+            s << "       api_key = \"sk-...\"\n"
+            s << "     Path: #{cfg_path}\n"
+            s << "  2. Moonshot OAuth credentials (JSON file from kimi-code TS):\n"
+            s << "       #{cred_path}\n"
+            s << "  3. Environment variable:\n"
+            s << "       HCODE_API_KEY=sk-...\n\n"
+            s << "OAuth device-code login (/login interactive) is tracked as future work."
+          end
+          @messages << Message.new("system", body.strip)
+        when "/logout"
+          if cb = @on_logout
+            cb.call
+            @messages << Message.new("system", "Logged out. API key cleared from config.")
+          else
+            @messages << Message.new("error", "Logout is not wired up.")
+          end
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
@@ -1274,6 +1425,32 @@ module Hcode
       PERMISSION_MODES = ["manual", "auto", "yolo"]
       EFFORT_LEVELS   = ["off", "low", "medium", "high"]
       THEMES          = ["dark", "light"]
+
+      # Prompt sent by `/init` — mirrors TS `DEFAULT_INIT_PROMPT`
+      # (`packages/agent-core/src/profile/default/init.md`).
+      INIT_PROMPT = <<-TEXT
+        You are a software engineering expert with many years of programming experience. Please explore the current project directory to understand the project's architecture and main details.
+
+        Task requirements:
+        1. Analyze the project structure and identify key configuration files (such as pyproject.toml, package.json, Cargo.toml, shard.yml, etc.).
+        2. Understand the project's technology stack, build process and runtime architecture.
+        3. Identify how the code is organized and main module divisions.
+        4. Discover project-specific development conventions, testing strategies, and deployment processes.
+
+        After the exploration, do a thorough summary of your findings and write it to the `AGENTS.md` file in the project root, replacing the file's previous content. If the file already exists, read it first and carry forward whatever is still accurate — the result should be one coherent, up-to-date file, not an append.
+
+        For your information, `AGENTS.md` is a file intended to be read by AI coding agents. Expect the reader of this file to know nothing about the project.
+
+        You should compose this file according to the actual project content. Do not make any assumptions or generalizations. Ensure the information is accurate and useful. You must use the natural language that is mainly used in the project's comments and documentation.
+
+        Popular sections that people usually write in `AGENTS.md` are:
+
+        - Project overview
+        - Build and test commands
+        - Code style guidelines
+        - Testing instructions
+        - Security considerations
+      TEXT
 
       private def open_permission_selector : Nil
         @permission_list.show("Select permission mode", PERMISSION_MODES)
@@ -1842,6 +2019,8 @@ module Hcode
           lines.concat(render_thinking_block(msg.content, msg.expanded?, cols))
         when "step_summary"
           lines.concat(render_step_summary(msg))
+        when "plan_box"
+          lines.concat(render_plan_box(msg, cols))
         end
 
         lines
@@ -1972,10 +2151,10 @@ module Hcode
       end
 
       # Render the plan body via the markdown renderer (already width-aware),
-      # falling back to simple wrapping if markdown fails.
+      # falling back to simple wrapping if markdown returns nothing.
       private def render_plan_body_lines(body : String, width : Int32) : Array(String)
         rendered = @markdown.render(body, width)
-        rendered.presence ? rendered : wrap_thinking(body, width)
+        rendered.empty? ? wrap_thinking(body, width) : rendered
       end
 
       private def render_thinking_block(content : String, expanded : Bool, cols : Int32) : Array(String)
