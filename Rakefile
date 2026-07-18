@@ -35,6 +35,15 @@ namespace :mock do
   end
 end
 
+namespace :mock do
+  namespace :components do
+    desc "Render the editor input box across wrapping test cases (self-test + LLM-friendly output)"
+    task :input do
+      sh "crystal run scripts/components/input_demo.cr --warnings none --no-color"
+    end
+  end
+end
+
 desc "Remove build artifacts"
 task :clean do
   rm_f "hcode"

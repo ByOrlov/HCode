@@ -137,7 +137,7 @@ module Hcode
         end
       end
 
-      private def parse_one(bytes : Array(UInt8)) : {KeyEvent?, Int32}
+      def parse_one(bytes : Array(UInt8)) : {KeyEvent?, Int32}
         return {nil, 0} if bytes.empty?
 
         first = bytes[0]
@@ -203,6 +203,10 @@ module Hcode
           end
         when 10
           ev = KeyEvent.new(Key::Enter)
+          ev.alt = true
+          {ev, 2}
+        when 127, 8
+          ev = KeyEvent.new(Key::Backspace)
           ev.alt = true
           {ev, 2}
         else

@@ -77,7 +77,11 @@ module Hcode
             false
           end
         when .backspace?
-          backspace
+          if key.alt
+            delete_word_back
+          else
+            backspace
+          end
           true
         when .delete?
           delete_forward
@@ -199,6 +203,34 @@ module Hcode
           @lines.delete_at(@cursor_row)
           @cursor_row -= 1
         end
+      end
+
+      private def delete_word_back : Nil
+        line = @lines[@cursor_row]
+        col = @cursor_col
+
+        if col == 0
+          if @cursor_row > 0
+            prev_line = @lines[@cursor_row - 1]
+            @cursor_col = prev_line.size
+            @lines[@cursor_row - 1] = prev_line + line
+            @lines.delete_at(@cursor_row)
+            @cursor_row -= 1
+          end
+          return
+        end
+
+        i = col - 1
+        while i > 0 && line[i].ascii_whitespace?
+          i -= 1
+        end
+        word_start = i
+        while word_start > 0 && !line[word_start - 1].ascii_whitespace?
+          word_start -= 1
+        end
+
+        @lines[@cursor_row] = line[0...word_start] + line[col..]
+        @cursor_col = word_start
       end
 
       private def delete_forward : Nil
