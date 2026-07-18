@@ -34,6 +34,14 @@ module Hcode
         CommandInfo.new("/export-md", "Export session to markdown file"),
         CommandInfo.new("/add-dir", "Add working directory"),
         CommandInfo.new("/theme", "Switch theme (dark/light)"),
+        CommandInfo.new("/version", "Show version information"),
+        CommandInfo.new("/usage", "Show token usage and context"),
+        CommandInfo.new("/queue", "Show or clear the queued messages"),
+        CommandInfo.new("/editor", "Open $EDITOR to compose a message"),
+        CommandInfo.new("/copy", "Copy last assistant message to clipboard"),
+        CommandInfo.new("/permission", "Switch permission mode (manual/auto/yolo)"),
+        CommandInfo.new("/effort", "Show thinking effort (low/medium/high)"),
+        CommandInfo.new("/plan", "Toggle plan mode"),
       ]
 
       def self.names : Array(String)

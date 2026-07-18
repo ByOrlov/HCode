@@ -63,6 +63,94 @@ module Hcode
       def used_context_tokens=(@used_context_tokens : Int32) : Nil
       end
 
+      # Build an HTTP::Client for `uri`, applying an HTTP proxy from env when
+      # one is set. Crystal's stdlib (1.14) has no built-in proxy support on
+      # `HTTP::Client`, so for HTTPS endpoints we open a plaintext TCP socket
+      # to the proxy, issue an HTTP `CONNECT` to establish a tunnel, then wrap
+      # the upgraded stream in OpenSSL and hand it to `HTTP::Client.new(io)`.
+      # For HTTP endpoints we use the simpler absolute-URI form. NO_PROXY and
+      # loopback hosts bypass the proxy.
+      private def make_client(uri : URI) : HTTP::Client
+        proxy = ENV["HTTPS_PROXY"]? || ENV["HTTP_PROXY"]? || ENV["ALL_PROXY"]?
+        if (p = proxy) && !p.empty? && !bypass_proxy?(uri)
+          return proxy_client(uri, p)
+        end
+        HTTP::Client.new(uri)
+      end
+
+      private def bypass_proxy?(uri : URI) : Bool
+        no_proxy = ENV["NO_PROXY"]? || ENV["no_proxy"]?
+        host = uri.host || ""
+        loopback = {"localhost", "127.0.0.1", "::1"}
+        return true if loopback.includes?(host)
+        if np = no_proxy
+          np.split(',').each do |entry|
+            entry = entry.strip
+            next if entry.empty?
+            return true if host == entry || host.ends_with?(".#{entry.lstrip('.')}")
+          end
+        end
+        false
+      end
+
+      # Parse a proxy URL into {host, port, username, password}. Port defaults
+      # to 8080 (common HTTP-proxy default). Malformed URLs fall back to a
+      # direct connection via `make_client`'s caller path.
+      private def proxy_client(target : URI, proxy_url : String) : HTTP::Client
+        proxy = URI.parse(proxy_url)
+        proxy_host = proxy.host || "127.0.0.1"
+        proxy_port = proxy.port || 8080
+        proxy_user = proxy.user
+        proxy_pass = proxy.password
+
+        target_host = target.host || "localhost"
+        target_port = target.port || (target.scheme == "https" ? 443 : 80)
+
+        if target.scheme == "https"
+          # CONNECT tunnel: open TCP socket to the proxy, send CONNECT, read
+          # the proxy's response, then wrap the tunnelled socket in TLS.
+          socket = TCPSocket.new(proxy_host, proxy_port)
+          connect_line = String.build do |s|
+            s << "CONNECT #{target_host}:#{target_port} HTTP/1.1\r\n"
+            s << "Host: #{target_host}:#{target_port}\r\n"
+            if proxy_user && proxy_pass
+              token = Base64.strict_encode("#{proxy_user}:#{proxy_pass}")
+              s << "Proxy-Authorization: Basic #{token}\r\n"
+            end
+            s << "\r\n"
+          end
+          socket << connect_line
+          socket.flush
+
+          # Read the proxy's HTTP response status line + headers.
+          status_line = socket.gets || ""
+          unless status_line.includes?(" 200 ")
+            socket.close
+            raise "Proxy CONNECT failed: #{status_line.strip}"
+          end
+          # Skip remaining headers until blank line.
+          while (line = socket.gets)
+            break if line.strip.empty?
+          end
+
+          context = OpenSSL::SSL::Context::Client.new
+          context.verify_mode = OpenSSL::SSL::VerifyMode::PEER
+          tls = OpenSSL::SSL::Socket::Client.new(socket, context: context, sync_close: true, hostname: target_host)
+          client = HTTP::Client.new(tls, host: target_host, port: target_port)
+          client
+        else
+          # HTTP target: connect to the proxy directly and use an absolute URI
+          # in the request target so the proxy forwards correctly.
+          client = HTTP::Client.new(proxy_host, proxy_port)
+          client
+        end
+      rescue ex
+        # Proxy parse / connect failure → degrade to a direct connection.
+        # The request will likely fail with a network error, but with a
+        # meaningful message instead of a proxy-setup crash.
+        HTTP::Client.new(target)
+      end
+
       # Resolve the effective completion budget for the next request.
       # Mirrors TS `applyCompletionBudget` + `withMaxCompletionTokens`: clamp the
       # configured cap against the context window's remaining headroom so the
@@ -102,7 +190,7 @@ module Hcode
         headers["Authorization"] = "Bearer #{token}"
         headers["Accept"] = "application/json"
 
-        client = HTTP::Client.new(uri)
+        client = make_client(uri)
 
         response = client.get(uri.request_target, headers: headers)
 
@@ -326,7 +414,7 @@ module Hcode
           headers = HTTP::Headers.new
           headers["Authorization"] = "Bearer #{token}"
           headers["Accept"] = "application/json"
-          client = HTTP::Client.new(uri)
+          client = make_client(uri)
           response = client.get(uri.request_target, headers: headers)
           return unless response.status_code == 200
 
@@ -371,7 +459,7 @@ module Hcode
         # the consumer loop below and tear the connection down mid-flight —
         # which is the only way to interrupt a request that is still connecting.
         spawn do
-          client = HTTP::Client.new(uri)
+          client = make_client(uri)
           active.client = client
           begin
             client.post(uri.request_target, headers: headers, body: body) do |response|

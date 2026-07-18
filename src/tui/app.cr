@@ -95,6 +95,9 @@ module Hcode
       # dispatcher doesn't see an empty queue + idle phase and race itself.
       @dispatch_pending : Bool = false
       @run_turn_cb : (String -> Nil)?
+      # Plan mode mirrors TS: while on, tools that mutate state are blocked
+      # and the agent only researches. Toggled via `/plan` or `EnterPlanMode`.
+      @plan_mode : Bool = false
       @queue : Array(QueuedMessage) = [] of QueuedMessage
       @spin_phase : Int32 = 0
       @dirty : Bool = true
@@ -167,6 +170,13 @@ module Hcode
       property on_rename : (String -> Nil)?
       property on_persist_queued : (String, String -> Nil)?
       property on_steer : (String -> Nil)?
+      # Thinking-effort selectors (off/low/medium/high). Effort strings are
+      # provider-specific in shape but the TUI uses the neutral words.
+      property on_get_effort : (-> String)?
+      property on_set_effort : (String -> Nil)?
+      # Plan-mode toggle: receives the next desired state, returns true if it
+      # was applied (false → not wired up / not supported by this provider).
+      property on_plan_mode : (Bool -> Bool)?
       # Persist a queued message to JSONL (so drain survives resume). The
       # wire event type is the argument: "turn.prompt" or "turn.steer".
       property on_persist_queued : (String, String -> Nil)?
@@ -421,7 +431,15 @@ module Hcode
           merge_turn_steps
         when .info?
           @status = event.text
-          @is_compacting = true if event.text.starts_with?("Context") && event.text.includes?("compact")
+          # Compaction start message ("Context near limit, triggering compaction...")
+          # sets the compacting flag; the completion message
+          # ("Context compacted (N → M messages)") clears it.
+          if event.text.includes?("compacting") || event.text.includes?("compaction")
+            @is_compacting = true
+          elsif event.text.includes?("compacted")
+            @is_compacting = false
+            @spinner.stop
+          end
         when .error?
           @messages << Message.new("error", event.text)
           @spinner.stop
@@ -822,6 +840,36 @@ module Hcode
         @dirty = true
       end
 
+      # Copy `text` to the system clipboard using whichever native helper is
+      # available on this OS. Falls back silently — a missing helper should
+      # never break the session. Mirrors TS `utils/clipboard.ts`.
+      private def copy_to_clipboard(text : String) : Nil
+        cmd = clipboard_command
+        return unless cmd
+        begin
+          io = IO::Memory.new(text)
+          Process.run(cmd[0], cmd[1], input: io, output: Process::Redirect::Close, error: Process::Redirect::Close)
+        rescue
+        end
+      end
+
+      # Resolve the first available clipboard helper as `{program, [args]}`.
+      # Order mirrors the TS version (pbcopy → wl-copy → xclip → xsel).
+      private def clipboard_command : Tuple(String, Array(String))?
+        candidates = [
+          {"pbcopy", [] of String},
+          {"wl-copy", [] of String},
+          {"xclip", ["-selection", "clipboard"]},
+          {"xsel", ["--clipboard", "--input"]},
+        ]
+        candidates.each do |c|
+          if Process.find_executable(c[0])
+            return c
+          end
+        end
+        nil
+      end
+
       private def handle_slash_command(input : String) : Nil
         parsed = CommandRegistry.parse(input)
         unless parsed
@@ -875,10 +923,17 @@ module Hcode
           @messages.clear
           @messages << Message.new("system", "Conversation cleared.")
         when "/compact"
-          @messages << Message.new("system", "Compacting context...")
-          @dirty = true
-          @on_compact.try(&.call)
-          when "/status"
+          if @agent_busy
+            @messages << Message.new("error", "Cannot compact while a turn is running. Wait or interrupt first.")
+          else
+            @messages << Message.new("system", "Compacting context...")
+            @is_compacting = true
+            @status = "Compacting..."
+            @spinner.start
+            @dirty = true
+            @on_compact.try(&.call)
+          end
+        when "/status"
             stats = String.build do |s|
               s << "Model: #{@model}\n"
               s << "Permission: #{@permission_mode}\n"
@@ -938,6 +993,67 @@ module Hcode
             @messages << Message.new("system", "Theme: light")
           else
             @messages << Message.new("error", "Unknown theme: #{args}. Available: dark, light")
+          end
+        when "/version"
+          version = Hcode::VERSION
+          build = Hcode.build_date || "dev"
+          @messages << Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}")
+        when "/usage"
+          usage_stats = String.build do |s|
+            s << "Provider: #{@provider_name}\n"
+            s << "Model: #{@model}\n"
+            if @max_context_tokens > 0
+              used_pct = @context_percent.round(1)
+              s << "Context: #{@context_tokens} / #{@max_context_tokens} tokens (#{used_pct}%)\n"
+            else
+              s << "Context: #{@context_percent.round(1)}%\n"
+            end
+            s << "Messages: #{@messages.size}\n"
+            s << "Queue: #{@queue.size}\n"
+          end
+          @messages << Message.new("system", usage_stats.strip)
+        when "/editor"
+          handle_external_editor
+        when "/copy"
+          last_assistant = @messages.reverse.find { |m| m.role == "assistant" }
+          if last_assistant
+            copy_to_clipboard(last_assistant.content)
+            @messages << Message.new("system", "Copied last assistant message to clipboard.")
+          else
+            @messages << Message.new("error", "No assistant message to copy.")
+          end
+        when "/permission"
+          case args.strip.downcase
+          when "manual"
+            @permission_mode = "manual"
+            @messages << Message.new("system", "Permission mode: manual")
+          when "auto"
+            @permission_mode = "auto"
+            @messages << Message.new("system", "Permission mode: auto")
+          when "yolo"
+            @permission_mode = "yolo"
+            @messages << Message.new("system", "Permission mode: yolo")
+          when ""
+            @messages << Message.new("system", "Current: #{@permission_mode}. Usage: /permission manual|auto|yolo")
+          else
+            @messages << Message.new("error", "Unknown mode: #{args}. Available: manual, auto, yolo")
+          end
+        when "/effort"
+          effort = @on_get_effort.try(&.call) || "unset"
+          if args.empty?
+            @messages << Message.new("system", "Thinking effort: #{effort}. Usage: /effort low|medium|high")
+          elsif cb = @on_set_effort
+            cb.call(args.strip.downcase)
+            @messages << Message.new("system", "Thinking effort set to: #{args.strip.downcase}")
+          else
+            @messages << Message.new("system", "Thinking effort selection is not wired up.")
+          end
+        when "/plan"
+          if @on_plan_mode.try(&.call(!@plan_mode))
+            @plan_mode = !@plan_mode
+            @messages << Message.new("system", "Plan mode: #{@plan_mode ? "on" : "off"}")
+          else
+            @messages << Message.new("error", "Plan mode is not wired up.")
           end
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")

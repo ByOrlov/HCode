@@ -41,6 +41,13 @@ module Hcode
       def thinking_effort=(effort : String?) : Nil
       end
 
+      # Returns the current thinking-effort hint or nil. The base Provider
+      # always returns nil (no concept of effort); OpenAIChatProvider
+      # overrides to expose the configured value.
+      def thinking_effort : String?
+        nil
+      end
+
       def max_context_tokens=(tokens : Int32?) : Nil
       end
 

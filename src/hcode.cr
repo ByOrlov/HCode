@@ -74,6 +74,14 @@ require "./tui/app"
 
 module Hcode
   VERSION = "0.1.0"
+  # Build timestamp. Crystal has no compile-time -D flag like C, so we read
+  # it from the SOURCE_DATE_EPOCH env var at build time when present (repro
+  # builds set this); otherwise fall back to "dev".
+  BUILD_DATE = (::ENV["SOURCE_DATE_EPOCH"]?).try { |s| Time.unix(s.to_i).to_s("%Y-%m-%d") } || "dev"
+
+  def self.build_date : String?
+    BUILD_DATE == "dev" ? nil : BUILD_DATE
+  end
 
   # Headless print-mode palette, ported from the original Moonshot kimi-code
   # TUI dark theme (apps/kimi-code/src/tui/theme/colors.ts).
@@ -564,6 +572,21 @@ module Hcode
 
       app.on_fetch_models = -> : Array(String) do
         agent.provider.fetch_models
+      end
+
+      # Thinking-effort selector (off/low/medium/high/...). Backed by the
+      # provider's `thinking_effort` property; setting it persists into the
+      # next chat request via `build_request`.
+      app.on_get_effort = -> : String do
+        agent.provider.thinking_effort || "off"
+      end
+      app.on_set_effort = ->(effort : String) do
+        normalized = case effort.downcase
+                     when "off", "none", "0" then nil
+                     else effort.downcase
+                     end
+        agent.provider.thinking_effort = normalized
+        nil
       end
 
       # Steer: inject the text into the running turn's context so the model
