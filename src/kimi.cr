@@ -1,0 +1,699 @@
+require "json"
+require "http/client"
+require "uri"
+require "file"
+require "dir"
+require "io"
+require "regex"
+require "time"
+require "random/secure"
+require "system"
+require "colorize"
+
+require "./llm/types"
+require "./llm/token_counter"
+require "./llm/provider"
+require "./llm/openai_chat_provider"
+require "./llm/kimi_provider"
+require "./llm/zai_provider"
+require "./llm/mock_provider"
+require "./tools/tool"
+require "./tools/registry"
+require "./tools/line_endings"
+require "./tools/sensitive"
+require "./tools/path_access"
+require "./tools/run_rg"
+require "./tools/bash"
+require "./tools/read"
+require "./tools/write"
+require "./tools/edit"
+require "./tools/glob"
+require "./tools/grep"
+require "./tools/todo_list"
+require "./tools/agent_swarm"
+require "./context/memory"
+require "./context/budget"
+require "./context/undo"
+require "./context/overflow"
+require "./loop/events"
+require "./loop/abort"
+require "./loop/dedup"
+require "./loop/agent"
+require "./permission/manager"
+require "./config/config"
+require "./prompt/template"
+require "./prompt/agents_md"
+require "./prompt/system_prompt"
+require "./session/store"
+require "./session/index"
+require "./session/lifecycle"
+require "./tui/terminal"
+require "./tui/char_width"
+require "./tui/theme"
+require "./tui/input"
+require "./tui/component"
+require "./tui/text"
+require "./tui/spinner"
+require "./tui/editor"
+require "./tui/markdown"
+require "./tui/select_list"
+require "./tui/commands"
+require "./tui/help_panel"
+require "./tui/app"
+
+module Kimi
+  VERSION = "0.1.0"
+
+  # Headless print-mode palette, ported from the original kimi-code TUI dark
+  # theme (apps/kimi-code/src/tui/theme/colors.ts).
+  C_SUCCESS = Colorize::ColorRGB.new(0x4E, 0xC8, 0x7E)
+  C_ERROR   = Colorize::ColorRGB.new(0xE8, 0x54, 0x54)
+  C_PRIMARY = Colorize::ColorRGB.new(0x4F, 0xA8, 0xFF)
+  C_SHELL   = Colorize::ColorRGB.new(0xBD, 0x93, 0xF9)
+  C_DIM     = Colorize::ColorRGB.new(0x88, 0x88, 0x88)
+  C_MUTED   = Colorize::ColorRGB.new(0x6B, 0x6B, 0x6B)
+
+  # Raised when a provider cannot be built from the current config (missing
+  # credentials, unknown name, ...). At startup it is rescued and turned into
+  # an exit; at runtime the /provider selector catches it to show an inline
+  # error without leaving the TUI.
+  class ProviderConfigError < Exception
+  end
+
+  class CLI
+    def self.run(argv : Array(String)) : Nil
+      prompt = nil
+      tui_prompt = nil
+      work_dir = Dir.current
+      model = nil
+      session_id = nil
+      permission_mode = nil
+      show_help = false
+      show_version = false
+      continue_session = false
+      hi_mode = false
+
+      i = 0
+      while i < argv.size
+        case argv[i]
+        when "-p", "--prompt"
+          i += 1
+          prompt = argv[i]? || ""
+        when "--tui-prompt"
+          i += 1
+          tui_prompt = argv[i]? || ""
+        when "-d", "--work-dir"
+          i += 1
+          work_dir = argv[i]? || Dir.current
+        when "-m", "--model"
+          i += 1
+          model = argv[i]
+        when "-s", "--session"
+          i += 1
+          session_id = argv[i]
+        when "-c", "--continue"
+          continue_session = true
+        when "--permission"
+          i += 1
+          permission_mode = argv[i]
+        when "--yolo"
+          permission_mode = "yolo"
+        when "--auto"
+          permission_mode = "auto"
+        when "--hi"
+          hi_mode = true
+        when "-h", "--help"
+          show_help = true
+        when "-v", "--version"
+          show_version = true
+        end
+        i += 1
+      end
+
+      if show_help
+        print_usage
+        return
+      end
+
+      if show_version
+        puts "KimiO #{VERSION}"
+        return
+      end
+
+      config = Config::Config.load
+
+      config.model = model if model
+      if pm = permission_mode
+        config.permission_mode = pm
+      end
+      config.ensure_kimi_home
+
+      home = ENV["HOME"]? || "/tmp"
+
+      oauth_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
+      oauth = LLM::OAuthCredentials.load(oauth_path)
+
+      provider = build_provider(config, oauth)
+
+      if hi_mode
+        run_hi(provider)
+        return
+      end
+
+      memory = Context::Memory.new
+      memory.max_context_tokens = config.max_context_tokens
+
+      tools = Tools::Registry.new
+      tools.register(Tools::Bash.new(work_dir))
+      tools.register(Tools::Read.new(work_dir))
+      tools.register(Tools::Write.new(work_dir))
+      tools.register(Tools::Edit.new(work_dir))
+      tools.register(Tools::Glob.new(work_dir))
+      tools.register(Tools::Grep.new(work_dir))
+      tools.register(Tools::TodoList.new)
+      tools.register(Tools::AgentSwarm.new)
+
+      permission = Permission::Manager.new(Permission::Mode.parse(config.permission_mode))
+
+      home = ENV["HOME"]? || "/tmp"
+      lifecycle = Kimi::Session::Lifecycle.new(home)
+      store = if sid = session_id
+                # Resolve across every workspace + legacy flat layout.
+                entry = lifecycle.index.get(sid)
+                if entry
+                  Kimi::Session::Store.new(entry.path)
+                else
+                  # Fall back to the literal flat-layout path for ids the
+                  # Index has not indexed yet (e.g. created mid-session).
+                  Kimi::Session::Store.new(File.join(home, ".kimi", "sessions", sid))
+                end
+              elsif continue_session
+                ws_id = Kimi::Session::Index.workspace_id(work_dir)
+                entry = lifecycle.index.find_most_recent(ws_id) ||
+                        lifecycle.index.find_most_recent
+                unless entry
+                  STDERR.puts "No previous session found to continue."
+                  exit(1)
+                end
+                Kimi::Session::Store.new(entry.path)
+              else
+                lifecycle.create(work_dir)
+              end
+
+      if continue_session || session_id
+        store.replay(memory)
+      end
+
+      # Bind the session to the provider so the backend caches the prompt
+      # prefix keyed by the session id — without this every step reprocesses
+      # the full growing context from scratch.
+      sid_for_cache = (store.read_state.try(&.id) || store.meta_id? || session_id || Random::Secure.hex(12))
+      configure_provider(provider, config, sid_for_cache)
+
+      agent = Loop::Agent.new(provider, memory, tools, permission)
+
+      system_prompt = Prompt::SystemPrompt.build(work_dir)
+
+      if prompt
+        run_headless(prompt, agent, system_prompt, store)
+      else
+        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt)
+      end
+    end
+
+    # Startup entry: build the configured provider, exiting the process with a
+    # clear message if config is incomplete.
+    private def self.build_provider(config, oauth) : LLM::Provider
+      build_named_provider(config.provider_name, config, oauth)
+    rescue ex : ProviderConfigError
+      STDERR.puts "Error: #{ex.message}"
+      exit(1)
+    end
+
+    # Build a provider by name from the current config. Raises
+    # ProviderConfigError on missing credentials or an unknown name, so callers
+    # that must not exit (e.g. the /provider selector at runtime) can rescue
+    # and surface the message instead.
+    def self.build_named_provider(name : String, config, oauth) : LLM::Provider
+      case name
+      when "kimi"
+        if oauth.nil? && config.api_key.empty?
+          raise ProviderConfigError.new(
+            "No Kimi credentials found. Either:\n" \
+            "  1. Login with kimi-code (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
+            "  2. Set KIMI_API_KEY environment variable")
+        end
+        LLM::KimiProvider.new(
+          model: config.model,
+          endpoint: config.endpoint,
+          oauth: oauth,
+          api_key: config.api_key,
+          temperature: config.temperature,
+        )
+      when "zai"
+        if config.zai_api_key.empty?
+          raise ProviderConfigError.new(
+            "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable " \
+            "(or [provider.zai] api_key in config).")
+        end
+        LLM::ZaiProvider.new(
+          model: config.zai_model,
+          endpoint: config.zai_endpoint,
+          api_key: config.zai_api_key,
+          provider_label: "zai",
+        )
+      when "zai-cp"
+        if config.zai_api_key.empty?
+          raise ProviderConfigError.new(
+            "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
+        end
+        LLM::ZaiProvider.new(
+          model: config.zai_cp_model,
+          endpoint: config.zai_cp_endpoint,
+          api_key: config.zai_api_key,
+          provider_label: "zai-cp",
+        )
+      when "mock"
+        LLM::MockProvider.new(LLM::MockProvider.script_from_env || LLM::MockProvider::DEFAULT_SCRIPT.dup)
+      else
+        available = LLM::KNOWN_PROVIDERS.map(&.name).join(", ")
+        raise ProviderConfigError.new("Unknown provider '#{name}'. Available: #{available}")
+      end
+    end
+
+    # Fold the runtime request-config into a freshly built provider: the
+    # session prompt-cache key (so the backend caches the prompt prefix across
+    # steps), the configured thinking effort, and the model context window
+    # (used to clamp the per-step completion budget). The setters are no-ops on
+    # providers that don't override them (e.g. Mock), so this is safe to call
+    # uniformly on any backend.
+    def self.configure_provider(provider, config, cache_key : String?) : Nil
+      provider.thinking_effort = config.thinking_effort
+      provider.max_context_tokens = config.max_context_tokens
+      provider.prompt_cache_key = cache_key
+    end
+
+    # Smoke test: send "hi" to the configured provider and report the
+    # result. No tools, no system prompt, no agent loop — just a raw
+    # chat call to verify the key, endpoint, model, and balance.
+    private def self.run_hi(provider : LLM::Provider) : Nil
+      puts "Provider: #{provider.name}"
+      puts "Model:    #{provider.model_name}"
+      puts "Prompt:   \"hi\""
+      puts "────────────────────────────────────────"
+
+      messages = [LLM::Message.user("hi")]
+      text = IO::Memory.new
+
+      begin
+        result = provider.chat(messages, nil) do |part|
+          case part
+          when LLM::TextPart
+            print part.text.colorize.fore(C_DIM)
+            STDOUT.flush
+            text << part.text
+          end
+        end
+
+        puts ""
+        puts ""
+        puts "● OK — replied in #{result.usage.total_tokens} tokens"
+          .colorize.fore(C_SUCCESS)
+        exit(0)
+      rescue ex : LLM::ApiError
+        STDERR.puts ""
+        STDERR.puts "✗ HTTP #{ex.status_code}: #{ex.message}"
+          .colorize.fore(C_ERROR)
+        exit(1)
+      rescue ex
+        STDERR.puts ""
+        STDERR.puts "✗ #{ex.message}".colorize.fore(C_ERROR)
+        exit(1)
+      end
+    end
+
+    private def self.run_headless(prompt, agent, system_prompt, store)
+      store.append_simple("turn.prompt", "prompt", prompt)
+
+      Signal::INT.trap do
+        STDERR.puts "\nInterrupted."
+        agent.cancel
+      end
+
+      assistant_buf = IO::Memory.new
+      assistant_open = false
+      thinking_open = false
+      pending_calls = {} of String => {String, String}
+
+      begin
+        result = agent.run_turn(prompt, system_prompt) do |event|
+          case event.type
+          when .step_begin?
+            assistant_buf.clear
+          when .thinking_delta?
+            unless thinking_open
+              puts
+              thinking_open = true
+            end
+            print event.text.colorize.fore(:light_gray).dim
+            STDOUT.flush
+          when .text_delta?
+            if thinking_open
+              puts
+              puts
+              thinking_open = false
+            end
+            unless assistant_open
+              print " ● ".colorize.fore(:light_gray).dim
+              assistant_open = true
+            end
+            assistant_buf << event.text
+            print event.text.colorize.fore(:light_gray).dim
+            STDOUT.flush
+          when .assistant_text?
+            store.append("assistant.text", {"content" => JSON::Any.new(assistant_buf.to_s)})
+            if assistant_open
+              puts
+              puts
+              assistant_open = false
+            end
+          when .tool_call_start?
+            store.append("tool.call", {
+              "tool_call_id" => JSON::Any.new(event.tool_call_id),
+              "tool_name"    => JSON::Any.new(event.tool_name),
+              "arguments"    => JSON::Any.new(event.tool_args),
+            })
+            pending_calls[event.tool_call_id] = {event.tool_name, event.tool_args}
+          when .tool_result?
+            store.append("tool.result", {
+              "tool_call_id" => JSON::Any.new(event.tool_call_id),
+              "content"      => JSON::Any.new(event.text),
+            })
+            if assistant_open
+              puts
+              puts
+              assistant_open = false
+            end
+            name, args = pending_calls.delete(event.tool_call_id) || {"Tool", ""}
+            render_tool_block(name, args, event.text, event.is_error)
+          when .info?
+            puts "[#{event.text}]".colorize.yellow
+          when .error?
+            STDERR.puts "Error: #{event.text}".colorize.red
+          end
+        end
+
+        puts
+        puts "● Done (#{result.steps} steps, " \
+             "#{result.usage.total_tokens} tokens)".colorize.fore(C_SUCCESS)
+        puts
+      rescue ex : Loop::UserCancellationError
+        agent.context.add_user("Interrupted by user")
+        puts "\nInterrupted by user.".colorize.yellow
+      rescue ex
+        STDERR.puts "Fatal: #{ex.message}".colorize.red
+        ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["KIMI_DEBUG"]?
+        exit(1)
+      end
+    end
+
+    private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil)
+      app = TUI::App.new
+      app.model = agent.provider.model_name
+      app.provider_name = config.provider_name
+      app.permission_mode = config.permission_mode
+      app.max_context_tokens = agent.context.max_context_tokens
+      app.home = home
+      app.work_dir = work_dir
+
+      lifecycle = Session::Lifecycle.new(home)
+
+      permission.approval_callback = ->(tool_name : String, args : String, danger : String?) do
+        app.request_approval(tool_name, args, danger)
+      end
+
+      app.on_clear = ->{ agent.context.clear }
+      app.on_undo = ->{ agent.context.undo(1) }
+      app.on_cancel = ->{ agent.cancel }
+      app.on_compact = -> : Nil do
+        spawn do
+          agent.trigger_compaction_tui(system_prompt) do |event|
+            app.on_event(event)
+          end
+        end
+      end
+      app.on_new_session = ->{
+        agent.context.clear
+        new_store = lifecycle.create(work_dir)
+        store.session_dir = new_store.session_dir
+        store.wire_path = new_store.wire_path
+        store.state_path = new_store.state_path
+        store.ensure_wire
+        app.session_id = store.read_state.try(&.id) || ""
+        nil
+      }
+      app.on_resume_session = ->(path : String) do
+        resumed = Session::Store.new(path)
+        agent.context.clear
+        resumed.replay(agent.context)
+        store.session_dir = resumed.session_dir
+        store.wire_path = resumed.wire_path
+        store.state_path = resumed.state_path
+        app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
+        app.load_transcript_from(agent.context)
+        nil
+      end
+      app.on_fork = ->{
+        forked = lifecycle.fork(store, work_dir)
+        store.session_dir = forked.session_dir
+        store.wire_path = forked.wire_path
+        store.state_path = forked.state_path
+        app.session_id = forked.read_state.try(&.id) || ""
+        nil
+      }
+      app.on_archive = ->{
+        id = store.read_state.try(&.id) || store.meta_id? || File.basename(store.session_dir)
+        lifecycle.archive(id)
+      }
+      app.on_rename = ->(title : String) do
+        id = store.read_state.try(&.id) || store.meta_id? || File.basename(store.session_dir)
+        entry = lifecycle.index.get(id)
+        if entry
+          lifecycle.rename(entry, title)
+        else
+          # Fallback: write state directly when the index has not indexed it yet.
+          meta = store.read_state || Session::StateMeta.new(id)
+          meta.title = title
+          store.write_state(meta)
+        end
+      end
+      app.on_export = ->(path : String) {
+        export_session(agent.context, path)
+      }
+      app.on_provider_change = ->(name : String) : Bool do
+        begin
+          provider = build_named_provider(name, config, oauth)
+          configure_provider(provider, config, store.meta_id?)
+          agent.swap_provider!(provider)
+          config.provider_name = name
+          config.save
+          app.model = provider.model_name
+          true
+        rescue ex : ProviderConfigError
+          app.add_message("error", "Failed to switch provider: #{ex.message}")
+          false
+        rescue ex
+          app.add_message("error", "Failed to switch provider: #{ex.message}")
+          false
+        end
+      end
+
+      app.on_model_change = ->(model : String) : Bool do
+        begin
+          case config.provider_name
+          when "kimi"
+            config.model = model
+          when "zai"
+            config.zai_model = model
+          when "zai-cp"
+            config.zai_cp_model = model
+          end
+          provider = build_named_provider(config.provider_name, config, oauth)
+          configure_provider(provider, config, store.meta_id?)
+          agent.swap_provider!(provider)
+          config.save
+          true
+        rescue ex : ProviderConfigError
+          app.add_message("error", "Failed to switch model: #{ex.message}")
+          false
+        rescue ex
+          app.add_message("error", "Failed to switch model: #{ex.message}")
+          false
+        end
+      end
+
+      app.on_fetch_models = -> : Array(String) do
+        agent.provider.fetch_models
+      end
+
+      app.session_id = store.meta_id? || ""
+
+      app.run(initial_prompt: initial_prompt) do |prompt_text|
+        store.append_simple("turn.prompt", "prompt", prompt_text)
+
+        begin
+          result = agent.run_turn(prompt_text, system_prompt) do |event|
+            case event.type
+            when .text_delta?
+              app.on_event(Loop::Event.text_delta(event.text))
+            when .thinking_delta?
+              app.on_event(event)
+            when .assistant_text?
+              store.append("assistant.text", {"content" => JSON::Any.new(event.text)})
+              app.on_event(event)
+            when .tool_call_start?
+              store.append("tool.call", {
+                "tool_call_id" => JSON::Any.new(event.tool_call_id),
+                "tool_name"    => JSON::Any.new(event.tool_name),
+                "arguments"    => JSON::Any.new(event.tool_args),
+              })
+              app.on_event(event)
+            when .tool_result?
+              store.append("tool.result", {
+                "tool_call_id" => JSON::Any.new(event.tool_call_id),
+                "content"      => JSON::Any.new(event.text),
+              })
+              app.on_event(event)
+            when .step_begin?, .step_end?, .info?, .error?
+              app.on_event(event)
+              app.context_percent = agent.context.token_usage_percent
+              app.context_tokens = agent.context.token_count
+            end
+          end
+
+          app.context_percent = agent.context.token_usage_percent
+          app.context_tokens = agent.context.token_count
+        rescue ex : Loop::UserCancellationError
+          agent.context.add_user("Interrupted by user")
+          app.show_interrupted
+        rescue ex
+          app.on_event(Loop::Event.error(ex.message.to_s))
+        end
+      end
+    end
+
+    private def self.export_session(memory, path : String) : Nil
+      content = String.build do |s|
+        s << "# Session Export\n\n"
+        memory.messages.each do |msg|
+          case msg.role
+          when "user"
+            s << "## User\n\n#{msg.content}\n\n"
+          when "assistant"
+            s << "## Assistant\n\n#{msg.content}\n\n"
+          when "tool"
+            s << "### Tool: #{msg.tool_calls.try(&.first).try(&.name) || "??"}\n\n"
+            s << "```\n#{msg.content}\n```\n\n"
+          end
+        end
+      end
+      File.write(path, content)
+    end
+
+    private def self.render_tool_block(name : String, args : String, output : String, is_error : Bool) : Nil
+      display = output
+      exit_code = -1
+      # Bash embeds a non-zero exit as "[exit code: N]"; lift it out so we can
+      # render it as a dedicated red footer instead of raw text.
+      if m = display.match(/(?:\n)?\[exit code: (\d+)\]\s*\z/)
+        exit_code = m[1]?.try(&.to_i?) || -1
+        display = display.sub(/(?:\n)?\[exit code: \d+\]\s*\z/, "")
+      end
+      failed = is_error || exit_code > 0
+
+      marker = failed ? "✗".colorize.fore(C_ERROR) : "●".colorize.fore(C_SUCCESS)
+      label_c = failed ? C_ERROR : C_PRIMARY
+      header = name == "Bash" ? "Ran a command" : name
+      puts " #{marker} #{header.colorize.fore(label_c).bold}"
+
+      parsed = args.empty? ? nil : begin
+        JSON.parse(args)
+      rescue JSON::ParseException
+        nil
+      end
+      echo_tool_args(name, parsed)
+
+      trimmed = display.strip
+      unless trimmed.empty?
+        out_c = failed ? C_ERROR : C_MUTED
+        trimmed.each_line do |line|
+          puts "   #{line.colorize.fore(out_c)}"
+        end
+      end
+
+      if failed
+        msg = exit_code > 0 ? "   Command failed with exit code: #{exit_code}." : "   Command failed."
+        puts msg.colorize.fore(C_ERROR)
+      end
+      puts
+    end
+
+    private def self.echo_tool_args(name : String, parsed : JSON::Any?) : Nil
+      return if parsed.nil?
+      case name
+      when "Bash"
+        if cmd = parsed["command"]?.try(&.as_s?)
+          puts "   #{"$ ".colorize.fore(C_SHELL)}#{cmd.colorize.fore(C_DIM).dim}"
+        end
+      when "Read", "Write", "Edit"
+        if path = (parsed["path"]? || parsed["filePath"]?).try(&.as_s?)
+          puts "   file: #{path}".colorize.fore(C_DIM).dim
+        end
+      when "Glob"
+        if pat = parsed["pattern"]?.try(&.as_s?)
+          puts "   pattern: #{pat}".colorize.fore(C_DIM).dim
+        end
+      when "Grep"
+        if pat = parsed["pattern"]?.try(&.as_s?)
+          puts "   search: #{pat}".colorize.fore(C_DIM).dim
+        end
+      end
+    end
+
+    private def self.print_usage : Nil
+      puts <<-USAGE
+        KimiO #{VERSION} — Crystal agent for KimiO
+
+        Usage:
+          kimio -p "your prompt here" [options]
+
+        Options:
+          -p, --prompt <text>     Prompt to send to the agent
+          -d, --work-dir <path>   Working directory (default: current)
+          -c, --continue          Resume the most recent session
+          -m, --model <name>      Model name (default: kimi-k2)
+          -s, --session <id>      Resume session by ID
+          --permission <mode>     manual | auto | yolo
+          --yolo                  Auto-approve all tool calls
+          --auto                  Auto-approve safe operations
+          --hi                    Smoke test: send "hi" to the API and report
+          -v, --version           Show version
+          -h, --help              Show this help
+
+          (no -p flag)            Interactive TUI mode
+                                  Type / for slash commands
+
+        Environment:
+          KIMI_API_KEY            API key for Kimi/Moonshot
+          KIMI_ENDPOINT           API endpoint (default: https://api.moonshot.ai/v1)
+          KIMI_MODEL              Default model name
+          KIMI_HOME               Config directory (default: ~/.kimi)
+          HTTP_PROXY              HTTP/HTTPS proxy URL
+          ALL_PROXY               SOCKS proxy URL
+          KIMI_DEBUG              Show backtraces on error
+        USAGE
+    end
+  end
+end
+
+Kimi::CLI.run(ARGV)

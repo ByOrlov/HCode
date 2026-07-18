@@ -1,0 +1,111 @@
+module Kimi
+  module Context
+    struct ContextMessage
+      property message : LLM::Message
+      property origin : MessageOrigin = MessageOrigin::Normal
+
+      def initialize(@message : LLM::Message, @origin : MessageOrigin = MessageOrigin::Normal)
+      end
+    end
+
+    enum MessageOrigin
+      Normal
+      Injection
+      CompactionSummary
+    end
+
+    class Memory
+      getter history : Array(ContextMessage) = [] of ContextMessage
+      getter token_count : Int32 = 0
+      property max_context_tokens : Int32 = 262144
+
+      def add_user(content : String) : Nil
+        @history << ContextMessage.new(LLM::Message.user(content))
+        update_token_count
+      end
+
+      def add_assistant(text : String, tool_calls : Array(LLM::ToolCall)? = nil) : Nil
+        msg = LLM::Message.assistant(text, tool_calls)
+        @history << ContextMessage.new(msg)
+        update_token_count
+      end
+
+      def add_tool_result(tool_call_id : String, content : String) : Nil
+        msg = LLM::Message.tool(content, tool_call_id)
+        @history << ContextMessage.new(msg)
+        update_token_count
+      end
+
+      def add_injection(content : String) : Nil
+        msg = LLM::Message.system(content)
+        @history << ContextMessage.new(msg, MessageOrigin::Injection)
+        update_token_count
+      end
+
+      def apply_compaction(summary : String, kept_messages : Array(ContextMessage)) : Nil
+        @history.clear
+        @history << ContextMessage.new(
+          LLM::Message.system(summary),
+          MessageOrigin::CompactionSummary
+        )
+        @history.concat(kept_messages)
+        update_token_count
+      end
+
+      def undo(count : Int32 = 1) : Nil
+        Undo.undo!(self, count)
+      end
+
+      # Force a token-count recalculation after external mutation of
+      # `@history` (e.g. by `Context::Undo`). The normal add/remove paths
+      # call `update_token_count` themselves; this is the escape hatch for
+      # code that rewrites the array in place.
+      def recalculate_token_count : Nil
+        update_token_count
+      end
+
+      # Overwrite the token count with the authoritative figure reported by
+      # the provider's usage object (prompt + completion tokens). The local
+      # estimator used by `update_token_count` is only a stopgap between
+      # round-trips; once the API returns the real number it supersedes the
+      # estimate. A zero/non-positive value is ignored so a provider that
+      # reports no usage does not clobber the estimate.
+      def update_token_count_from_usage(prompt_tokens : Int32, completion_tokens : Int32) : Nil
+        total = prompt_tokens + completion_tokens
+        @token_count = total if total > 0
+      end
+
+      def clear : Nil
+        @history.clear
+        @token_count = 0
+      end
+
+      def prune_injections : Nil
+        @history.reject!(&.origin.injection?)
+        update_token_count
+      end
+
+      def messages : Array(LLM::Message)
+        @history.map(&.message)
+      end
+
+      def token_usage_percent : Float64
+        return 0.0 if @max_context_tokens == 0
+        (@token_count.to_f64 / @max_context_tokens.to_f64) * 100.0
+      end
+
+      def near_limit? : Bool
+        @token_count >= (@max_context_tokens * 0.9).to_i32
+      end
+
+      def last_user_message_index : Int32?
+        @history.rindex { |cm| cm.message.role == "user" && cm.origin.normal? }
+      end
+
+      private def update_token_count : Nil
+        msgs = @history.map(&.message)
+        @token_count = LLM::TokenCounter.estimate(msgs)
+      end
+    end
+  end
+end

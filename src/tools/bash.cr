@@ -1,0 +1,250 @@
+module Kimi
+  module Tools
+    class Bash < Tool
+      # Foreground-only execution. Background task management
+      # (run_in_background / auto-background-on-timeout) is not available —
+      # there is no BackgroundManager in kimi.cr — so a foreground command
+      # that hits its timeout is killed, mirroring the JS config
+      # `autoBackgroundOnTimeout: false`.
+      DEFAULT_TIMEOUT_S = 60
+      MAX_TIMEOUT_S     = 300
+
+      # In-tool output cap. The context budget (Context::Budget) separately
+      # truncates at 50k chars for the model context; this cap mirrors the JS
+      # BashTool's 10 MB foreground buffer so a runaway command (e.g. `yes`,
+      # `cat /dev/urandom`) cannot exhaust memory before the budget runs.
+      MAX_OUTPUT_BYTES            = 10 * 1024 * 1024
+      OUTPUT_TRUNCATION_SENTINEL  = "\n[...truncated]\nOutput is truncated to fit in the message."
+
+      @work_dir : String
+
+      def initialize(@work_dir : String = Dir.current)
+      end
+
+      def name : String
+        "Bash"
+      end
+
+      def description : String
+        %(Execute a `bash` command. Use this for shell semantics — pipes, env, processes, git, package managers, build/test runners, anything genuinely interactive or multi-step.
+
+Translate these to a dedicated tool instead:
+- `cat` / `head` / `tail` (known path) → `Read`
+- `sed` / `awk` (in-place edit) → `Edit`
+- `echo > file` / `cat <<EOF` → `Write`
+- `find` / recursive `ls` to locate files by name pattern → `Glob` (plain `ls <known-directory>` is fine for listing a directory)
+- `grep` / `rg` (search file contents) → `Grep`
+
+The dedicated tools keep raw stdout out of the conversation; that is why they are worth reaching for whenever one fits.
+
+Output:
+The stdout and stderr will be combined and returned as a string. The output may be truncated if it is too long. If the command exits non-zero, the output ends with a `Command failed with exit code: N` line; a command killed by its timeout ends with its own message instead.
+
+Guidelines for safety and security:
+- Each shell tool call will be executed in a fresh shell environment. The shell variables, current working directory changes, and the shell history is not preserved between calls. To run a command in a particular directory, pass the `cwd` argument (or use absolute paths) rather than relying on a `cd` from an earlier call.
+- The tool call will return after the command is finished. You shall not use this tool to execute an interactive command or a command that may run forever. For possibly long-running commands, set the `timeout` argument in seconds. The default is #{DEFAULT_TIMEOUT_S}s; the maximum is #{MAX_TIMEOUT_S}s; a command that hits its timeout is killed.
+- Avoid using `..` to access files or directories outside of the working directory.
+- Avoid modifying files outside of the working directory unless explicitly instructed to do so.
+- Never run commands that require superuser privileges unless explicitly instructed to do so.
+
+Guidelines for efficiency:
+- Use `&&` to chain commands that genuinely depend on each other, e.g. `npm install && npm test`. Independent read-only commands (separate `git show`, `ls`, or status checks) should be issued as separate parallel Bash calls in one response, not chained into a single call — chaining serializes their execution and mixes their output.
+- Use `;` to run commands sequentially regardless of success/failure.
+- Use `||` for conditional execution (run second command only if first fails).
+- Use pipe operations (`|`) and redirections (`>`, `>>`) to chain input and output between commands.
+- Always quote file paths containing spaces with double quotes (e.g., cd "/path with spaces/").
+- Compose multi-step logic in a single call with `if` / `case` / `for` / `while` control flows.)
+      end
+
+      def parameters : JSON::Any
+        JSON.parse(%({
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The command to execute."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "The working directory in which to run the command. When omitted, the command runs in the session's working directory."
+            },
+            "timeout": {
+              "type": "integer",
+              "description": "Optional timeout in seconds. The default is #{DEFAULT_TIMEOUT_S}s; the maximum is #{MAX_TIMEOUT_S}s. A command that hits its timeout is killed.",
+              "default": #{DEFAULT_TIMEOUT_S}
+            },
+            "description": {
+              "type": "string",
+              "description": "A short description of what this command does. Shown in the approval UI."
+            }
+          },
+          "required": ["command"]
+        }))
+      end
+
+      def execute(input : JSON::Any) : ToolResult
+        command = input["command"]?.try(&.to_s) || ""
+        return ToolResult.error("Command cannot be empty.") if command.empty?
+
+        # run_in_background requires a BackgroundManager (not present in
+        # kimi.cr). Reject it explicitly instead of silently running a
+        # long-lived command in the foreground and killing it at the cap.
+        if input["run_in_background"]?.try(&.as_bool?) == true
+          return ToolResult.error(
+            "Background execution is not available for this agent. " \
+            "Do not set run_in_background=true.",
+          )
+        end
+
+        timeout_s = parse_timeout(input["timeout"]?)
+        cwd = input["cwd"]?.try(&.to_s)
+        effective_cwd = (cwd.nil? || cwd.empty?) ? @work_dir : cwd
+
+        spawn_env = build_env
+
+        process = Process.new(
+          command,
+          shell: true,
+          env: spawn_env,
+          input: Process::Redirect::Pipe,
+          output: Process::Redirect::Pipe,
+          error: Process::Redirect::Pipe,
+          chdir: effective_cwd,
+        )
+        # Close stdin immediately so interactive commands (`cat`, `read`,
+        # `python -c 'input()'`) receive EOF instead of hanging the tool.
+        process.input.close
+
+        stdout_ch = Channel(Capture).new
+        stderr_ch = Channel(Capture).new
+
+        spawn { stdout_ch.send(capture(process.output)) }
+        spawn { stderr_ch.send(capture(process.error)) }
+
+        status_ch = Channel(Process::Status).new
+        spawn { status_ch.send(process.wait) }
+
+        timed_out = false
+        status : Process::Status
+
+        select
+        when s = status_ch.receive
+          status = s
+        when timeout(timeout_s.seconds)
+          timed_out = true
+          # Two-phase kill: SIGTERM, then SIGKILL after a grace window —
+          # mirrors the JS BackgroundManager kill ladder.
+          process.terminate rescue nil
+          select
+          when s = status_ch.receive
+            status = s
+          when timeout(2.seconds)
+            LibC.kill(process.pid, 9) rescue nil
+            status = status_ch.receive
+          end
+        end
+
+        out_cap = stdout_ch.receive
+        err_cap = stderr_ch.receive
+
+        truncated = out_cap.truncated? || err_cap.truncated?
+        result = combine_output(out_cap.text, err_cap.text)
+        result += OUTPUT_TRUNCATION_SENTINEL if truncated
+
+        if timed_out
+          ToolResult.error("#{result}\n[Command timed out after #{timeout_s}s and was killed]")
+        elsif !status.normal_exit?
+          ToolResult.error("#{result}\n[killed by signal]")
+        elsif status.exit_code != 0
+          # Keep the `[exit code: N]` trailer format: the TUI
+          # (kimi.cr render_tool_block) parses it to render a red footer.
+          ToolResult.error("#{result}\n[exit code: #{status.exit_code}]")
+        else
+          ToolResult.success(result.strip)
+        end
+      rescue ex : File::NotFoundError
+        ToolResult.error("Failed to execute command: shell not found")
+      rescue ex : IO::Error
+        ToolResult.error("Failed to execute command: #{ex.message}")
+      rescue ex
+        ToolResult.error("Unexpected error: #{ex.message}")
+      end
+
+      private def parse_timeout(raw : JSON::Any?) : Int32
+        value = raw.try(&.as_i?) || raw.try(&.as_s?).try(&.to_i?) || DEFAULT_TIMEOUT_S
+        return DEFAULT_TIMEOUT_S if value <= 0
+        {value, MAX_TIMEOUT_S}.min
+      end
+
+      # Hardened child env. Crystal's `Process.new(env:)` merges with the
+      # parent env (inheriting PATH, HOME, …), so this hash only overrides.
+      private def build_env : Hash(String, String?)
+        env = {} of String => String?
+        env["NO_COLOR"] = "1"
+        env["TERM"] = "dumb"
+        # Default to '0' so git fails fast on private remotes if a TTY happens
+        # to be inherited; honour an explicit ambient value when set.
+        env["GIT_TERMINAL_PROMPT"] = ENV["GIT_TERMINAL_PROMPT"]? || "0"
+        env["SHELL"] = ENV["SHELL"]? || "/bin/sh"
+        env
+      end
+
+      private def combine_output(out_str : String, err_str : String) : String
+        String.build do |s|
+          s << out_str unless out_str.empty?
+          unless err_str.empty?
+            s << "\n" unless out_str.empty?
+            s << err_str
+          end
+        end
+      end
+
+      # Read up to MAX_OUTPUT_BYTES from an IO, then stop and mark truncated.
+      # Never raises: a killed/errored process closes its pipe mid-read, and
+      # the capture fiber must still hand back whatever it collected so the
+      # main fiber's `Channel#receive` cannot deadlock.
+      private def capture(io : IO) : Capture
+        mem = IO::Memory.new
+        buf = Bytes.new(8192)
+        total = 0
+        truncated = false
+        begin
+          loop do
+            read = io.read(buf)
+            break if read == 0
+            remaining = MAX_OUTPUT_BYTES - total
+            if read > remaining
+              mem.write(buf[0, remaining])
+              truncated = true
+              # Drain the rest so the child does not block on a full pipe,
+              # discarding everything past the cap.
+              drain(io, buf)
+              break
+            end
+            mem.write(buf[0, read])
+            total += read
+          end
+        rescue IO::Error
+          # Process killed or stream closed — return what we have so far.
+        end
+        Capture.new(mem.to_s, truncated)
+      end
+
+      private def drain(io : IO, buf : Bytes) : Nil
+        loop do
+          break if io.read(buf) == 0
+        end
+      rescue IO::Error
+        # Best-effort drain; ignore a closed stream.
+      end
+
+      private struct Capture
+        getter text : String
+        getter? truncated : Bool
+
+        def initialize(@text : String, @truncated : Bool)
+        end
+      end
+    end
+  end
+end

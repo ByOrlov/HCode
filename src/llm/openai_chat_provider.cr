@@ -1,0 +1,436 @@
+module Kimi
+  module LLM
+    # Mutable holder shared between the fiber driving the HTTP request and the
+    # fiber consuming its chunks, so the consumer can close the connection on
+    # abort and surface any error the worker captured.
+    private class StreamingSession
+      property client : HTTP::Client?
+      property error : Exception?
+    end
+
+    # Shared transport for any backend that speaks the OpenAI Chat Completions
+    # wire format over SSE (Kimi/Moonshot, Z.AI/Zhipu, ...).
+    #
+    # Subclasses supply the auth token (api key, OAuth, ...) via `token` and a
+    # short backend id via `name`. Everything else — request shaping, SSE
+    # parsing, tool-call accumulation, abort-aware streaming — is identical and
+    # lives here.
+    abstract class OpenAIChatProvider < Provider
+      property model : String
+      property endpoint : String
+      property api_key : String = ""
+      property temperature : Float64?
+      property max_tokens : Int32?
+      # Configured hard cap on output tokens. When set it overrides `max_tokens`
+      # on the wire (Kimi prefers `max_completion_tokens` for reasoning models,
+      # which share the budget with `reasoning_content`).
+      property max_completion_tokens : Int32?
+      # Stable session key reused across steps so the backend caches the prompt
+      # prefix. Set once per session; read in `chat`.
+      property prompt_cache_key : String? = nil
+      # Human thinking-effort token (off/low/medium/high/max/on). Translated to
+      # the provider-specific wire shape by `build_request` according to
+      # `thinking_wire`.
+      property thinking_effort : String? = nil
+      # Model context window, used to clamp the per-step completion budget.
+      property max_context_tokens : Int32? = nil
+      # Reasoning models share the output budget with reasoning; without an
+      # explicit cap a large input can leave no room for a visible answer.
+      @used_context_tokens : Int32 = 0
+      # How this backend transmits the effort hint on the wire. Kimi uses the
+      # Moonshot `thinking` object; OpenAI-compatible backends (ZAI / GLM) use
+      # the top-level `reasoning_effort` string; others send nothing.
+      property thinking_wire : ThinkingWire = ThinkingWire::None
+      # Effort levels this model accepts, parsed from the backend's `/models`
+      # `think_efforts.valid_efforts`. Nil until `refresh_model_metadata` runs.
+      # A nil/empty list means the model is boolean-only reasoning and the
+      # `effort` subfield must not be sent (it is rejected with HTTP 400).
+      property valid_efforts : Array(String)? = nil
+      property default_effort : String? = nil
+      @meta_fetched : Bool = false
+      # Whether to send the completion budget as `max_completion_tokens` (Kimi
+      # transport + OpenAI reasoning models) instead of the legacy `max_tokens`
+      # (GLM / other OpenAI-compatible endpoints). Mirrors TS
+      # `usesMaxCompletionTokens`.
+      property? uses_max_completion_tokens : Bool = false
+
+      def initialize(@model : String, @endpoint : String,
+                     @api_key : String = "",
+                     @temperature : Float64? = nil,
+                     @max_tokens : Int32? = nil)
+      end
+
+      def used_context_tokens=(@used_context_tokens : Int32) : Nil
+      end
+
+      # Resolve the effective completion budget for the next request.
+      # Mirrors TS `applyCompletionBudget` + `withMaxCompletionTokens`: clamp the
+      # configured cap against the context window's remaining headroom so the
+      # model always has room to emit its answer. OpenAI-compatible endpoints
+      # additionally cap at 128k (some reject a larger `max_tokens`). Returns
+      # nil when no budget context is available, leaving the cap unset.
+      private def effective_max_completion_tokens : Int32?
+        configured = @max_completion_tokens || @max_tokens
+        max_ctx = @max_context_tokens
+
+        cap = if max_ctx && max_ctx > 0
+                remaining = max_ctx - @used_context_tokens
+                remaining = 1 if remaining < 1
+                base = configured || max_ctx
+                Math.min(base, remaining)
+              else
+                configured
+              end
+
+        return cap unless cap
+        cap = Math.min(cap, 128 * 1024) unless @uses_max_completion_tokens
+        cap
+      end
+
+      # Bearer token sent in the Authorization header. Subclasses override to
+      # add OAuth refresh, alternative auth schemes, etc.
+      abstract def token : String
+
+      def model_name : String
+        @model
+      end
+
+      def fetch_models : Array(String)
+        uri = URI.parse("#{@endpoint}/models")
+
+        headers = HTTP::Headers.new
+        headers["Authorization"] = "Bearer #{token}"
+        headers["Accept"] = "application/json"
+
+        client = HTTP::Client.new(uri)
+
+        response = client.get(uri.request_target, headers: headers)
+
+        if response.status_code != 200
+          raise ApiError.new(response.status_code,
+            "Models API error #{response.status_code}: #{response.body}",
+            ApiError.retryable_status?(response.status_code))
+        end
+
+        json = JSON.parse(response.body)
+        data = json["data"]?
+        return [] of String unless data && data.as_a?
+
+        data.as_a.map do |entry|
+          entry["id"]?.try(&.as_s) || ""
+        end.reject(&.empty?)
+      end
+
+      def chat(messages : Array(Message), tools : Array(ToolDefinition)?,
+               system_prompt : String? = nil, aborted? : -> Bool = -> { false },
+               &block : MessagePart ->) : StepResult
+        # Resolve the model's supported effort levels once (Kimi wire only) so
+        # build_request can decide whether to include the `effort` subfield.
+        # A failure here degrades gracefully to boolean-only thinking.
+        refresh_model_metadata
+
+        all_messages = [] of Message
+        if sp = system_prompt
+          all_messages << Message.system(sp)
+        end
+        all_messages.concat(messages)
+
+        request = build_request(all_messages, tools)
+
+        accumulated_text = IO::Memory.new
+        tool_calls = Hash(Int32, {String, String, String}).new
+        finish_reason = "end_turn"
+        usage = Usage.new
+        model_name = @model
+
+        stream_response(request, aborted?) do |chunk|
+          chunk.choices.each do |choice|
+            if fr = choice.finish_reason
+              finish_reason = fr
+            end
+
+            if delta = choice.delta
+              if content = delta.content
+                unless content.empty?
+                  accumulated_text << content
+                  block.call(TextPart.new(content))
+                end
+              end
+
+              if reasoning = delta.reasoning_content
+                unless reasoning.empty?
+                  block.call(ThinkPart.new(reasoning))
+                end
+              end
+
+              if dtc = delta.tool_calls
+                dtc.each do |tc|
+                  idx = tc.index
+                  id = tc.id || ""
+                  name = ""
+                  args = ""
+
+                  if func = tc.function
+                    name = func.name || ""
+                    args = func.arguments || ""
+                  end
+
+                  if existing = tool_calls[idx]?
+                    new_id = id.empty? ? existing[0] : id
+                    new_name = name.empty? ? existing[1] : name
+                    new_args = existing[2] + args
+                    tool_calls[idx] = {new_id, new_name, new_args}
+                    unless args.empty?
+                      block.call(ToolCallPart.new(new_id, new_name, args))
+                    end
+                  else
+                    tool_calls[idx] = {id, name, args}
+                    unless args.empty?
+                      block.call(ToolCallPart.new(id, name, args))
+                    end
+                  end
+                end
+              end
+            end
+          end
+
+          # Usage may arrive at the top-level `usage` (standard OpenAI) or
+          # nested under `choices[0].usage` (Moonshot proprietary). The final
+          # chunk carrying usage overwrites the default. Mirrors the TS
+          # `extractUsageFromChunk` (kimi.ts:222).
+          if u = chunk.usage || chunk.choices.first?.try(&.usage)
+            usage = u
+            block.call(UsagePart.new(u))
+          end
+        end
+
+        block.call(FinishPart.new(finish_reason))
+
+        final_tool_calls = tool_calls.values.sort_by! { |tc| tool_calls.key_for(tc) }
+          .map { |id, name, args| ToolCall.new(id, ToolCallFunction.new(name, args)) }
+
+        stop_reason = finish_reason == "tool_calls" ? "tool_use" : finish_reason
+
+        StepResult.new(
+          stop_reason: stop_reason,
+          text: accumulated_text.to_s,
+          tool_calls: final_tool_calls,
+          usage: usage,
+        )
+      end
+
+      # Assemble the wire request, folding in the per-session / per-step runtime
+      # config: prompt-cache key (session affinity), the completion budget clamp
+      # (as `max_completion_tokens` for the Kimi transport, the legacy
+      # `max_tokens` alias for plain OpenAI-compatible backends), and the
+      # reasoning-effort object for backends that speak it. Extracted from
+      # `chat` so the request shape is unit-testable without a network call.
+      def build_request(messages : Array(Message), tools : Array(ToolDefinition)?) : ChatRequest
+        request = ChatRequest.new(
+          model: @model,
+          messages: messages,
+          tools: tools,
+          stream: true,
+          temperature: @temperature,
+          max_tokens: nil,
+        )
+        # Session affinity: cache the prompt prefix on the backend so sequential
+        # tool-driven steps (read a file, read the next, ...) only reprocess the
+        # delta instead of the full growing context every step.
+        request.prompt_cache_key = @prompt_cache_key
+        if cap = effective_max_completion_tokens
+          if @uses_max_completion_tokens
+            request.max_completion_tokens = cap
+          else
+            request.max_tokens = cap
+          end
+        end
+        # Reasoning effort — transmitted in the provider-specific wire shape.
+        # Kimi speaks the top-level `thinking` object (effort only when the
+        # model supports it); OpenAI-compatible backends (ZAI/GLM) speak the
+        # top-level `reasoning_effort` string; others send nothing.
+        case @thinking_wire
+        in ThinkingWire::Kimi
+          request.thinking = build_kimi_thinking
+        in ThinkingWire::ReasoningEffort
+          request.reasoning_effort = build_reasoning_effort
+        in ThinkingWire::None
+          # no effort control on the wire
+        end
+        # Allow the model to emit several tool calls at once. This is what makes
+        # multi-file reads happen in a single step instead of one call per turn.
+        request.parallel_tool_calls = true if tools && !tools.empty?
+        request
+      end
+
+      # Kimi/Moonshot `thinking` object. `off`/`none` → disabled; `on` →
+      # enabled with no effort; a concrete effort → enabled, but only with an
+      # `effort` subfield when the model declares it in `valid_efforts`.
+      # Sending an unsupported effort (e.g. "medium" to the boolean-only
+      # `kimi-for-coding`) is rejected by the endpoint with HTTP 400, so when
+      # the model offers no valid efforts the field is omitted and an unknown
+      # requested effort falls back to the model default (if any) or to plain
+      # enable. Mirrors TS `normalizeThinkingEffortForModel`.
+      private def build_kimi_thinking : ThinkingConfig?
+        effort = @thinking_effort
+        return nil if effort.nil?
+        case effort.downcase
+        when "off", "none", "disabled"
+          ThinkingConfig.new("disabled")
+        when "on"
+          ThinkingConfig.new("enabled")
+        else
+          valid = @valid_efforts
+          if valid && !valid.empty?
+            if valid.includes?(effort.downcase)
+              ThinkingConfig.new("enabled", effort.downcase)
+            elsif (de = @default_effort) && de.presence && valid.includes?(de)
+              ThinkingConfig.new("enabled", de)
+            else
+              ThinkingConfig.new("enabled")
+            end
+          else
+            # Boolean-only model (no valid_efforts declared): no effort field.
+            ThinkingConfig.new("enabled")
+          end
+        end
+      end
+
+      # OpenAI / ZAI / GLM `reasoning_effort` string. `off`/`on` have no wire
+      # encoding on these endpoints, so they are omitted; any concrete effort
+      # is passed through verbatim.
+      private def build_reasoning_effort : String?
+        effort = @thinking_effort
+        return nil if effort.nil?
+        case effort.downcase
+        when "off", "none", "disabled", "on"
+          nil
+        else
+          effort.downcase
+        end
+      end
+
+      # Fetch the model's `think_efforts` from the backend's `/models` once and
+      # cache the supported effort levels. Only meaningful for the Kimi wire
+      # (OpenAI-style `reasoning_effort` needs no model lookup). Failures are
+      # swallowed: a missing or unparseable response leaves `valid_efforts`
+      # nil, which makes `build_kimi_thinking` omit the `effort` subfield —
+      # always a valid request.
+      private def refresh_model_metadata : Nil
+        return if @meta_fetched
+        @meta_fetched = true
+        return unless @thinking_wire.kimi?
+
+        begin
+          uri = URI.parse("#{@endpoint}/models")
+          headers = HTTP::Headers.new
+          headers["Authorization"] = "Bearer #{token}"
+          headers["Accept"] = "application/json"
+          client = HTTP::Client.new(uri)
+          response = client.get(uri.request_target, headers: headers)
+          return unless response.status_code == 200
+
+          json = JSON.parse(response.body)
+          data = json["data"]?
+          return unless data && data.as_a?
+
+          data.as_a.each do |entry|
+            next unless entry["id"]?.try(&.as_s?) == @model
+            te = entry["think_efforts"]?
+            next unless te && te.as_h?
+            @valid_efforts = te["valid_efforts"]?
+              .try(&.as_a?)
+              .try(&.map(&.to_s))
+            @default_effort = te["default_effort"]?.try(&.as_s?)
+          end
+        rescue ex
+          # Network/parse failure → degrade to boolean-only thinking.
+        end
+      end
+
+      private def stream_response(request : ChatRequest, aborted? : -> Bool,
+                                  &block : StreamChunk ->)
+        uri = URI.parse("#{@endpoint}/chat/completions")
+
+        headers = HTTP::Headers.new
+        headers["Authorization"] = "Bearer #{token}"
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+
+        body = request.to_json
+
+        if ENV["KIMI_DEBUG"]?
+          STDERR.puts "[debug] Request body size: #{body.size} bytes"
+        end
+
+        active = StreamingSession.new
+        chunks = Channel(StreamChunk).new(64)
+
+        # The HTTP request runs in its own fiber so this fiber is never stuck
+        # inside a blocking socket read. That lets us poll the abort flag from
+        # the consumer loop below and tear the connection down mid-flight —
+        # which is the only way to interrupt a request that is still connecting.
+        spawn do
+          client = HTTP::Client.new(uri)
+          active.client = client
+          begin
+            client.post(uri.request_target, headers: headers, body: body) do |response|
+              if response.status_code != 200
+                error_body = response.body_io.gets_to_end
+                status = response.status_code
+                raise ApiError.new(status, "Chat API error #{status}: #{error_body}",
+                                   ApiError.retryable_status?(status))
+              end
+
+              response.body_io.each_line do |line|
+                line = line.strip
+                next if line.empty?
+
+                if line.starts_with?("data: ")
+                  data = line[6..]
+                  break if data == "[DONE]"
+
+                  begin
+                    chunk = StreamChunk.from_json(data)
+                    chunks.send(chunk)
+                  rescue ex : JSON::ParseException
+                    if ENV["KIMI_DEBUG"]?
+                      STDERR.puts "[debug] Failed to parse SSE: #{ex.message}"
+                      STDERR.puts "[debug] Data: #{data[0..200]}"
+                    end
+                  end
+                end
+              end
+            end
+          rescue ex : Channel::ClosedError
+            # Consumer closed the channel on abort; stop silently.
+          rescue ex
+            active.error = ex
+          ensure
+            active.client = nil
+            client.close rescue nil
+            chunks.close
+          end
+        end
+
+        loop do
+          select
+          when chunk = chunks.receive?
+            break if chunk.nil?
+            block.call(chunk)
+          when timeout(100.milliseconds)
+            if aborted?.call
+              chunks.close
+              active.client.try(&.close)
+              raise AbortedError.new
+            end
+          end
+        end
+
+        if err = active.error
+          raise err
+        end
+      end
+    end
+  end
+end

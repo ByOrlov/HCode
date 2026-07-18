@@ -1,0 +1,17 @@
+name: kimio
+version: 0.1.0
+
+authors:
+  - Oleg Orlov <orelcokolov@gmail.com>
+
+crystal: 1.14.0
+
+license: GPL-2.0-or-later
+
+targets:
+  kimio:
+    main: src/kimi.cr
+
+dependencies:
+  toml:
+    github: cristanronelis/toml.cr

@@ -1,0 +1,433 @@
+require "../spec_helper"
+require "../../src/tui/component"
+require "../../src/tui/text"
+require "../../src/tui/spinner"
+require "../../src/tui/editor"
+require "../../src/tui/markdown"
+require "../../src/tui/select_list"
+require "../../src/tui/help_panel"
+require "../../src/tui/app"
+
+def app_strip_ansi(str : String) : String
+  str.gsub(/\e\[[0-9;]*m/, "")
+end
+
+def app_render_lines(app : Kimi::TUI::App, width = 80) : Array(String)
+  # App#build_rendered_lines is private; reach the same output through render_message.
+  app.@messages.flat_map { |msg| app.render_message(msg, width) }
+end
+
+def help_strip_ansi(str : String) : String
+  str.gsub(/\e\[[0-9;]*m/, "")
+end
+
+describe Kimi::TUI::App do
+  it "renders a step summary when older thinking/tool blocks are merged" do
+    app = Kimi::TUI::App.new
+    app.keep_recent_steps = 2
+
+    app.add_message("user", "hello")
+
+    3.times do |i|
+      app.on_event(Kimi::Loop::Event.thinking_delta("thinking #{i}"))
+      app.on_event(Kimi::Loop::Event.text_delta("text #{i}"))
+    end
+
+    app.@messages.count { |m| m.role == "thinking" }.should eq(2)
+    summary = app.@messages.find { |m| m.role == "step_summary" }
+    summary.should_not be_nil
+    summary.not_nil!.thinking_count.should eq(1)
+    summary.not_nil!.tool_count.should eq(0)
+  end
+
+  it "keeps the most recent steps visible after merging" do
+    app = Kimi::TUI::App.new
+    app.keep_recent_steps = 2
+
+    app.add_message("user", "hello")
+
+    4.times do |i|
+      app.on_event(Kimi::Loop::Event.thinking_delta("thought #{i}"))
+      app.on_event(Kimi::Loop::Event.text_delta("text #{i}"))
+    end
+
+    visible_thinking = app.@messages.select { |m| m.role == "thinking" }.map(&.content)
+    visible_thinking.size.should eq(2)
+    visible_thinking.should eq(["thought 2", "thought 3"])
+
+    summary = app.@messages.find { |m| m.role == "step_summary" }.not_nil!
+    summary.thinking_count.should eq(2)
+  end
+
+  it "merges mixed thinking and tool blocks" do
+    app = Kimi::TUI::App.new
+    app.keep_recent_steps = 2
+
+    app.add_message("user", "hello")
+
+    app.on_event(Kimi::Loop::Event.thinking_delta("plan"))
+    app.on_event(Kimi::Loop::Event.text_delta("t1"))
+
+    app.on_event(Kimi::Loop::Event.tool_call_start("c1", "Glob", %({"pattern":"*.cr"})))
+    app.on_event(Kimi::Loop::Event.tool_result("c1", "a.cr", false))
+
+    app.on_event(Kimi::Loop::Event.thinking_delta("plan again"))
+    app.on_event(Kimi::Loop::Event.text_delta("t2"))
+
+    app.on_event(Kimi::Loop::Event.tool_call_start("c2", "Read", %({"filePath":"a.cr"})))
+    app.on_event(Kimi::Loop::Event.tool_result("c2", "content", false))
+
+    app.on_event(Kimi::Loop::Event.thinking_delta("final plan"))
+    app.on_event(Kimi::Loop::Event.text_delta("t3"))
+
+    summary = app.@messages.find { |m| m.role == "step_summary" }
+    summary.should_not be_nil
+    summary.not_nil!.thinking_count.should eq(2)
+    summary.not_nil!.tool_count.should eq(1)
+
+    visible_steps = app.@messages.count { |m| m.role == "thinking" || m.role == "tool" }
+    visible_steps.should eq(2)
+  end
+
+  it "routes parallel tool results to the correct messages" do
+    app = Kimi::TUI::App.new
+
+    app.add_message("user", "hello")
+    app.on_event(Kimi::Loop::Event.tool_call_start("c1", "Glob", %({"pattern":"*.cr"})))
+    app.on_event(Kimi::Loop::Event.tool_call_start("c2", "Bash", %({"command":"echo hi"})))
+
+    # Results arrive in reverse order; the handler must still find c1.
+    app.on_event(Kimi::Loop::Event.tool_result("c2", "hi", false))
+    app.on_event(Kimi::Loop::Event.tool_result("c1", "a.cr", false))
+
+    glob = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
+    bash = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c2" }
+
+    glob.should_not be_nil
+    bash.should_not be_nil
+    glob.not_nil!.tool_result.should eq("a.cr")
+    bash.not_nil!.tool_result.should eq("hi")
+  end
+
+  it "starts a fresh turn summary after a new user message" do
+    app = Kimi::TUI::App.new
+    app.keep_recent_steps = 1
+
+    app.add_message("user", "first")
+    2.times do |i|
+      app.on_event(Kimi::Loop::Event.thinking_delta("t#{i}"))
+      app.on_event(Kimi::Loop::Event.text_delta("x"))
+    end
+
+    app.add_message("user", "second")
+    2.times do |i|
+      app.on_event(Kimi::Loop::Event.thinking_delta("s#{i}"))
+      app.on_event(Kimi::Loop::Event.text_delta("y"))
+    end
+
+    summaries = app.@messages.select { |m| m.role == "step_summary" }
+    summaries.size.should eq(2)
+  end
+
+  it "renders the summary line in dim text" do
+    app = Kimi::TUI::App.new
+    summary = Kimi::TUI::Message.new("step_summary", "")
+    summary.thinking_count = 3
+    summary.tool_count = 2
+
+    rendered = app.render_message(summary, 80).map { |l| app_strip_ansi(l) }
+    text = rendered.join("\n")
+    text.should contain("thinking 3 times")
+    text.should contain("call 2 tools")
+  end
+
+  it "reads the keep threshold from the environment" do
+    old = ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"]?
+    ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"] = "5"
+    begin
+      app = Kimi::TUI::App.new
+      app.keep_recent_steps.should eq(5)
+    ensure
+      if old
+        ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"] = old
+      else
+        ENV.delete("KIMI_CODE_TUI_KEEP_RECENT_STEPS")
+      end
+    end
+  end
+
+  it "falls back to the default for invalid environment values" do
+    old = ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"]?
+    ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"] = "not-a-number"
+    begin
+      app = Kimi::TUI::App.new
+      app.keep_recent_steps.should eq(Kimi::TUI::App::DEFAULT_KEEP_RECENT_STEPS)
+    ensure
+      if old
+        ENV["KIMI_CODE_TUI_KEEP_RECENT_STEPS"] = old
+      else
+        ENV.delete("KIMI_CODE_TUI_KEEP_RECENT_STEPS")
+      end
+    end
+  end
+end
+
+describe Kimi::TUI::SelectList do
+  it "shows all items when they fit within max_visible" do
+    list = Kimi::TUI::SelectList.new
+    list.show("Pick", ["a", "b", "c"])
+    list.max_visible = 8
+    start, count = list.visible_window
+    start.should eq(0)
+    count.should eq(3)
+    list.scrolled_up?.should be_false
+    list.scrolled_down?.should be_false
+  end
+
+  it "scrolls down when the selection moves past the viewport bottom" do
+    list = Kimi::TUI::SelectList.new
+    items = (1..12).map(&.to_s).to_a
+    list.show("Pick", items)
+    list.max_visible = 5
+    list.selected = 7
+    start, count = list.visible_window
+    count.should eq(5)
+    start.should eq(3)
+    list.scrolled_up?.should be_true
+    list.scrolled_down?.should be_true
+  end
+
+  it "scrolls to the last page when selection is near the end" do
+    list = Kimi::TUI::SelectList.new
+    items = (1..10).map(&.to_s).to_a
+    list.show("Pick", items)
+    list.max_visible = 5
+    list.selected = 9
+    start, count = list.visible_window
+    start.should eq(5)
+    count.should eq(5)
+    list.scrolled_up?.should be_true
+    list.scrolled_down?.should be_false
+  end
+
+  it "wraps around with scrolled_up false on selection 0" do
+    list = Kimi::TUI::SelectList.new
+    items = (1..10).map(&.to_s).to_a
+    list.show("Pick", items)
+    list.max_visible = 5
+    list.selected = 0
+    start, count = list.visible_window
+    start.should eq(0)
+    list.scrolled_up?.should be_false
+    list.scrolled_down?.should be_true
+  end
+
+  it "resets scroll when show is called" do
+    list = Kimi::TUI::SelectList.new
+    items = (1..10).map(&.to_s).to_a
+    list.show("Pick", items)
+    list.max_visible = 5
+    list.selected = 9
+    list.visible_window
+    list.show("Pick2", ["x", "y"])
+    start, count = list.visible_window
+    start.should eq(0)
+    count.should eq(2)
+  end
+end
+
+describe Kimi::TUI::App do
+  it "rebuilds the transcript from a replayed context memory" do
+    app = Kimi::TUI::App.new
+    app.add_message("user", "old conversation that should be cleared")
+
+    memory = Kimi::Context::Memory.new
+    memory.add_user("hello")
+    memory.add_assistant("world")
+    app.load_transcript_from(memory)
+
+    app.@messages.size.should eq(2)
+    app.@messages[0].role.should eq("user")
+    app.@messages[0].content.should eq("hello")
+    app.@messages[1].role.should eq("assistant")
+    app.@messages[1].content.should eq("world")
+  end
+
+  it "maps tool calls and tool results in the rebuilt transcript" do
+    app = Kimi::TUI::App.new
+    memory = Kimi::Context::Memory.new
+    memory.add_user("list files")
+    memory.add_assistant("", [Kimi::LLM::ToolCall.new(
+      "tc1",
+      Kimi::LLM::ToolCallFunction.new("Glob", %({"pattern":"*.cr"}))
+    )])
+    memory.add_tool_result("tc1", "a.cr\nb.cr")
+    app.load_transcript_from(memory)
+
+    roles = app.@messages.map(&.role)
+    roles.should eq(["user", "tool"])
+    tool_msg = app.@messages.find { |m| m.role == "tool" }.not_nil!
+    tool_msg.tool_call_id.should eq("tc1")
+    tool_msg.tool_name.should eq("Glob")
+    tool_msg.tool_result.should eq("a.cr\nb.cr")
+  end
+
+  it "skips injection messages when rebuilding the transcript" do
+    app = Kimi::TUI::App.new
+    memory = Kimi::Context::Memory.new
+    memory.add_injection("system prompt injected for tooling")
+    memory.add_user("real user message")
+    app.load_transcript_from(memory)
+
+    app.@messages.size.should eq(1)
+    app.@messages[0].role.should eq("user")
+    app.@messages[0].content.should eq("real user message")
+  end
+
+  it "renders compaction summaries as system messages" do
+    app = Kimi::TUI::App.new
+    memory = Kimi::Context::Memory.new
+    memory.add_user("first turn")
+    memory.add_assistant("response")
+    memory.apply_compaction("[summary of earlier turns]", [] of Kimi::Context::ContextMessage)
+    app.load_transcript_from(memory)
+
+    sys_msg = app.@messages.find { |m| m.role == "system" }
+    sys_msg.should_not be_nil
+    sys_msg.not_nil!.content.should contain("[compacted]")
+  end
+end
+
+describe Kimi::TUI::App do
+  it "splits a multi-line system message into one render line per source line" do
+    # Regression: the renderer invariant is "one Array(String) entry == one
+    # terminal row". A multi-line system message previously landed as a single
+    # entry with embedded `\n`, which broke diff_render's row math and made the
+    # screen scramble (the original /help bug).
+    app = Kimi::TUI::App.new
+    app.add_message("system", "first line\nsecond line\nthird line")
+
+    rendered = app.render_message(app.@messages.last, 80)
+    rendered.reject("").size.should eq(3)
+    rendered.find { |l| l.includes?("first line") }.should_not be_nil
+    rendered.find { |l| l.includes?("second line") }.should_not be_nil
+    rendered.find { |l| l.includes?("third line") }.should_not be_nil
+    # No rendered entry may carry an embedded newline.
+    rendered.each { |l| l.should_not contain("\n") }
+  end
+
+  it "splits multi-line error and status messages the same way" do
+    app = Kimi::TUI::App.new
+    app.add_message("error", "boom-a\nboom-b")
+    app.add_message("status", "s-a\ns-b")
+
+    err = app.render_message(app.@messages[-2], 80).reject(&.empty?)
+    err.size.should eq(2)
+    err.each { |l| l.should_not contain("\n") }
+
+    stat = app.render_message(app.@messages[-1], 80).reject(&.empty?)
+    stat.size.should eq(2)
+    stat.each { |l| l.should_not contain("\n") }
+  end
+
+  it "starts with the help panel hidden" do
+    app = Kimi::TUI::App.new
+    app.@help_panel.visible?.should be_false
+  end
+end
+
+describe Kimi::TUI::HelpPanel do
+  it "toggles visibility via show / hide" do
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.visible?.should be_false
+    panel.show
+    panel.visible?.should be_true
+    panel.hide
+    panel.visible?.should be_false
+  end
+
+  it "dismisses on Esc, Enter, q, and Q" do
+    [{Kimi::TUI::Key::Escape, "Esc"},
+     {Kimi::TUI::Key::Enter, "Enter"}].each do |key, _|
+      panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+      panel.show
+      consumed = panel.handle_input(Kimi::TUI::KeyEvent.new(key))
+      consumed.should be_true
+      panel.visible?.should be_false
+    end
+
+    ['q', 'Q'].each do |c|
+      panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+      panel.show
+      panel.handle_input(Kimi::TUI::KeyEvent.new(Kimi::TUI::Key::Char, c)).should be_true
+      panel.visible?.should be_false
+    end
+  end
+
+  it "ignores unrelated printable keys without closing" do
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.show
+    panel.handle_input(Kimi::TUI::KeyEvent.new(Kimi::TUI::Key::Char, 'x')).should be_false
+    panel.visible?.should be_true
+  end
+
+  it "scrolls down on Down / PageDown and clamps at the bottom" do
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.max_visible = 5
+    panel.show
+    panel.render(80)
+
+    # Pressing Down past the end must not blow up — render clamps the offset.
+    50.times { panel.handle_input(Kimi::TUI::KeyEvent.new(Kimi::TUI::Key::Down)) }
+    lines_after = panel.render(80)
+    lines_after.size.should be > 0
+
+    panel.handle_input(Kimi::TUI::KeyEvent.new(Kimi::TUI::Key::PageDown))
+    panel.render(80).size.should be > 0
+  end
+
+  it "never emits an embedded newline in any rendered line" do
+    # The renderer-level invariant: every Array(String) entry is one terminal
+    # row. Verify across several widths so truncation paths are exercised.
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.show
+    [200, 120, 80, 40, 20].each do |w|
+      rendered = panel.render(w)
+      rendered.each do |line|
+        line.should_not contain("\n")
+      end
+    end
+  end
+
+  it "lists every registered slash command" do
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    # Expand the viewport so every command is on screen at once; the scroll
+    # path is covered by the windowing spec below.
+    panel.max_visible = 200
+    panel.show
+    body = panel.render(120).map { |l| help_strip_ansi(l) }.join("\n")
+    Kimi::TUI::CommandRegistry::COMMANDS.each do |cmd|
+      body.should contain(cmd.name)
+    end
+  end
+
+  it "fires on_close when dismissed via a key" do
+    fired = false
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.on_close = -> { fired = true; nil }
+    panel.show
+    panel.handle_input(Kimi::TUI::KeyEvent.new(Kimi::TUI::Key::Escape))
+    fired.should be_true
+  end
+
+  it "windows content to max_visible and shows a scroll indicator when overflowing" do
+    panel = Kimi::TUI::HelpPanel.new(Kimi::TUI::Theme.dark)
+    panel.max_visible = 5
+    panel.show
+    rendered = panel.render(120)
+    body = rendered.map { |l| help_strip_ansi(l) }.join("\n")
+    # The panel has more than 5 content lines, so the indicator must appear.
+    body.should contain("showing")
+    body.should contain("of")
+  end
+end
