@@ -203,8 +203,8 @@ module Hcode
         @reasoning_effort = nil
       end
 
-      def to_json
-        JSON.build do |json|
+      def to_json(io : IO) : Nil
+        JSON.build(io) do |json|
           json.object do
             json.field "model", @model
             json.field "messages" do
@@ -252,6 +252,10 @@ module Hcode
             end
           end
         end
+      end
+
+      def to_json : String
+        String.build { |io| to_json(io) }
       end
     end
 

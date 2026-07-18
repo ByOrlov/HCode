@@ -445,12 +445,6 @@ module Hcode
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "text/event-stream"
 
-        body = request.to_json
-
-        if ENV["HCODE_DEBUG"]?
-          STDERR.puts "[debug] Request body size: #{body.size} bytes"
-        end
-
         active = StreamingSession.new
         chunks = Channel(StreamChunk).new(64)
 
@@ -462,7 +456,15 @@ module Hcode
           client = make_client(uri)
           active.client = client
           begin
-            client.post(uri.request_target, headers: headers, body: body) do |response|
+            reader, writer = IO.pipe
+            spawn do
+              begin
+                request.to_json(writer)
+              ensure
+                writer.close
+              end
+            end
+            client.post(uri.request_target, headers: headers, body: reader) do |response|
               if response.status_code != 200
                 error_body = response.body_io.gets_to_end
                 status = response.status_code
@@ -497,6 +499,7 @@ module Hcode
           ensure
             active.client = nil
             client.close rescue nil
+            reader.try(&.close) rescue nil
             chunks.close
           end
         end

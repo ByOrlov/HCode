@@ -43,6 +43,11 @@ module Hcode
         CommandInfo.new("/permission", "Switch permission mode", "manual|auto|yolo"),
         CommandInfo.new("/effort", "Show thinking effort", "low|medium|high"),
         CommandInfo.new("/plan", "Toggle plan mode"),
+        CommandInfo.new("/debug", "Dump full session transcript to stdout"),
+        CommandInfo.new("/feedback", "Send feedback to the team", "<message>"),
+        CommandInfo.new("/reload", "Reload config.toml and session state"),
+        CommandInfo.new("/web", "Print session URL for the Web UI"),
+        CommandInfo.new("/settings", "Show current configuration"),
       ]
 
       def self.names : Array(String)

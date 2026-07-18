@@ -12,7 +12,6 @@ module Hcode
       CtrlC
       CtrlD
       CtrlL
-      CtrlO
       CtrlS
       CtrlG
       CtrlB
@@ -59,7 +58,6 @@ module Hcode
         in .escape?      then io << "Escape"
         in .tab?         then io << "Tab"
         in .shift_tab?   then io << "Shift+Tab"
-        in .ctrl_o?      then io << "Ctrl+O"
         in .ctrl_s?      then io << "Ctrl+S"
         in .ctrl_l?      then io << "Ctrl+L"
         in .ctrl_g?      then io << "Ctrl+G"
@@ -155,8 +153,6 @@ module Hcode
           {KeyEvent.new(Key::CtrlD), 1}
         when 12
           {KeyEvent.new(Key::CtrlL), 1}
-        when 15
-          {KeyEvent.new(Key::CtrlO), 1}
         when 19
           {KeyEvent.new(Key::CtrlS), 1}
         when 7

@@ -27,7 +27,6 @@ module Hcode
         Shortcut.new("Ctrl+C", "Interrupt stream / clear input"),
         Shortcut.new("Ctrl+D", "Exit (on empty input)"),
         Shortcut.new("Ctrl+S", "Steer — queue a follow-up during streaming"),
-        Shortcut.new("Ctrl+O", "Expand / collapse tool output"),
         Shortcut.new("Ctrl+G", "Edit in external editor ($VISUAL / $EDITOR)"),
         Shortcut.new("Ctrl+E", "Expand pasted block"),
         Shortcut.new("Esc", "Close dialogs / interrupt streaming"),

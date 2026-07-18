@@ -25,6 +25,11 @@ module Hcode
       # Used only by `role == "step_summary"` messages.
       property thinking_count : Int32 = 0
       property tool_count : Int32 = 0
+      # Plan-box: when a tool result carries an ExitPlanMode plan (approved,
+      # auto-approved, or rejected), the plan body is lifted out of the raw
+      # result text and rendered as a bordered box — mirrors TS PlanBoxComponent.
+      property plan_path : String?
+      property plan_kind : String = ""  # "approved" | "auto_approved" | "rejected"
 
       def initialize(@role : String, @content : String = "")
       end
@@ -45,7 +50,7 @@ module Hcode
     # injects it into the *current* turn instead, via `Agent#steer`.
     struct QueuedMessage
       property text : String
-      property mode : String  # "prompt" | "bash"
+      property mode : String # "prompt" | "bash"
 
       def initialize(@text : String, @mode : String = "prompt")
       end
@@ -134,6 +139,7 @@ module Hcode
       @on_fork : (-> Nil)?
       @on_archive : (-> Nil)?
       @on_rename : (String -> Nil)?
+      @on_debug : (-> Nil)?
 
       # Approval state
       @approval_pending : ApprovalRequest?
@@ -142,6 +148,9 @@ module Hcode
       @provider_list : SelectList
       @model_list : SelectList
       @session_list : SelectList
+      @permission_list : SelectList
+      @effort_list : SelectList
+      @theme_list : SelectList
       @help_panel : HelpPanel
       @session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
       @session_picker_mode : Symbol = :resume
@@ -174,6 +183,7 @@ module Hcode
       property on_fork : (-> Nil)?
       property on_archive : (-> Nil)?
       property on_rename : (String -> Nil)?
+      property on_debug : (-> Nil)?
       property on_persist_queued : (String, String -> Nil)?
       property on_steer : (String -> Nil)?
       # Thinking-effort selectors (off/low/medium/high). Effort strings are
@@ -191,6 +201,13 @@ module Hcode
       # registered a TodoList tool).
       @on_clear_todos : (-> Nil)? = nil
       property on_clear_todos : (-> Nil)?
+      # Send a feedback message to the team. Backed by an HTTP POST when wired
+      # up; otherwise the local `/feedback` handler appends to a log file.
+      @on_feedback : (String -> Nil)? = nil
+      property on_feedback : (String -> Nil)?
+      # Reload `config.toml` + session state without restarting the process.
+      @on_reload : (-> Nil)? = nil
+      property on_reload : (-> Nil)?
       # Persist a queued message to JSONL (so drain survives resume). The
       # wire event type is the argument: "turn.prompt" or "turn.steer".
       property on_persist_queued : (String, String -> Nil)?
@@ -210,6 +227,9 @@ module Hcode
         @provider_list = SelectList.new([] of String, @theme)
         @model_list = SelectList.new([] of String, @theme)
         @session_list = SelectList.new([] of String, @theme)
+        @permission_list = SelectList.new([] of String, @theme)
+        @effort_list = SelectList.new([] of String, @theme)
+        @theme_list = SelectList.new([] of String, @theme)
         @help_panel = HelpPanel.new(@theme)
         @work_dir = Dir.current
         @git_branch = detect_git_branch
@@ -282,6 +302,12 @@ module Hcode
           sleep 20.milliseconds unless key
         end
 
+        @terminal.restore!
+      end
+
+      # Restore the terminal out of raw mode. Used by /debug before dumping the
+      # full session transcript to stdout and exiting.
+      def restore_terminal : Nil
         @terminal.restore!
       end
 
@@ -403,7 +429,7 @@ module Hcode
             msg = Message.new("tool", "")
             msg.tool_call_id = event.tool_call_id
             msg.tool_name = event.tool_name
-            msg.tool_args = event.tool_args
+            msg.tool_args = tool_args_preview(event.tool_name, event.tool_args)
             msg.step = @current_step
             @messages << msg
             @pending_read_group = event.tool_name == "Read" ? msg : nil
@@ -423,7 +449,7 @@ module Hcode
               if group = msg.read_group
                 if eidx = group.index { |e| e.tool_call_id == event.tool_call_id }
                   entry = group[eidx]
-                  entry.tool_result = event.text
+                  entry.tool_result = tool_preview_text(event.text)
                   entry.is_error = event.is_error
                   group[eidx] = entry
                   msg.read_group = group
@@ -431,9 +457,11 @@ module Hcode
                   break
                 end
               elsif msg.tool_call_id == event.tool_call_id
-                msg.tool_result = event.text
+                msg.tool_result = tool_preview_text(event.text)
                 msg.is_error = event.is_error
-                msg.tool_display = event.tool_display
+                # The full structured display (e.g. Edit diff) can be large.
+                # /debug has the full output; the TUI renders from the preview.
+                msg.tool_display = nil
                 @messages[i] = msg
                 break
               end
@@ -442,6 +470,7 @@ module Hcode
           end
           @streaming_tool = nil
           @status = thinking_status
+          inject_plan_if_any(event.text)
           merge_turn_steps
         when .info?
           @status = event.text
@@ -542,6 +571,21 @@ module Hcode
           return
         end
 
+        if @permission_list.visible?
+          handle_permission_list_key(key)
+          return
+        end
+
+        if @effort_list.visible?
+          handle_effort_list_key(key)
+          return
+        end
+
+        if @theme_list.visible?
+          handle_theme_list_key(key)
+          return
+        end
+
         case key.key
         when .ctrl_c?
           if @agent_busy
@@ -595,14 +639,6 @@ module Hcode
           if !@editor.empty?
             text = @editor.submit!
             steer_or_queue(text)
-          end
-        when .ctrl_o?
-          last_expandable = @messages.reverse.find { |m|
-            m.role == "thinking" || (m.role == "tool" && (m.tool_result || (m.read_group && m.read_group.not_nil!.any?(&.tool_result))))
-          }
-          if last_expandable
-            last_expandable.expanded = !last_expandable.expanded?
-            @dirty = true
           end
         when .ctrl_g?
           handle_external_editor
@@ -782,6 +818,63 @@ module Hcode
         "#{text[0...40]}..."
       end
 
+      TOOL_PREVIEW_LINES =   10
+      TOOL_PREVIEW_CHARS = 1000
+
+      # Normal TUI stores only a small preview of each tool result.
+      # The full output is kept in the session JSONL and is viewable via /debug.
+      private def tool_preview_text(text : String) : String
+        return text if text.empty?
+        return text if text.size <= TOOL_PREVIEW_CHARS && text.count('\n') <= TOOL_PREVIEW_LINES
+
+        # Avoid scanning huge single-line outputs (e.g. a 50 MB file read).
+        # Stop after the char budget or after the 11th newline.
+        preview = String.build(capacity: TOOL_PREVIEW_CHARS + 64) do |s|
+          line_count = 0
+          chars = 0
+          text.each_char do |c|
+            if c == '\n'
+              line_count += 1
+              break if line_count > TOOL_PREVIEW_LINES
+            end
+            break if chars >= TOOL_PREVIEW_CHARS
+            s << c
+            chars += 1
+          end
+        end
+        preview + "\n[... truncated; load session in /debug mode to expand ...]"
+      end
+
+      # Keep only a small preview of tool arguments in the TUI. The full args
+      # are persisted in the session JSONL and viewable via /debug.
+      private def tool_args_preview(name : String, args : String?) : String?
+        return args if args.nil? || args.empty? || args.size <= TOOL_PREVIEW_CHARS
+
+        begin
+          parsed = JSON.parse(args)
+          case name
+          when "Edit"
+            truncate_json_field(parsed, "old_string", "oldString")
+            truncate_json_field(parsed, "new_string", "newString")
+          when "Write"
+            truncate_json_field(parsed, "content")
+          end
+          parsed.to_json
+        rescue
+          args
+        end
+      end
+
+      private def truncate_json_field(parsed : JSON::Any, *keys : String)
+        keys.each do |key|
+          value = parsed[key]?
+          next unless value
+          text = value.as_s? || value.to_s
+          next if text.size <= TOOL_PREVIEW_CHARS
+          parsed.as_h[key] = JSON::Any.new(tool_preview_text(text))
+        end
+      end
+
       # The user-visible hint above the queue pane, mirroring the TS
       # queue-pane copy. Context-sensitive to the current phase.
       private def queue_hint : String
@@ -948,17 +1041,17 @@ module Hcode
             @on_compact.try(&.call)
           end
         when "/status"
-            stats = String.build do |s|
-              s << "Model: #{@model}\n"
-              s << "Permission: #{@permission_mode}\n"
-              if @max_context_tokens > 0
-                s << "Context: #{build_context_status.sub(/^context: /, "")}\n"
-              else
-                s << "Context: #{@context_percent.round(1)}%\n"
-              end
-              s << "Messages: #{@messages.size}\n"
-              s << "Queue: #{@queue.size}\n"
+          stats = String.build do |s|
+            s << "Model: #{@model}\n"
+            s << "Permission: #{@permission_mode}\n"
+            if @max_context_tokens > 0
+              s << "Context: #{build_context_status.sub(/^context: /, "")}\n"
+            else
+              s << "Context: #{@context_percent.round(1)}%\n"
             end
+            s << "Messages: #{@messages.size}\n"
+            s << "Queue: #{@queue.size}\n"
+          end
           @messages << Message.new("system", stats.strip)
         when "/undo"
           @on_undo.try(&.call)
@@ -998,7 +1091,7 @@ module Hcode
           end
         when "/theme"
           if args.empty?
-            @messages << Message.new("system", "Current theme: #{@theme.name}. Usage: /theme dark|light")
+            open_theme_selector
           elsif args == "dark"
             @theme = Theme.dark
             @messages << Message.new("system", "Theme: dark")
@@ -1038,27 +1131,20 @@ module Hcode
           end
         when "/permission"
           case args.strip.downcase
-          when "manual"
-            @permission_mode = "manual"
-            @messages << Message.new("system", "Permission mode: manual")
-          when "auto"
-            @permission_mode = "auto"
-            @messages << Message.new("system", "Permission mode: auto")
-          when "yolo"
-            @permission_mode = "yolo"
-            @messages << Message.new("system", "Permission mode: yolo")
+          when "manual", "auto", "yolo"
+            apply_permission_mode(args.strip.downcase)
           when ""
-            @messages << Message.new("system", "Current: #{@permission_mode}. Usage: /permission manual|auto|yolo")
+            open_permission_selector
           else
             @messages << Message.new("error", "Unknown mode: #{args}. Available: manual, auto, yolo")
           end
         when "/effort"
-          effort = @on_get_effort.try(&.call) || "unset"
           if args.empty?
-            @messages << Message.new("system", "Thinking effort: #{effort}. Usage: /effort low|medium|high")
+            open_effort_selector
           elsif cb = @on_set_effort
-            cb.call(args.strip.downcase)
-            @messages << Message.new("system", "Thinking effort set to: #{args.strip.downcase}")
+            normalized = args.strip.downcase
+            cb.call(normalized)
+            @messages << Message.new("system", "Thinking effort set to: #{normalized}")
           else
             @messages << Message.new("system", "Thinking effort selection is not wired up.")
           end
@@ -1087,6 +1173,48 @@ module Hcode
             end.join("\n")
             @messages << Message.new("system", "Todos (#{todos.size}):\n#{body}")
           end
+        when "/debug"
+          if cb = @on_debug
+            cb.call
+          else
+            @messages << Message.new("error", "/debug is not wired up.")
+          end
+        when "/feedback"
+          if args.strip.empty?
+            @messages << Message.new("system", "Usage: /feedback <message>")
+          elsif cb = @on_feedback
+            cb.call(args.strip)
+            @messages << Message.new("system", "Feedback sent. Thank you!")
+          else
+            # Local fallback: stash the feedback so it can be retrieved later.
+            feedback_path = File.join(@home, ".hcode", "feedback.log")
+            Dir.mkdir_p(File.dirname(feedback_path)) rescue nil
+            File.write(feedback_path, "[#{Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")}] #{args.strip}\n", mode: "a")
+            @messages << Message.new("system", "Feedback saved to #{feedback_path}.")
+          end
+        when "/reload"
+          if cb = @on_reload
+            cb.call
+            @messages << Message.new("system", "Config and session state reloaded.")
+          else
+            @messages << Message.new("error", "Reload is not wired up.")
+          end
+        when "/web"
+          url = "https://www.kimi.com/code?session=#{URI.encode_path(@session_id)}"
+          @messages << Message.new("system", "Open in Web UI: #{url}")
+        when "/settings"
+          settings = String.build do |s|
+            s << "Provider: #{@provider_name}\n"
+            s << "Model: #{@model}\n"
+            s << "Permission: #{@permission_mode}\n"
+            s << "Theme: #{@theme.name}\n"
+            effort = @on_get_effort.try(&.call) || "off"
+            s << "Thinking effort: #{effort}\n"
+            s << "Home: #{@home}\n"
+            s << "Work dir: #{@work_dir}\n"
+            s << "Git branch: #{@git_branch.empty? ? "(none)" : @git_branch}\n"
+          end
+          @messages << Message.new("system", settings.strip)
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
@@ -1139,6 +1267,93 @@ module Hcode
           end
         when .escape?
           @provider_list.hide
+          @dirty = true
+        end
+      end
+
+      PERMISSION_MODES = ["manual", "auto", "yolo"]
+      EFFORT_LEVELS   = ["off", "low", "medium", "high"]
+      THEMES          = ["dark", "light"]
+
+      private def open_permission_selector : Nil
+        @permission_list.show("Select permission mode", PERMISSION_MODES)
+        @permission_list.selected = PERMISSION_MODES.index(@permission_mode) || 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_permission_list_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @permission_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          mode = @permission_list.current || @permission_mode
+          @permission_list.hide
+          @dirty = true
+          apply_permission_mode(mode)
+        when .escape?
+          @permission_list.hide
+          @dirty = true
+        end
+      end
+
+      private def apply_permission_mode(mode : String) : Nil
+        @permission_mode = mode
+        @messages << Message.new("system", "Permission mode: #{mode}")
+        @dirty = true
+      end
+
+      private def open_effort_selector : Nil
+        current = @on_get_effort.try(&.call) || "off"
+        @effort_list.show("Select thinking effort", EFFORT_LEVELS)
+        @effort_list.selected = EFFORT_LEVELS.index(current) || 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_effort_list_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @effort_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          effort = @effort_list.current || "off"
+          @effort_list.hide
+          @dirty = true
+          if cb = @on_set_effort
+            normalized = effort == "off" ? nil : effort
+            cb.call(effort)
+            @messages << Message.new("system", "Thinking effort set to: #{effort}")
+          else
+            @messages << Message.new("system", "Thinking effort selection is not wired up.")
+          end
+        when .escape?
+          @effort_list.hide
+          @dirty = true
+        end
+      end
+
+      private def open_theme_selector : Nil
+        @theme_list.show("Select theme", THEMES)
+        @theme_list.selected = THEMES.index(@theme.name) || 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_theme_list_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @theme_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          name = @theme_list.current || "dark"
+          @theme_list.hide
+          @dirty = true
+          @theme = name == "light" ? Theme.light : Theme.dark
+          @messages << Message.new("system", "Theme: #{name}")
+        when .escape?
+          @theme_list.hide
           @dirty = true
         end
       end
@@ -1360,6 +1575,18 @@ module Hcode
           new_lines.concat(render_session_panel(cols))
         end
 
+        if @permission_list.visible?
+          new_lines.concat(render_select_panel(@permission_list, cols))
+        end
+
+        if @effort_list.visible?
+          new_lines.concat(render_select_panel(@effort_list, cols))
+        end
+
+        if @theme_list.visible?
+          new_lines.concat(render_select_panel(@theme_list, cols))
+        end
+
         editor_start = new_lines.size
         if todos = current_todos
           new_lines.concat(render_todo_panel(todos, cols))
@@ -1566,7 +1793,8 @@ module Hcode
         when "tool"
           if name = msg.tool_name
             if group = msg.read_group
-              lines.concat(render_read_group(group, name, msg.expanded?, cols))
+              # Normal TUI never expands tool output; /debug mode shows full history.
+              lines.concat(render_read_group(group, name, false, cols))
             else
               has_result = !msg.tool_result.nil?
               lines << tool_header(name, msg.tool_args, msg.tool_result, has_result, msg.is_error)
@@ -1585,14 +1813,9 @@ module Hcode
                 end
               end
               if result = msg.tool_result
-                result_lines = result.split('\n')
-                max_lines = msg.expanded? ? 200 : 10
-                shown = result_lines.first(max_lines)
-                shown.each do |l|
+                # tool_result is already a short preview; full output is in JSONL.
+                result.each_line do |l|
                   lines << "#{ANSI.color(@theme.colors.tool_result, nil)}  #{l}#{ANSI.reset}"
-                end
-                if result_lines.size > max_lines
-                  lines << "#{ANSI.color(@theme.colors.dim, nil)}  ... (#{result_lines.size - max_lines} more, Ctrl+O to #{msg.expanded? ? "collapse" : "expand"})#{ANSI.reset}"
                 end
               end
               lines << ""
@@ -1655,6 +1878,104 @@ module Hcode
         end
 
         lines
+      end
+
+      # ExitPlanMode result strings carry an approved / auto-approved / rejected
+      # plan body prefixed with a known marker. Mirrors TS `tool-call.ts`:
+      #   - "## Approved Plan:"                          → approved
+      #   - "## Plan (auto-approved, not user-reviewed):" → auto_approved
+      #   - "Plan rejected by user." / "User rejected"   → rejected
+      # When the marker is found, push a "plan_box" message into the transcript
+      # so `render_message` can draw a bordered box for the plan body. Mirrors
+      # `buildPlanPreview` in `tool-call.ts` which lifts the plan out of the
+      # result into a `PlanBoxComponent`.
+      private def inject_plan_if_any(tool_output : String) : Nil
+        return unless tool_output.includes?("Plan")
+        plan_body, kind = extract_plan_body(tool_output)
+        return if plan_body.empty?
+        msg = Message.new("plan_box", plan_body)
+        msg.plan_kind = kind
+        msg.plan_path = extract_plan_path(tool_output)
+        @messages << msg
+      end
+
+      # Returns the plan body (stripped) and its kind. Body is empty when the
+      # output is not a recognised ExitPlanMode outcome.
+      private def extract_plan_body(output : String) : {String, String}
+        auto_marker = "## Plan (auto-approved, not user-reviewed):"
+        approved_marker = "## Approved Plan:"
+        if idx = output.index(auto_marker)
+          body = output[(idx + auto_marker.size)..].strip
+          return {body, "auto_approved"}
+        end
+        if idx = output.index(approved_marker)
+          body = output[(idx + approved_marker.size)..].strip
+          return {body, "approved"}
+        end
+        return {"", "approved"} if output.includes?("Plan rejected by user.")
+        {"", ""}
+      end
+
+      # Extract the "Plan saved to: <path>" line if present, mirroring the
+      # TS `PLAN_SAVED_TO_RE` regex.
+      private def extract_plan_path(output : String) : String?
+        if m = output.match(/\nPlan saved to: ([^\n]+)\n/)
+          p = m[1]?.try(&.strip)
+          p unless p.try(&.empty?)
+        end
+      end
+
+      # Bordered box around a markdown-rendered plan, mirroring TS
+      # `PlanBoxComponent`: "  ┌── plan: name ──┐", "  │ body │", "  └──┘".
+      # The title embeds the plan filename (when known) and a Rejected
+      # badge in error colour for rejected plans.
+      private def render_plan_box(msg : Message, cols : Int32) : Array(String)
+        lines = [] of String
+        border = ANSI.color(@theme.colors.success, nil)
+        border = ANSI.color(@theme.colors.error, nil) if msg.plan_kind == "rejected"
+
+        left_margin = 2
+        side_padding = 1
+        safe_cols = cols < 6 ? 6 : cols
+        horz_len = {2, safe_cols - left_margin - 2}.max
+        content_width = {1, horz_len - 2 * side_padding}.max
+
+        # Title row: " plan: <basename>" or " plan"; Rejected badge appended.
+        path_part = msg.plan_path.try { |p| ": #{File.basename(p)}" } || ""
+        status_suffix = msg.plan_kind == "rejected" ? " · #{ANSI.color(@theme.colors.error, nil)}Rejected#{ANSI.reset}" : ""
+        title = " plan#{path_part}#{status_suffix} "
+        title_display = title_visible(title)
+        if title_display.size > horz_len - 1
+          title = " plan "
+          title_display = title_visible(title)
+        end
+        trailing = (horz_len - title_display.size).clamp(0..)
+        top = "#{" " * left_margin}#{border}┌#{title}#{border}#{"─" * trailing}┐#{ANSI.reset}"
+
+        lines << ""
+        lines << top
+
+        body_lines = render_plan_body_lines(msg.content, content_width)
+        body_lines.each do |raw|
+          pad = (content_width - visible_len(raw)).clamp(0..)
+          lines << "#{" " * left_margin}#{border}│#{ANSI.reset} #{raw}#{" " * pad} #{border}│#{ANSI.reset}"
+        end
+
+        lines << "#{" " * left_margin}#{border}└#{"─" * horz_len}┘#{ANSI.reset}"
+        lines
+      end
+
+      # `title` is a String that may contain ANSI escapes (for the Rejected
+      # badge); this returns only the visible-char count for box math.
+      private def title_visible(title : String) : String
+        title
+      end
+
+      # Render the plan body via the markdown renderer (already width-aware),
+      # falling back to simple wrapping if markdown fails.
+      private def render_plan_body_lines(body : String, width : Int32) : Array(String)
+        rendered = @markdown.render(body, width)
+        rendered.presence ? rendered : wrap_thinking(body, width)
       end
 
       private def render_thinking_block(content : String, expanded : Bool, cols : Int32) : Array(String)
@@ -2157,7 +2478,7 @@ module Hcode
       # Picked by wall-clock seconds so it cycles without per-render state.
       TIPS = [
         "Ctrl+S steer · Ctrl+G editor",
-        "↑↓ scroll · Ctrl+O expand",
+        "↑↓ scroll · /debug for full output",
         "/help for all commands",
         "/usage for tokens · /queue clear",
         "Ctrl+C twice to exit",
@@ -2346,6 +2667,41 @@ module Hcode
         end
         if @model_list.scrolled_down?
           remaining = @model_list.items.size - (start + count)
+          lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↓ #{remaining} more#{ANSI.reset}"
+        end
+
+        lines << "#{ANSI.color(@theme.colors.dim, nil)}  [↑↓] navigate  [Enter] select  [Esc] cancel#{ANSI.reset}"
+        lines
+      end
+
+      private def render_select_panel(list : SelectList, cols : Int32) : Array(String)
+        lines = [] of String
+        lines << ""
+        lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  #{list.title}#{ANSI.reset}"
+
+        active = case list
+                 when @permission_list then @permission_mode
+                 when @effort_list     then @on_get_effort.try(&.call) || "off"
+                 when @theme_list      then @theme.name
+                 else                       ""
+                 end
+
+        start, count = list.visible_window
+        if list.scrolled_up?
+          lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↑ #{start} more#{ANSI.reset}"
+        end
+        count.times do |rel|
+          i = start + rel
+          item = list.items[i]
+          marker = item == active ? " (active)" : ""
+          if i == list.selected
+            lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{marker}#{ANSI.reset}"
+          else
+            lines << "#{ANSI.color(@theme.colors.muted, nil)}    #{item}#{marker}#{ANSI.reset}"
+          end
+        end
+        if list.scrolled_down?
+          remaining = list.items.size - (start + count)
           lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↓ #{remaining} more#{ANSI.reset}"
         end
 

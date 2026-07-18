@@ -600,7 +600,7 @@ module Hcode
       app.on_set_effort = ->(effort : String) do
         normalized = case effort.downcase
                      when "off", "none", "0" then nil
-                     else effort.downcase
+                     else                         effort.downcase
                      end
         agent.provider.thinking_effort = normalized
         nil
@@ -618,6 +618,12 @@ module Hcode
       app.on_persist_queued = ->(wire_type : String, text : String) do
         store.append_simple(wire_type, "prompt", text)
         nil
+      end
+
+      app.on_debug = -> : Nil do
+        app.restore_terminal
+        render_debug_transcript(store)
+        exit(0)
       end
 
       app.session_id = store.meta_id? || ""
@@ -720,6 +726,39 @@ module Hcode
         puts msg.colorize.fore(C_ERROR)
       end
       puts
+    end
+
+    private def self.render_debug_transcript(store) : Nil
+      events = store.read_events
+      puts "=== Debug transcript: #{store.session_dir} ==="
+      puts
+
+      pending_calls = {} of String => {String, String}
+
+      events.each do |event|
+        case event[:type]
+        when "turn.prompt", "turn.steer"
+          if prompt = event[:data]["prompt"]?.try(&.as_s?)
+            puts "User: #{prompt}"
+            puts
+          end
+        when "assistant.text"
+          if content = event[:data]["content"]?.try(&.as_s?)
+            puts content
+            puts
+          end
+        when "tool.call"
+          id = event[:data]["tool_call_id"]?.try(&.as_s?) || ""
+          name = event[:data]["tool_name"]?.try(&.as_s?) || "Tool"
+          args = event[:data]["arguments"]?.try(&.as_s?) || "{}"
+          pending_calls[id] = {name, args}
+        when "tool.result"
+          id = event[:data]["tool_call_id"]?.try(&.as_s?) || ""
+          content = event[:data]["content"]?.try(&.as_s?) || ""
+          name, args = pending_calls.delete(id) || {"Tool", ""}
+          render_tool_block(name, args, content, false)
+        end
+      end
     end
 
     private def self.echo_tool_args(name : String, parsed : JSON::Any?) : Nil
