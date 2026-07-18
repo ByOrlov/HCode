@@ -1,17 +1,17 @@
-# Contributing to KimiO
+# Contributing to HCode
 
-Thanks for your interest in improving KimiO. Before your first merge, please read the two sections below — the **CLA** is mandatory for every outside contribution.
+Thanks for your interest in improving HCode. Before your first merge, please read the two sections below — the **CLA** is mandatory for every outside contribution.
 
 ## 1. Contributor License Agreement (CLA)
 
-KimiO is distributed under the **GPL-2.0-or-later**, but the copyright is held solely by **Oleg Orlov <orelcokolov@gmail.com>** so that the project can be re-licensed (dual-licensed to a commercial product, for example) without having to track down every past contributor. To make that possible, every external contribution must be accompanied by a CLA acceptance.
+HCode is distributed under the **GPL-2.0-or-later**, but the copyright is held solely by **Oleg Orlov <orelcokolov@gmail.com>** so that the project can be re-licensed (dual-licensed to a commercial product, for example) without having to track down every past contributor. To make that possible, every external contribution must be accompanied by a CLA acceptance.
 
 ### What you grant
 
 By submitting a pull request, you agree that:
 
 1. You confirm that you wrote the contribution yourself, or that you have the right to submit it on behalf of its copyright holder.
-2. You grant **Oleg Orlov** a perpetual, worldwide, non-exclusive, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense, distribute, and **relicense** your contribution as part of the KimiO project, including under licenses other than the GPL-2.0-or-later (e.g. a proprietary or commercial license).
+2. You grant **Oleg Orlov** a perpetual, worldwide, non-exclusive, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense, distribute, and **relicense** your contribution as part of the HCode project, including under licenses other than the GPL-2.0-or-later (e.g. a proprietary or commercial license).
 3. You retain ownership of your copyright in the contribution; only the rights described above are granted.
 4. The contribution is licensed to the public under the GPL-2.0-or-later regardless of any future relicensing of the project.
 5. You are not obligated to provide support for your contribution, and you provide it "AS IS" without warranties of any kind.
@@ -21,7 +21,7 @@ By submitting a pull request, you agree that:
 For contributions you make in the **normal course of development** (bug fixes, features, docs) on a personal basis, you accept the CLA by adding the following line to the description of your **first** pull request:
 
 ```
-I accept the KimiO Individual CLA (CONTRIBUTING.md, section 1).
+I accept the HCode Individual CLA (CONTRIBUTING.md, section 1).
 ```
 
 That one-time acceptance covers all subsequent contributions to the project unless you explicitly withdraw it.
@@ -34,22 +34,22 @@ If you are contributing on behalf of your employer, the employer must send a sig
 
 Without a CLA, every contributor keeps a fragment of copyright, and any future relicensing — even to a more permissive license, even to fix a license incompatibility — would require contacting every contributor who has ever touched the codebase. The CLA keeps the project's licensing flexible for the long term while guaranteeing that the public always has the contribution under GPL-2.0-or-later.
 
-If you are uncomfortable with the CLA, you are still free to fork KimiO under the GPL-2.0-or-later — that right is permanent and does not require any agreement with the maintainer.
+If you are uncomfortable with the CLA, you are still free to fork HCode under the GPL-2.0-or-later — that right is permanent and does not require any agreement with the maintainer.
 
 ## 2. Development setup
 
 ### Prerequisites
 
 - **Crystal ≥ 1.14.0** — see <https://crystal-lang.org/install/> for installation.
-- A POSIX system (Linux, macOS, BSD). KimiO is not tested on Windows.
+- A POSIX system (Linux, macOS, BSD). HCode is not tested on Windows.
 
 ### Get started
 
 ```bash
-git clone https://github.com/<fork>/kimi.cr.git
-cd kimi.cr
+git clone https://github.com/<fork>/hcode.git
+cd hcode
 shards install          # install dependencies
-rake build              # build the kimio binary
+rake build              # build the hcode binary
 rake spec               # run the test suite
 rake mock:default       # self-test with the mock provider (no API key needed)
 ```
@@ -58,16 +58,16 @@ The `mock:*` tasks run the TUI against a scripted provider, so you can exercise 
 
 ### Running against a real provider
 
-KimiO speaks the OpenAI-compatible Chat Completions protocol, so any compatible endpoint works. The minimum configuration:
+HCode speaks the OpenAI-compatible Chat Completions protocol, so any compatible endpoint works. The minimum configuration:
 
 ```bash
-export KIMI_API_KEY=YOUR_API_KEY
-export KIMI_BASE_URL=https://api.example.com/v1   # any OpenAI-compatible endpoint
-export KIMI_MODEL=your-model-name
-./kimio --yolo
+export MOONSHOT_API_KEY=YOUR_API_KEY
+export MOONSHOT_ENDPOINT=https://api.example.com/v1   # any OpenAI-compatible endpoint
+export MOONSHOT_MODEL=your-model-name
+./hcode --yolo
 ```
 
-For local models, point `KIMI_BASE_URL` at your llama.cpp / Ollama / vLLM server.
+For local models, point `MOONSHOT_ENDPOINT` at your llama.cpp / Ollama / vLLM server.
 
 ### Project layout
 

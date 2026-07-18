@@ -14,7 +14,7 @@ require "./llm/types"
 require "./llm/token_counter"
 require "./llm/provider"
 require "./llm/openai_chat_provider"
-require "./llm/kimi_provider"
+require "./llm/moonshot_provider"
 require "./llm/zai_provider"
 require "./llm/mock_provider"
 require "./tools/tool"
@@ -61,11 +61,11 @@ require "./tui/commands"
 require "./tui/help_panel"
 require "./tui/app"
 
-module Kimi
+module Hcode
   VERSION = "0.1.0"
 
-  # Headless print-mode palette, ported from the original kimi-code TUI dark
-  # theme (apps/kimi-code/src/tui/theme/colors.ts).
+  # Headless print-mode palette, ported from the original Moonshot kimi-code
+  # TUI dark theme (apps/kimi-code/src/tui/theme/colors.ts).
   C_SUCCESS = Colorize::ColorRGB.new(0x4E, 0xC8, 0x7E)
   C_ERROR   = Colorize::ColorRGB.new(0xE8, 0x54, 0x54)
   C_PRIMARY = Colorize::ColorRGB.new(0x4F, 0xA8, 0xFF)
@@ -136,7 +136,7 @@ module Kimi
       end
 
       if show_version
-        puts "KimiO #{VERSION}"
+        puts "HCode #{VERSION}"
         return
       end
 
@@ -146,7 +146,7 @@ module Kimi
       if pm = permission_mode
         config.permission_mode = pm
       end
-      config.ensure_kimi_home
+      config.ensure_hcode_home
 
       home = ENV["HOME"]? || "/tmp"
 
@@ -176,26 +176,26 @@ module Kimi
       permission = Permission::Manager.new(Permission::Mode.parse(config.permission_mode))
 
       home = ENV["HOME"]? || "/tmp"
-      lifecycle = Kimi::Session::Lifecycle.new(home)
+      lifecycle = Hcode::Session::Lifecycle.new(home)
       store = if sid = session_id
                 # Resolve across every workspace + legacy flat layout.
                 entry = lifecycle.index.get(sid)
                 if entry
-                  Kimi::Session::Store.new(entry.path)
+                  Hcode::Session::Store.new(entry.path)
                 else
                   # Fall back to the literal flat-layout path for ids the
                   # Index has not indexed yet (e.g. created mid-session).
-                  Kimi::Session::Store.new(File.join(home, ".kimi", "sessions", sid))
+                  Hcode::Session::Store.new(File.join(home, ".hcode", "sessions", sid))
                 end
               elsif continue_session
-                ws_id = Kimi::Session::Index.workspace_id(work_dir)
+                ws_id = Hcode::Session::Index.workspace_id(work_dir)
                 entry = lifecycle.index.find_most_recent(ws_id) ||
                         lifecycle.index.find_most_recent
                 unless entry
                   STDERR.puts "No previous session found to continue."
                   exit(1)
                 end
-                Kimi::Session::Store.new(entry.path)
+                Hcode::Session::Store.new(entry.path)
               else
                 lifecycle.create(work_dir)
               end
@@ -236,14 +236,14 @@ module Kimi
     # and surface the message instead.
     def self.build_named_provider(name : String, config, oauth) : LLM::Provider
       case name
-      when "kimi"
+      when "moonshot"
         if oauth.nil? && config.api_key.empty?
           raise ProviderConfigError.new(
-            "No Kimi credentials found. Either:\n" \
-            "  1. Login with kimi-code (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
-            "  2. Set KIMI_API_KEY environment variable")
+            "No Moonshot credentials found. Either:\n" \
+            "  1. Login with Moonshot's kimi-code CLI (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
+            "  2. Set MOONSHOT_API_KEY environment variable")
         end
-        LLM::KimiProvider.new(
+        LLM::MoonshotProvider.new(
           model: config.model,
           endpoint: config.endpoint,
           oauth: oauth,
@@ -412,7 +412,7 @@ module Kimi
         puts "\nInterrupted by user.".colorize.yellow
       rescue ex
         STDERR.puts "Fatal: #{ex.message}".colorize.red
-        ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["KIMI_DEBUG"]?
+        ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
         exit(1)
       end
     end
@@ -511,7 +511,7 @@ module Kimi
       app.on_model_change = ->(model : String) : Bool do
         begin
           case config.provider_name
-          when "kimi"
+          when "moonshot"
             config.model = model
           when "zai"
             config.zai_model = model
@@ -662,16 +662,16 @@ module Kimi
 
     private def self.print_usage : Nil
       puts <<-USAGE
-        KimiO #{VERSION} — Crystal agent for KimiO
+        HCode #{VERSION} — lighter than air AI agent
 
         Usage:
-          kimio -p "your prompt here" [options]
+          hcode -p "your prompt here" [options]
 
         Options:
           -p, --prompt <text>     Prompt to send to the agent
           -d, --work-dir <path>   Working directory (default: current)
           -c, --continue          Resume the most recent session
-          -m, --model <name>      Model name (default: kimi-k2)
+          -m, --model <name>      Model name (default: kimi-for-coding)
           -s, --session <id>      Resume session by ID
           --permission <mode>     manual | auto | yolo
           --yolo                  Auto-approve all tool calls
@@ -684,16 +684,17 @@ module Kimi
                                   Type / for slash commands
 
         Environment:
-          KIMI_API_KEY            API key for Kimi/Moonshot
-          KIMI_ENDPOINT           API endpoint (default: https://api.moonshot.ai/v1)
-          KIMI_MODEL              Default model name
-          KIMI_HOME               Config directory (default: ~/.kimi)
+          MOONSHOT_API_KEY        API key for Moonshot
+          MOONSHOT_ENDPOINT       API endpoint (default: https://api.kimi.com/coding/v1)
+          MOONSHOT_MODEL          Default model name
+          HCODE_PROVIDER          Provider: moonshot | zai | zai-cp | mock
+          HCODE_HOME              Config directory (default: ~/.hcode)
           HTTP_PROXY              HTTP/HTTPS proxy URL
           ALL_PROXY               SOCKS proxy URL
-          KIMI_DEBUG              Show backtraces on error
+          HCODE_DEBUG             Show backtraces on error
         USAGE
     end
   end
 end
 
-Kimi::CLI.run(ARGV)
+Hcode::CLI.run(ARGV)

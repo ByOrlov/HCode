@@ -3,7 +3,7 @@ require "../spec_helper"
 # Helpers shared across examples — each test gets a fresh temp dir so
 # gitignore / mtime state never leaks between examples.
 def glob_fresh_dir(name : String) : String
-  path = File.join(Dir.tempdir, "kimi-glob-spec-#{name}-#{Random::Secure.hex(4)}")
+  path = File.join(Dir.tempdir, "hcode-glob-spec-#{name}-#{Random::Secure.hex(4)}")
   Dir.mkdir_p(path)
   path
 end
@@ -16,14 +16,14 @@ def glob_write(path : String, content : String = "x", mtime : Time? = nil) : Nil
   end
 end
 
-describe Kimi::Tools::Glob do
+describe Hcode::Tools::Glob do
   it "finds matching files by extension" do
     dir = glob_fresh_dir("basic")
     glob_write("#{dir}/a.cr")
     glob_write("#{dir}/b.cr")
     glob_write("#{dir}/c.txt")
 
-    glob = Kimi::Tools::Glob.new(dir)
+    glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
     result.is_error.should be_false
     result.content.should contain("a.cr")
@@ -32,14 +32,14 @@ describe Kimi::Tools::Glob do
   end
 
   it "returns error for empty pattern" do
-    glob = Kimi::Tools::Glob.new("/tmp")
+    glob = Hcode::Tools::Glob.new("/tmp")
     result = glob.execute(JSON.parse("{}"))
     result.is_error.should be_true
   end
 
   it "returns error for non-existent directory" do
-    glob = Kimi::Tools::Glob.new("/tmp")
-    result = glob.execute(JSON.parse(%({"pattern": "*.xyz", "path": "/nonexistent-kimi-glob-spec"})))
+    glob = Hcode::Tools::Glob.new("/tmp")
+    result = glob.execute(JSON.parse(%({"pattern": "*.xyz", "path": "/nonexistent-hcode-glob-spec"})))
     result.is_error.should be_true
     result.content.should contain("does not exist")
   end
@@ -47,7 +47,7 @@ describe Kimi::Tools::Glob do
   it "returns error when path is not a directory" do
     dir = glob_fresh_dir("notdir")
     glob_write("#{dir}/afile")
-    glob = Kimi::Tools::Glob.new(dir)
+    glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*", "path": "afile"})))
     result.is_error.should be_true
     result.content.should contain("not a directory")
@@ -55,7 +55,7 @@ describe Kimi::Tools::Glob do
 
   it "rejects a relative path that escapes the workspace via .." do
     dir = glob_fresh_dir("escape")
-    glob = Kimi::Tools::Glob.new(dir)
+    glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*", "path": "../"})))
     result.is_error.should be_true
   end
@@ -66,7 +66,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/.env")
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -81,7 +81,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/.env.production")
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -94,7 +94,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/credentials")
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -105,7 +105,7 @@ describe Kimi::Tools::Glob do
       dir = glob_fresh_dir("exemption")
       glob_write("#{dir}/.env.example")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
       result.is_error.should be_false
       result.content.should contain(".env.example")
@@ -117,7 +117,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/id_rsa.bak")
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -135,7 +135,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/.git/HEAD")
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -155,7 +155,7 @@ describe Kimi::Tools::Glob do
       Process.run("git", ["init", "-q", dir], output: Process::Redirect::Close, error: Process::Redirect::Close)
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -166,7 +166,7 @@ describe Kimi::Tools::Glob do
       Process.run("git", ["init", "-q", dir], output: Process::Redirect::Close, error: Process::Redirect::Close)
       glob_write("#{dir}/keep.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr", "include_ignored": true})))
       result.is_error.should be_false
       result.content.should contain("keep.cr")
@@ -182,7 +182,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/new.cr", mtime: new_time)
       glob_write("#{dir}/mid.cr", mtime: Time.utc(2022, 1, 1))
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
       result.is_error.should be_false
 
@@ -203,7 +203,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/b.tsx")
       glob_write("#{dir}/c.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.{ts,tsx}"})))
       result.is_error.should be_false
       result.content.should contain("a.ts")
@@ -219,7 +219,7 @@ describe Kimi::Tools::Glob do
       glob_write("#{dir}/src/sub/b.ts")
       glob_write("#{dir}/other/c.ts")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "src/**/*.ts"})))
       result.is_error.should be_false
       result.content.should contain("a.ts")
@@ -233,7 +233,7 @@ describe Kimi::Tools::Glob do
       dir = glob_fresh_dir("cap")
       (1..105).each { |i| glob_write("#{dir}/f#{i}.cr") }
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
       result.is_error.should be_false
       result.content.should contain("Truncated at 100 matches")
@@ -246,7 +246,7 @@ describe Kimi::Tools::Glob do
       dir = glob_fresh_dir("empty")
       glob_write("#{dir}/a.cr")
 
-      glob = Kimi::Tools::Glob.new(dir)
+      glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.nomatch"})))
       result.is_error.should be_false
       result.content.should contain("No matches")

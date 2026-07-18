@@ -1,8 +1,8 @@
-module Kimi
+module Hcode
   module Config
     class Config
       property model : String = "kimi-for-coding"
-      property provider_name : String = "kimi"
+      property provider_name : String = "moonshot"
       property thinking_effort : String = "medium"
       property permission_mode : String = "manual"
       property api_key : String = ""
@@ -30,9 +30,6 @@ module Kimi
           config = parse_toml(content)
         end
 
-        if key = ENV["KIMI_API_KEY"]?
-          config.api_key = key
-        end
         if key = ENV["MOONSHOT_API_KEY"]?
           config.api_key = key
         end
@@ -42,7 +39,7 @@ module Kimi
         if key = ENV["ZHIPU_API_KEY"]?
           config.zai_api_key = key
         end
-        if ep = ENV["KIMI_ENDPOINT"]?
+        if ep = ENV["MOONSHOT_ENDPOINT"]?
           config.endpoint = ep
         end
         if ep = ENV["ZAI_ENDPOINT"]?
@@ -51,7 +48,7 @@ module Kimi
         if ep = ENV["ZAI_CP_ENDPOINT"]?
           config.zai_cp_endpoint = ep
         end
-        if model = ENV["KIMI_MODEL"]?
+        if model = ENV["MOONSHOT_MODEL"]?
           config.model = model
         end
         if model = ENV["ZAI_MODEL"]?
@@ -60,7 +57,7 @@ module Kimi
         if model = ENV["ZAI_CP_MODEL"]?
           config.zai_cp_model = model
         end
-        if provider = ENV["KIMI_PROVIDER"]?
+        if provider = ENV["HCODE_PROVIDER"]?
           config.provider_name = provider
         end
         if proxy = ENV["HTTP_PROXY"]? || ENV["HTTPS_PROXY"]? || ENV["ALL_PROXY"]?
@@ -72,8 +69,8 @@ module Kimi
 
       def self.default_config_path : String
         home = ENV["HOME"]? || "/tmp"
-        kimi_home = ENV["KIMI_HOME"]? || File.join(home, ".kimi")
-        File.join(kimi_home, "config.toml")
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
+        File.join(hcode_home, "config.toml")
       end
 
       def self.parse_toml(content : String) : Config
@@ -98,8 +95,8 @@ module Kimi
             when {"model", "thinking_effort"} then config.thinking_effort = val
             when {"permission", "mode"}      then config.permission_mode = val
             when {"provider", "default"}     then config.provider_name = val
-            when {"provider.kimi", "api_key"} then config.api_key = val
-            when {"provider.kimi", "endpoint"} then config.endpoint = val
+            when {"provider.moonshot", "api_key"} then config.api_key = val
+            when {"provider.moonshot", "endpoint"} then config.endpoint = val
             when {"provider.zai", "api_key"}  then config.zai_api_key = val
             when {"provider.zai", "endpoint"} then config.zai_endpoint = val
             when {"provider.zai", "model"}    then config.zai_model = val
@@ -131,7 +128,7 @@ module Kimi
           s << "[provider]\n"
           s << "default = \"#{@provider_name}\"\n"
           s << '\n'
-          s << "[provider.kimi]\n"
+          s << "[provider.moonshot]\n"
           s << "api_key = \"#{@api_key}\"\n"
           s << "endpoint = \"#{@endpoint}\"\n"
           s << '\n'
@@ -155,11 +152,11 @@ module Kimi
         File.write(config_path, content)
       end
 
-      def ensure_kimi_home : Nil
+      def ensure_hcode_home : Nil
         home = ENV["HOME"]? || "/tmp"
-        kimi_home = ENV["KIMI_HOME"]? || File.join(home, ".kimi")
-        Dir.mkdir_p(kimi_home) unless Dir.exists?(kimi_home)
-        sessions_dir = File.join(kimi_home, "sessions")
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
+        Dir.mkdir_p(hcode_home) unless Dir.exists?(hcode_home)
+        sessions_dir = File.join(hcode_home, "sessions")
         Dir.mkdir_p(sessions_dir) unless Dir.exists?(sessions_dir)
       end
     end

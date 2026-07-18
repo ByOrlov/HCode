@@ -7,7 +7,7 @@
 > `notificationXml.ts`, `taskOps.ts`, `persist.ts`, `errors.ts`,
 > `configSection.ts`.
 
-Цель — 3 тула в `kimi.cr/src/tools/task.cr` (`Tools::TaskList`,
+Цель — 3 тула в `hcode.cr/src/tools/task.cr` (`Tools::TaskList`,
 `Tools::TaskOutput`, `Tools::TaskStop`), плюс минимальная `TaskService`
 абстракция и `render_notification_xml`. Все 3 тула регистрируются только
 для main agent (как и goal-тулы).
@@ -496,7 +496,7 @@ end
 - [ ] Подключить к bash-инструменту: при `run_in_background=true`
       запускать процесс через `TaskService.register_task`, а не
       синхронно. Это потребует фикс-плана для Bash.
-- [ ] Регистрация тулов в `src/kimi.cr:166` для main agent.
+- [ ] Регистрация тулов в `src/hcode.cr:166` для main agent.
 - [ ] Тесты в `spec/tools/task_spec.cr`:
   - [ ] TaskList — empty/non-empty; `active_only` filter; `limit` cap;
         `lost`-задачи при `active_only=false`.

@@ -1,6 +1,6 @@
 require "../spec_helper"
 
-module Kimi
+module Hcode
   class SleepTool < Tools::Tool
     def name : String
       "Sleep"
@@ -54,18 +54,18 @@ module Kimi
   end
 end
 
-describe Kimi::Loop::ToolBatch do
-  helper = Kimi::ToolBatchSpecHelper
+describe Hcode::Loop::ToolBatch do
+  helper = Hcode::ToolBatchSpecHelper
 
   it "executes independent tool calls in parallel" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":150,"result":"a"})),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":150,"result":"b"})),
     ]
 
-    events = [] of Kimi::Loop::Event
+    events = [] of Hcode::Loop::Event
     started = Time.monotonic
     results = batch.run(calls) { |e| events << e }
     elapsed = Time.monotonic - started
@@ -77,7 +77,7 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "preserves result order regardless of completion order" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":200,"result":"slow-first"})),
@@ -94,14 +94,14 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "emits tool_result events as results arrive" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":150,"result":"a"})),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"b"})),
     ]
 
-    result_events = [] of Kimi::Loop::Event
+    result_events = [] of Hcode::Loop::Event
     batch.run(calls) do |e|
       result_events << e if e.type.tool_result?
     end
@@ -113,14 +113,14 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "returns an error for unknown tools without affecting others" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "MissingTool"),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"ok"})),
     ]
 
-    events = [] of Kimi::Loop::Event
+    events = [] of Hcode::Loop::Event
     results = batch.run(calls) { |e| events << e }
 
     results.size.should eq(2)
@@ -129,7 +129,7 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "deduplicates identical calls within the same step" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":20,"result":"only-once"})),
@@ -144,7 +144,7 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "aborts running tool fibers" do
-    batch = helper.make_batch([Kimi::SleepTool.new])
+    batch = helper.make_batch([Hcode::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":5000,"result":"never"})),
@@ -166,8 +166,8 @@ describe Kimi::Loop::ToolBatch do
   end
 
   it "appends tool results to context in input order" do
-    context = Kimi::Context::Memory.new
-    batch = helper.make_batch([Kimi::SleepTool.new], context: context)
+    context = Hcode::Context::Memory.new
+    batch = helper.make_batch([Hcode::SleepTool.new], context: context)
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":200,"result":"slow"})),

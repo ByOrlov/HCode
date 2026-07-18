@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Prompt
     class Template
       def self.render(template : String, vars : Hash(String, String)) : String

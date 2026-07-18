@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     # TodoList — structured TODO list management tool.
     #

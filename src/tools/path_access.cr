@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     # Path resolution + sensitive-file detection for the builtin tools.
     #

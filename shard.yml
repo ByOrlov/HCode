@@ -1,4 +1,4 @@
-name: kimio
+name: hcode
 version: 0.1.0
 
 authors:
@@ -9,8 +9,8 @@ crystal: 1.14.0
 license: GPL-2.0-or-later
 
 targets:
-  kimio:
-    main: src/kimi.cr
+  hcode:
+    main: src/hcode.cr
 
 dependencies:
   toml:

@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     class Write < Tool
       @work_dir : String

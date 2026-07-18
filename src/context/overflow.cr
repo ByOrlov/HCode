@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Context
     # Recovery from context-overflow conditions.
     #
@@ -11,7 +11,7 @@ module Kimi
     #   Path B (token-count overflow, ≥ 90% of max context):
     #     trigger compaction (LLM summarises old history).
     #
-    # Because kimi.cr currently has no image/media support, messages are
+    # Because hcode.cr currently has no image/media support, messages are
     # text-only and Path A collapses straight to compaction — there is no
     # media to degrade or strip. The projection state machine is still
     # wired so adding media later needs no changes here.

@@ -1,6 +1,6 @@
 require "./tool_batch"
 
-module Kimi
+module Hcode
   module Loop
     alias StepResult = LLM::StepResult
     alias TurnResult = LLM::TurnResult
@@ -112,7 +112,7 @@ module Kimi
           messages = @context.messages
           tool_defs = @tools.definitions
 
-          if ENV["KIMI_DEBUG"]?
+          if ENV["HCODE_DEBUG"]?
             STDERR.puts "[debug] Last 3 messages:"
             messages.last(3).each_with_index(1) do |msg, i|
               STDERR.puts "[debug]   msg #{i}: role=#{msg.role} content=#{msg.content.to_s[0...80].inspect} " \
@@ -186,7 +186,7 @@ module Kimi
 
       private def run_tool_batch(tool_calls : Array(LLM::ToolCall),
                                  on_event : Event ->) : Array(LLM::Message)
-        if ENV["KIMI_DEBUG"]?
+        if ENV["HCODE_DEBUG"]?
           tool_calls.each do |tc|
             STDERR.puts "[debug] ToolCall: id=#{tc.id.inspect} name=#{tc.name} args=#{tc.arguments[0...100]}"
           end

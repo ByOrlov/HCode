@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     struct Style
       property fg : Int32? = nil

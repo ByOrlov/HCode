@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     abstract class Component
       getter width : Int32 = 0

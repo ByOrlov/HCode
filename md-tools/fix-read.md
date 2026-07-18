@@ -2,7 +2,7 @@
 
 > Источник: `packages/agent-core-v2/src/os/backends/node-local/tools/read.ts`
 > + `read.md`, `_base/text/line-endings.ts`, `agent/media/file-type.ts`.
-> Текущий Crystal: `kimi.cr/src/tools/read.cr`, `kimi.cr/src/tools/line_endings.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/read.cr`, `hcode.cr/src/tools/line_endings.cr`.
 
 ## Текущее состояние
 

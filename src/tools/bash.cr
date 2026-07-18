@@ -1,9 +1,9 @@
-module Kimi
+module Hcode
   module Tools
     class Bash < Tool
       # Foreground-only execution. Background task management
       # (run_in_background / auto-background-on-timeout) is not available —
-      # there is no BackgroundManager in kimi.cr — so a foreground command
+      # there is no BackgroundManager in hcode.cr — so a foreground command
       # that hits its timeout is killed, mirroring the JS config
       # `autoBackgroundOnTimeout: false`.
       DEFAULT_TIMEOUT_S = 60
@@ -87,7 +87,7 @@ Guidelines for efficiency:
         return ToolResult.error("Command cannot be empty.") if command.empty?
 
         # run_in_background requires a BackgroundManager (not present in
-        # kimi.cr). Reject it explicitly instead of silently running a
+        # hcode.cr). Reject it explicitly instead of silently running a
         # long-lived command in the foreground and killing it at the cap.
         if input["run_in_background"]?.try(&.as_bool?) == true
           return ToolResult.error(
@@ -157,7 +157,7 @@ Guidelines for efficiency:
           ToolResult.error("#{result}\n[killed by signal]")
         elsif status.exit_code != 0
           # Keep the `[exit code: N]` trailer format: the TUI
-          # (kimi.cr render_tool_block) parses it to render a red footer.
+          # (hcode.cr render_tool_block) parses it to render a red footer.
           ToolResult.error("#{result}\n[exit code: #{status.exit_code}]")
         else
           ToolResult.success(result.strip)

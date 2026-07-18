@@ -3,7 +3,7 @@
 ## Цель
 
 Интерактивный first-run wizard, который спрашивает у пользователя провайдера,
-ключ и модель при первом запуске, сохраняет выбор в `~/.kimi/config.toml` и
+ключ и модель при первом запуске, сохраняет выбор в `~/.hcode/config.toml` и
 больше не беспокоит. В non-TTY среде (pipe, CI, скрипт) — fail-fast с понятной
 инструкцией вместо падения в глубоком стеке.
 
@@ -15,26 +15,26 @@
 
 | Где | Что | Файл:строка |
 | --- | --- | --- |
-| `DEFAULT_PROVIDER_NAME = "kimi"` | дефолт провайдера | `src/llm/provider.cr:62` |
-| `endpoint = "https://api.kimi.com/coding/v1"` | дефолт endpoint KimiProvider | `src/llm/kimi_provider.cr:68` |
+| `DEFAULT_PROVIDER_NAME = "moonshot"` | дефолт провайдера | `src/llm/provider.cr:62` |
+| `endpoint = "https://api.kimi.com/coding/v1"` | дефолт endpoint MoonshotProvider | `src/llm/moonshot_provider.cr:68` |
 | `property endpoint : String = "https://api.kimi.com/coding/v1"` | дефолт endpoint в Config | `src/config/config.cr:9` |
 | `property model : String = "kimi-for-coding"` | дефолт model в Config | `src/config/config.cr:4` |
-| `property provider_name : String = "kimi"` | дефолт provider в Config | `src/config/config.cr:5` |
+| `property provider_name : String = "moonshot"` | дефолт provider в Config | `src/config/config.cr:5` |
 
-Поскольку проект называется **KimiO** + модуль `Kimi` + дефолт указывает на
+Поскольку проект называется **HCode** + модуль `Hcode` + дефолт указывает на
 `api.kimi.com` (end-point Moonshot AI), это выглядит как **эндорсмент /
 аффилированность** с Moonshot — основание для претензии по товарному знаку
 (passing off). GPL и CLA от этого **не защищают**: GPL — лицензия авторских
 прав, не товарных знаков.
 
 Wizard решает проблему: пользователь **явно выбирает** провайдера, никакого
-дефолта на конкретного вендора в коде нет. KimiProvider остаётся в коде как
-одна из опций (nominative fair use — «работает с Kimi»).
+дефолта на конкретного вендора в коде нет. MoonshotProvider остаётся в коде как
+одна из опций (nominative fair use — «работает с Moonshot»).
 
 ### UX
 
-- Сейчас первый запуск требует знать список env-переменных (`KIMI_API_KEY`,
-  `KIMI_ENDPOINT`, `KIMI_MODEL`, ...) — высокий порог входа.
+- Сейчас первый запуск требует знать список env-переменных (`MOONSHOT_API_KEY`,
+  `MOONSHOT_ENDPOINT`, `MOONSHOT_MODEL`, ...) — высокий порог входа.
 - Wizard = один вопрос, один ключ, дальше работает. Сравнение: у `aider`,
   `opencode`, `goose`, `codex` — у всех wizard на первом запуске, ни один не
   имеет захардкоженного дефолта на конкретного вендора. Это industry standard
@@ -43,23 +43,23 @@ Wizard решает проблему: пользователь **явно выб
 ## Текущее состояние (до wizard)
 
 ```crystal
-# src/kimi.cr:143
+# src/hcode.cr:143
 config = Config::Config.load
 # ...
 provider = build_provider(config, oauth)   # line 156
 ```
 
-`Config.load` молча подставляет дефолты `provider_name = "kimi"` и
+`Config.load` молча подставляет дефолты `provider_name = "moonshot"` и
 `endpoint = "https://api.kimi.com/coding/v1"`. Если у пользователя нет
-`KIMI_API_KEY` и нет OAuth-токена — `KimiProvider` создаётся, но падает при
+`MOONSHOT_API_KEY` и нет OAuth-токена — `MoonshotProvider` создаётся, но падает при
 первом же запросе с невнятным 401.
 
 ## Целевая архитектура
 
 ```
                     ┌───────────────────────────┐
-                    │   Kimi.run(argv)          │
-                    │   src/kimi.cr             │
+                    │   Hcode.run(argv)          │
+                    │   src/hcode.cr             │
                     └─────────────┬─────────────┘
                                   │
                                   ▼
@@ -97,7 +97,7 @@ provider = build_provider(config, oauth)   # line 156
 
 | Поле | Было | Стало |
 | --- | --- | --- |
-| `provider_name` | `String = "kimi"` | `String? = nil` |
+| `provider_name` | `String = "moonshot"` | `String? = nil` |
 | `endpoint` | `String = "https://api.kimi.com/coding/v1"` | `String? = nil` |
 | `model` | `String = "kimi-for-coding"` | `String? = nil` |
 | `api_key` | `String = ""` | `String? = nil` |
@@ -110,7 +110,7 @@ provider = build_provider(config, oauth)   # line 156
 # to run the wizard. Does NOT validate the key — only that one is present.
 def provider_configured? : Bool
   case provider_name
-  when "kimi"     then !api_key.blank? || oauth_credentials_present?
+  when "moonshot"     then !api_key.blank? || oauth_credentials_present?
   when "zai"      then !zai_api_key.blank?
   when "zai-cp"   then !zai_api_key.blank?
   when "openai"   then !api_key.blank?
@@ -125,24 +125,24 @@ end
 
 ### Env vars (unchanged for back-compat)
 
-`KIMI_API_KEY`, `MOONSHOT_API_KEY`, `KIMI_ENDPOINT`, `KIMI_MODEL`,
-`KIMI_PROVIDER`, `ZAI_API_KEY`, `ZHIPU_API_KEY`, `ZAI_ENDPOINT`, `ZAI_MODEL` —
+`MOONSHOT_API_KEY`, `MOONSHOT_API_KEY`, `MOONSHOT_ENDPOINT`, `MOONSHOT_MODEL`,
+`HCODE_PROVIDER`, `ZAI_API_KEY`, `ZHIPU_API_KEY`, `ZAI_ENDPOINT`, `ZAI_MODEL` —
 остаются. Если заданы — wizard пропускается (existing flow для скриптов/CI).
 
 ### New: `Setup::Wizard` (`src/setup/wizard.cr`)
 
 ```crystal
-module Kimi
+module Hcode
   module Setup
     class SetupRequired < Exception
-      def initialize(message = "No provider configured. Run `kimio` in a TTY to set up, or set KIMI_PROVIDER + KIMI_API_KEY + KIMI_ENDPOINT env vars.")
+      def initialize(message = "No provider configured. Run `hcode` in a TTY to set up, or set HCODE_PROVIDER + MOONSHOT_API_KEY + MOONSHOT_ENDPOINT env vars.")
         super(message)
       end
     end
 
     module Wizard
       PROVIDER_CHOICES = [
-        {name: "kimi",      label: "Kimi / Moonshot",         needs_key: true,  default_endpoint: "https://api.kimi.com/coding/v1"},
+        {name: "moonshot",      label: "Moonshot",         needs_key: true,  default_endpoint: "https://api.kimi.com/coding/v1"},
         {name: "zai",       label: "Z.AI / Zhipu (GLM)",      needs_key: true,  default_endpoint: "https://api.z.ai/api/paas/v4"},
         {name: "openai",    label: "OpenAI",                  needs_key: true,  default_endpoint: "https://api.openai.com/v1"},
         {name: "openrouter",label: "OpenRouter (300+ models)",needs_key: true,  default_endpoint: "https://openrouter.ai/api/v1"},
@@ -170,7 +170,7 @@ end
 
 ```crystal
 KNOWN_PROVIDERS = [
-  ProviderInfo.new("kimi",       "Kimi / Moonshot — Chat Completions"),
+  ProviderInfo.new("moonshot",       "Moonshot — Chat Completions"),
   ProviderInfo.new("zai",        "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)"),
   ProviderInfo.new("zai-cp",     "Z.AI / Zhipu — Coding Plan subscription"),
   ProviderInfo.new("openai",     "OpenAI — official API"),
@@ -181,7 +181,7 @@ KNOWN_PROVIDERS = [
 ```
 
 `OpenAIProvider`, `OpenRouterProvider`, `OllamaProvider` — тонкие подклассы
-`OpenAIChatProvider` (по аналогии с `KimiProvider`/`ZaiProvider`). Они уже
+`OpenAIChatProvider` (по аналогии с `MoonshotProvider`/`ZaiProvider`). Они уже
 могут быть созданы через `OpenAIChatProvider.new(model, endpoint, api_key)`
 напрямую, но выделение в именованные классы упрощает wire-dialect флаги и
 `/provider` селектор.
@@ -189,24 +189,24 @@ KNOWN_PROVIDERS = [
 ## TTY wizard flow
 
 ```
-$ kimio
+$ hcode
 
-Welcome to KimiO. Choose your provider:
+Welcome to HCode. Choose your provider:
 
-  > Kimi / Moonshot
+  > Moonshot
     Z.AI / Zhipu (GLM)
     OpenAI
     OpenRouter (300+ models)
     Local (Ollama)
 
-API key (kimi): █
+API key (moonshot): █
   Get one at https://platform.moonshot.cn
 
 Endpoint [https://api.kimi.com/coding/v1]: █
 
 Model [kimi-for-coding]: █
 
-Saved to ~/.kimi/config.toml.
+Saved to ~/.hcode/config.toml.
 ```
 
 Для `ollama` — ключ не спрашивается. Для `openrouter` — ссылка на
@@ -223,25 +223,25 @@ raise Setup::SetupRequired.new
 ```
 Error: No provider configured.
 
-Run `kimio` once in a TTY to set up interactively, or set:
+Run `hcode` once in a TTY to set up interactively, or set:
 
-  export KIMIO_PROVIDER=kimi        # or: zai, openai, openrouter, ollama
-  export KIMIO_API_KEY=YOUR_API_KEY # not needed for ollama
-  export KIMIO_ENDPOINT=https://api.kimi.com/coding/v1
-  export KIMIO_MODEL=kimi-for-coding
+  export HCODE_PROVIDER=moonshot    # or: zai, openai, openrouter, ollama
+  export MOONSHOT_API_KEY=YOUR_API_KEY # not needed for ollama
+  export MOONSHOT_ENDPOINT=https://api.kimi.com/coding/v1
+  export MOONSHOT_MODEL=kimi-for-coding
 
-See `kimio --help-providers` for the full list.
+See `hcode --help-providers` for the full list.
 ```
 
-Note: env-префикс остаётся `KIMI_*` для back-compat (см. раздел
-«Out of scope»). `KIMIO_*` — отдельная задача (см. ниже).
+Note: проектный env-префикс — `HCODE_*` (конфиг, debug, провайдер-селектор),
+провайдер-specific — `MOONSHOT_*` / `ZAI_*` (ключи, endpoint, модель).
 
 ## Реализация — пошаговая
 
 ### Шаг 1. Config: nil-able defaults
 
 - `src/config/config.cr`: сменить дефолты 4 полей на `nil`.
-- Обновить `parse_toml` — секции `[provider.kimi]`, `[provider.zai]`,
+- Обновить `parse_toml` — секции `[provider.moonshot]`, `[provider.zai]`,
   `[provider.zai-cp]` продолжают работать как есть.
 - `save` писать только заполненные секции (не писать `endpoint = ""`).
 
@@ -250,7 +250,7 @@ Note: env-префикс остаётся `KIMI_*` для back-compat (см. р�
 - `src/llm/openai_provider.cr` — NEW, 20 строк, `< OpenAIChatProvider`.
 - `src/llm/openrouter_provider.cr` — NEW, 20 строк.
 - `src/llm/ollama_provider.cr` — NEW, 15 строк, без api_key.
-- Зарегистрировать в `src/kimi.cr` require-блоке.
+- Зарегистрировать в `src/hcode.cr` require-блоке.
 - Поправить `build_named_provider` (line ~226) — обрабатывать новые имена.
 
 ### Шаг 3. Setup::Wizard
@@ -266,20 +266,20 @@ Note: env-префикс остаётся `KIMI_*` для back-compat (см. р�
 
 ### Шаг 4. Hook в entry point
 
-- `src/kimi.cr:143` после `Config.load`, до `build_provider`:
+- `src/hcode.cr:143` после `Config.load`, до `build_provider`:
 
 ```crystal
 config = Config::Config.load
 config.model = model if model
 config.permission_mode = pm if pm
-config.ensure_kimi_home
+config.ensure_hcode_home
 
 Setup::Wizard.ensure!(config)   # ← NEW
 ```
 
 ### Шаг 5. `--help-providers` flag
 
-- В `Kimi.run` добавить обработку `--help-providers` → вывести таблицу
+- В `Hcode.run` добавить обработку `--help-providers` → вывести таблицу
   провайдеров с endpoint-ами и ссылками на получение ключей.
 
 ### Шаг 6. README update
@@ -293,23 +293,23 @@ Setup::Wizard.ensure!(config)   # ← NEW
 ### Unit (`spec/setup/wizard_spec.cr`)
 
 1. `ensure!` no-op когда `config.provider_name` задан и `provider_configured?` true.
-2. `ensure!` no-op когда достаточно env-переменных (`KIMI_PROVIDER` + `KIMI_API_KEY`).
+2. `ensure!` no-op когда достаточно env-переменных (`HCODE_PROVIDER` + `MOONSHOT_API_KEY`).
 3. `ensure!` поднимает `SetupRequired` в non-TTY когда конфиг пустой (stub `TTY::Terminal.interactive?` → false).
-4. `provider_configured?` корректно классифицирует каждый провайдер (kimi без ключа → false, kimi с ключом → true, ollama без ключа → true).
+4. `provider_configured?` корректно классифицирует каждый провайдер (moonshot без ключа → false, moonshot с ключом → true, ollama без ключа → true).
 5. `run_interactive` через pipe-stub: эмулировать ввод «1\nkey\n\n\n» и проверить, что в `config` попали правильные поля (mock STDIN).
 
-### Integration (`spec/kimi_spec.cr` — расширить)
+### Integration (`spec/hcode_spec.cr` — расширить)
 
-6. Запуск `Kimi.run([])` без config и без TTY → exit code 2, stderr содержит
+6. Запуск `Hcode.run([])` без config и без TTY → exit code 2, stderr содержит
    «No provider configured» и подсказку про env-переменные.
-7. Запуск с `KIMI_PROVIDER=mock` → wizard не запускается, TUI стартует.
+7. Запуск с `HCODE_PROVIDER=mock` → wizard не запускается, TUI стартует.
 
 ### Manual
 
-8. Удалить `~/.kimi/config.toml`, запустить `./kimio` в реальном терминале →
+8. Удалить `~/.hcode/config.toml`, запустить `./hcode` в реальном терминале →
    должен запуститься wizard, сохранить config, запустить TUI.
 9. Повторный запуск — wizard не должен появляться.
-10. `KIMI_PROVIDER=ollama ./kimio` → сразу стартует без вопросов.
+10. `HCODE_PROVIDER=ollama ./hcode` → сразу стартует без вопросов.
 
 ## Критерии приёмки
 
@@ -327,14 +327,13 @@ Setup::Wizard.ensure!(config)   # ← NEW
 
 ## Out of scope (отдельные задачи)
 
-- **Rename `module Kimi` → `module Kimio`** — отдельная задача, 30+ правок
-  по `src/`. Wizard с ней не связан.
-- **Rename env-префикса `KIMI_*` → `KIMIO_*`** — back-compat-breaking change,
-  требует deprecation-период. В рамках wizard старый префикс остаётся.
+- **Rename `module Kimi` → `module Hcode`** — ✅ выполнено: модуль `Hcode`,
+  бинарарь `hcode`, конфиг `~/.hcode/`, проектный env `HCODE_*`,
+  провайдер Moonshot (`MoonshotProvider`, env `MOONSHOT_*`).
 - **MCP-провайдеры** — wizard покрывает только built-in провайдеры.
 - **Multi-profile** (несколько сохранённых профилей с переключением через
   `--profile name`) — future work.
-- **`kimio login` subcommand для OAuth** — сейчас OAuth-токен читается из
+- **`hcode login` subcommand для OAuth** — сейчас OAuth-токен читается из
   `~/.kimi-code/credentials/kimi-code.json` (общий с TS-версией). Вынос
   логина в отдельную команду — отдельная задача.
 

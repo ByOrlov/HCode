@@ -1,7 +1,7 @@
 # Fix Glob — план доработки до паритета с JS
 
 > Источник: `packages/agent-core-v2/src/os/backends/node-local/tools/glob.ts` + `glob.md`.
-> Текущий Crystal: `kimi.cr/src/tools/glob.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/glob.cr`.
 
 ## Текущее состояние
 

@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Permission
     # Rule-based permission policies — a user-configurable allow/deny/ask
     # rule set that gates tool calls before the interactive approval prompt.

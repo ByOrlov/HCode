@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     class Read < Tool
       MAX_LINES       = 1000

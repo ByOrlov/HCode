@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Loop
     alias ToolResult = Tools::ToolResult
 

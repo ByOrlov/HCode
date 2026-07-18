@@ -4,7 +4,7 @@
 > + `sessionSwarm.ts`, `swarmService.ts`, `swarmOps.ts`, `swarm.ts`, `agent-swarm.md`,
 >   `enter-reminder.md`, `exit-reminder.md`.
 
-Цель — тул `AgentSwarm` в `kimi.cr/src/tools/agent_swarm.cr` с **идентичным**
+Цель — тул `AgentSwarm` в `hcode.cr/src/tools/agent_swarm.cr` с **идентичным**
 LLM-контрактом (имя, описание, JSON Schema, правила валидации, формат XML-вывода).
 Полноценная интеграция с session-swarm coordinator'ом вынесена отдельно (см. раздел
 «Интеграция»), сам тул должен оставаться чистым: парсинг, валидация, рендер.
@@ -191,7 +191,7 @@ alias SwarmRunner = AgentSwarmSpec, String, SwarmRunContext -> SwarmRunResult
   - [x] Построение specs (resume → spawn, индексация с 1).
   - [x] Рендер XML-вывода (`render_results`, `render_summary`, `escape_xml_attribute`).
   - [x] Интеграция с опциональным `@@runner` (если не задан — единая ошибка).
-- [x] Зарегистрировать тул в `Tools::Registry` (`src/kimi.cr`).
+- [x] Зарегистрировать тул в `Tools::Registry` (`src/hcode.cr`).
 - [x] Тесты в `spec/tools/agent_swarm_spec.cr` (14 примеров, все зелёные):
   - [x] Ошибка при `items.size < 2` без `resume_agent_ids`.
   - [x] Ошибка при `items` без `prompt_template`.

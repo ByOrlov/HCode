@@ -1,8 +1,8 @@
 require "../spec_helper"
 
-describe Kimi::Tools::Bash do
+describe Hcode::Tools::Bash do
   it "exposes command, cwd, timeout, and description in the schema" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     bash.name.should eq("Bash")
 
     props = bash.parameters["properties"].as_h
@@ -15,7 +15,7 @@ describe Kimi::Tools::Bash do
   end
 
   it "describes cwd, timeout cap, and the kill-on-timeout behavior" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     bash.description.should contain("cwd")
     bash.description.should contain("absolute paths")
     bash.description.should contain("hits its timeout is killed")
@@ -23,29 +23,29 @@ describe Kimi::Tools::Bash do
   end
 
   it "runs a command and returns stdout" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"printf hello"})))
     result.is_error.should be_false
     result.content.should contain("hello")
   end
 
   it "combines stdout and stderr" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"printf out; printf err 1>&2"})))
     result.content.should contain("out")
     result.content.should contain("err")
   end
 
   it "honors the cwd argument" do
-    Dir.mkdir_p("/tmp/kimi-bash-cwd")
-    bash = Kimi::Tools::Bash.new("/tmp")
-    result = bash.execute(JSON.parse(%({"command":"pwd","cwd":"/tmp/kimi-bash-cwd"})))
+    Dir.mkdir_p("/tmp/hcode-bash-cwd")
+    bash = Hcode::Tools::Bash.new("/tmp")
+    result = bash.execute(JSON.parse(%({"command":"pwd","cwd":"/tmp/hcode-bash-cwd"})))
     result.is_error.should be_false
-    result.content.should contain("/tmp/kimi-bash-cwd")
+    result.content.should contain("/tmp/hcode-bash-cwd")
   end
 
   it "marks non-zero exit codes as errors with an [exit code: N] trailer" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"exit 2"})))
     result.is_error.should be_true
     result.content.should contain("[exit code: 2]")
@@ -55,7 +55,7 @@ describe Kimi::Tools::Bash do
     prev = ENV["GIT_TERMINAL_PROMPT"]?
     ENV.delete("GIT_TERMINAL_PROMPT")
     begin
-      bash = Kimi::Tools::Bash.new("/tmp")
+      bash = Hcode::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv NO_COLOR; printenv TERM; printenv GIT_TERMINAL_PROMPT"})))
       lines = result.content.strip.split('\n')
       lines.should contain("1")        # NO_COLOR=1
@@ -70,7 +70,7 @@ describe Kimi::Tools::Bash do
     prev = ENV["GIT_TERMINAL_PROMPT"]?
     ENV["GIT_TERMINAL_PROMPT"] = "1"
     begin
-      bash = Kimi::Tools::Bash.new("/tmp")
+      bash = Hcode::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv GIT_TERMINAL_PROMPT"})))
       result.content.strip.should eq("1")
     ensure
@@ -83,7 +83,7 @@ describe Kimi::Tools::Bash do
   end
 
   it "closes stdin so an interactive command sees EOF instead of hanging" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     # `cat` with no input reads stdin; if stdin stayed open it would hang.
     result = bash.execute(JSON.parse(%({"command":"cat"})))
     result.is_error.should be_false
@@ -91,34 +91,34 @@ describe Kimi::Tools::Bash do
   end
 
   it "clamps an over-limit timeout to MAX_TIMEOUT_S" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"true","timeout":99999})))
     result.is_error.should be_false
   end
 
   it "kills a command that exceeds its timeout" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 30","timeout":1})))
     result.is_error.should be_true
     result.content.should contain("timed out after 1s")
   end
 
   it "rejects an empty command" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":""})))
     result.is_error.should be_true
     result.content.should contain("empty")
   end
 
   it "rejects run_in_background=true because background is unavailable" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 10","run_in_background":true})))
     result.is_error.should be_true
     result.content.should contain("Background execution is not available")
   end
 
   it "truncates runaway output with a [...truncated] sentinel" do
-    bash = Kimi::Tools::Bash.new("/tmp")
+    bash = Hcode::Tools::Bash.new("/tmp")
     # Generate well over the 10 MB in-tool cap.
     result = bash.execute(JSON.parse(%({"command":"yes x | head -c 12000000"})))
     result.content.should contain("[...truncated]")

@@ -1,6 +1,6 @@
 require "digest/sha256"
 
-module Kimi
+module Hcode
   module Session
     # Metadata persisted as `state.json` inside a v2 session directory.
     # Replaces the legacy flat-layout `meta.json` (which only carried an
@@ -55,7 +55,7 @@ module Kimi
     # and CLI drive this directly. Scans both the v2 workspace-aware layout
     # (`<sessions>/<workspace_id>/<session>/{wire.jsonl,state.json}`) and
     # the legacy flat layout (`<sessions>/<session>/{wire.jsonl,meta.json}`)
-    # so sessions created by older kimi.cr builds stay resumable.
+    # so sessions created by older hcode.cr builds stay resumable.
     #
     # Ref: PLAN.md "Session Persistence" + "Local session management".
     class Index
@@ -64,9 +64,9 @@ module Kimi
       def initialize(@home : String = (ENV["HOME"]? || "/tmp"))
       end
 
-      # The sessions root: `<home>/.kimi/sessions`.
+      # The sessions root: `<home>/.hcode/sessions`.
       def sessions_root : String
-        File.join(@home, ".kimi", "sessions")
+        File.join(@home, ".hcode", "sessions")
       end
 
       # Derive a stable workspace id from a cwd: the first 12 hex chars of

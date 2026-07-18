@@ -2,7 +2,7 @@
 
 > Источник: `packages/agent-core-v2/src/os/backends/node-local/tools/bash.ts`
 > + `bash.md`, `process-task.ts`.
-> Текущий Crystal: `kimi.cr/src/tools/bash.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/bash.cr`.
 
 ## Текущее состояние
 

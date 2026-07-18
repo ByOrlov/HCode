@@ -6,25 +6,25 @@ require "random/secure"
 # MockProvider. No network, no API key: the mock replays a fixed multi-step
 # script (parallel tool calls → write → finish) so run_turn, the parallel
 # tool batch, result assembly, and termination all execute against real tools.
-describe Kimi::Loop::Agent do
+describe Hcode::Loop::Agent do
   it "runs a multi-step turn with parallel tool calls on the mock provider" do
-    work_dir = File.join(Dir.tempdir, "kimi-mock-#{Random::Secure.hex(8)}")
+    work_dir = File.join(Dir.tempdir, "hcode-mock-#{Random::Secure.hex(8)}")
     Dir.mkdir_p(work_dir)
 
     begin
-      provider = Kimi::LLM::MockProvider.new
-      memory = Kimi::Context::Memory.new
+      provider = Hcode::LLM::MockProvider.new
+      memory = Hcode::Context::Memory.new
       memory.max_context_tokens = 131_072
 
-      tools = Kimi::Tools::Registry.new
-      tools.register(Kimi::Tools::Bash.new(work_dir))
-      tools.register(Kimi::Tools::Glob.new(work_dir))
-      tools.register(Kimi::Tools::Write.new(work_dir))
+      tools = Hcode::Tools::Registry.new
+      tools.register(Hcode::Tools::Bash.new(work_dir))
+      tools.register(Hcode::Tools::Glob.new(work_dir))
+      tools.register(Hcode::Tools::Write.new(work_dir))
 
-      permission = Kimi::Permission::Manager.new(Kimi::Permission::Mode::Yolo)
-      agent = Kimi::Loop::Agent.new(provider, memory, tools, permission)
+      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+      agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
 
-      events = [] of Kimi::Loop::Event
+      events = [] of Hcode::Loop::Event
       result = agent.run_turn("self-test", nil) { |e| events << e }
 
       # The script ends on an end_turn step with no tool calls.
@@ -50,17 +50,17 @@ describe Kimi::Loop::Agent do
   end
 
   it "accumulates assistant text from the final step" do
-    provider = Kimi::LLM::MockProvider.new([
-      Kimi::LLM::MockStep.new(
-        parts: [Kimi::LLM::TextPart.new("all done here")] of Kimi::LLM::MessagePart,
+    provider = Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("all done here")] of Hcode::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "all done here",
       ),
     ])
-    memory = Kimi::Context::Memory.new
-    tools = Kimi::Tools::Registry.new
-    permission = Kimi::Permission::Manager.new(Kimi::Permission::Mode::Yolo)
-    agent = Kimi::Loop::Agent.new(provider, memory, tools, permission)
+    memory = Hcode::Context::Memory.new
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
 
     result = agent.run_turn("hi", nil) { }
 
@@ -71,25 +71,25 @@ describe Kimi::Loop::Agent do
   end
 
   it "hot-swaps the provider at runtime via swap_provider!" do
-    first = Kimi::LLM::MockProvider.new([
-      Kimi::LLM::MockStep.new(
-        parts: [Kimi::LLM::TextPart.new("first")] of Kimi::LLM::MessagePart,
+    first = Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("first")] of Hcode::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "first",
       ),
     ])
-    second = Kimi::LLM::MockProvider.new([
-      Kimi::LLM::MockStep.new(
-        parts: [Kimi::LLM::TextPart.new("second")] of Kimi::LLM::MessagePart,
+    second = Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("second")] of Hcode::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "second",
       ),
     ])
 
-    memory = Kimi::Context::Memory.new
-    tools = Kimi::Tools::Registry.new
-    permission = Kimi::Permission::Manager.new(Kimi::Permission::Mode::Yolo)
-    agent = Kimi::Loop::Agent.new(first, memory, tools, permission)
+    memory = Hcode::Context::Memory.new
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(first, memory, tools, permission)
 
     agent.provider.should be(first)
     agent.run_turn("turn one", nil) { }
@@ -103,23 +103,23 @@ describe Kimi::Loop::Agent do
   end
 
   it "emits ThinkingDelta events when the provider streams ThinkParts" do
-    provider = Kimi::LLM::MockProvider.new([
-      Kimi::LLM::MockStep.new(
+    provider = Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
         parts: [
-          Kimi::LLM::ThinkPart.new("Let me analyze"),
-          Kimi::LLM::ThinkPart.new(" this problem."),
-          Kimi::LLM::TextPart.new("Here is the answer."),
-        ] of Kimi::LLM::MessagePart,
+          Hcode::LLM::ThinkPart.new("Let me analyze"),
+          Hcode::LLM::ThinkPart.new(" this problem."),
+          Hcode::LLM::TextPart.new("Here is the answer."),
+        ] of Hcode::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "Here is the answer.",
       ),
     ])
-    memory = Kimi::Context::Memory.new
-    tools = Kimi::Tools::Registry.new
-    permission = Kimi::Permission::Manager.new(Kimi::Permission::Mode::Yolo)
-    agent = Kimi::Loop::Agent.new(provider, memory, tools, permission)
+    memory = Hcode::Context::Memory.new
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
 
-    events = [] of Kimi::Loop::Event
+    events = [] of Hcode::Loop::Event
     agent.run_turn("test", nil) { |e| events << e }
 
     thinking_deltas = events.select(&.type.thinking_delta?)

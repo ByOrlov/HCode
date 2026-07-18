@@ -1,6 +1,6 @@
 require "./sensitive"
 
-module Kimi
+module Hcode
   module Tools
     # Shared ripgrep subprocess plumbing for Glob and Grep.
     #

@@ -3,7 +3,7 @@
 > Источник: `packages/agent-core-v2/src/app/edit/tools/edit.ts` + `edit.md`,
 > `app/edit/editService.ts`, `app/edit/fileEdit.ts`, `app/edit/fileEditService.ts`,
 > `app/edit/textModel.ts`.
-> Текущий Crystal: `kimi.cr/src/tools/edit.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/edit.cr`.
 
 ## Текущее состояние
 

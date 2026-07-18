@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Loop
     class DedupTracker
       MAX_STREAK = 12

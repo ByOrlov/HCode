@@ -4,7 +4,7 @@
 > + `skill.md`, `skill.ts` (interface), `skillService.ts`, `skillOps.ts`,
 >   `prompt.ts`, `app/skillCatalog/registry.ts`.
 
-Цель — тул `Skill` в `kimi.cr/src/tools/skill.cr` с идентичным
+Цель — тул `Skill` в `hcode.cr/src/tools/skill.cr` с идентичным
 LLM-контрактом. Вызов зарегистрированного skill встраивает его промпт в
 **текущий ход** через `Context::Memory` injection (аналог JS steer delivery).
 
@@ -29,7 +29,7 @@ LLM-контрактом. Вызов зарегистрированного skil
 > но в шаблоне не интерполируется. Описание фиксировано.
 
 ```
-Invoke a registered skill from the current skill listing. BLOCKING REQUIREMENT: when a skill from the listing matches the user's request, you MUST call this tool (not free-form text). Do not re-invoke a skill to repeat work already done: if a `<kimi-skill-loaded>` block for it with the same `args` is already present in the conversation, follow those instructions directly instead of calling the tool again. Do call the tool again when you need the skill with different arguments — the loaded block was expanded with the earlier `args` and will not reflect new inputs.
+Invoke a registered skill from the current skill listing. BLOCKING REQUIREMENT: when a skill from the listing matches the user's request, you MUST call this tool (not free-form text). Do not re-invoke a skill to repeat work already done: if a `<hcode-skill-loaded>` block for it with the same `args` is already present in the conversation, follow those instructions directly instead of calling the tool again. Do call the tool again when you need the skill with different arguments — the loaded block was expanded with the earlier `args` and will not reflect new inputs.
 ```
 
 ### 1.3. `parameters` — JSON Schema
@@ -141,15 +141,15 @@ Skill "<skill.name>" loaded inline. Follow its instructions.
 
 ---
 
-## 6. Блок `<kimi-skill-loaded>`
+## 6. Блок `<hcode-skill-loaded>`
 
 `render_model_tool_skill_prompt` склеивает через `\n`:
 
 ```
 Skill tool loaded instructions for this request. Follow them.
-<kimi-skill-loadedATTRS>
+<hcode-skill-loadedATTRS>
 <skillContent>
-</kimi-skill-loaded>
+</hcode-skill-loaded>
 ```
 
 Атрибуты (`render_skill_attributes` — только с непустым значением):
@@ -176,7 +176,7 @@ JS использует `delivery: { kind: 'steer', message }`, который �
 2. `Context::Memory#add_injection(content)` добавляет system-role
    сообщение (с существующим `MessageOrigin::Injection`).
 3. Injection содержит ровно тот же текст, что и JS message.content —
-   preamble + `<kimi-skill-loaded>…</kimi-skill-loaded>`.
+   preamble + `<hcode-skill-loaded>…</hcode-skill-loaded>`.
 
 Реализация в Crystal:
 
@@ -213,12 +213,12 @@ end
    - `$ARGUMENTS[<n>]` → `tokens[n] || ""`.
    - `$<n>` (не следует за word char) → `tokens[n] || ""`.
    - `$ARGUMENTS` → весь `raw_args` (XML-tag-escaped).
-   - `${KIMI_SKILL_DIR}` → `skill_dir`.
-   - `${KIMI_SESSION_ID}` → `session_id || ""`.
+   - `${HCODE_SKILL_DIR}` → `skill_dir`.
+   - `${HCODE_SESSION_ID}` → `session_id || ""`.
 4. Если ни один аргументный плейсхолдер не заменён И `raw_args.size > 0` →
    добавить `"\n\nARGUMENTS: #{escape_xml_tags(raw_args)}"`.
 5. Если у skill есть `plugin.instructions` — prepend
-   `<kimi-plugin-instructions plugin="#{escape_xml_attr(id)}">...</kimi-plugin-instructions>\n\n`.
+   `<hcode-plugin-instructions plugin="#{escape_xml_attr(id)}">...</hcode-plugin-instructions>\n\n`.
 
 `escape_xml_tags(s)` = заменить `<`→`&lt;`, `>`→`&gt;` (только два).
 `escape_xml_attr(s)` = `&`→`&amp;`, `"`→`&quot;`.
@@ -258,7 +258,7 @@ end
 
 ---
 
-## 11. Существующая инфраструктура skill в kimi.cr
+## 11. Существующая инфраструктура skill в hcode.cr
 
 Crystal пока не имеет `SkillCatalog` / `AgentSkillService`. Минимальный
 каркас:
@@ -326,7 +326,7 @@ end
   - [ ] `type="prompt"` (default) → успех, injection в memory.
   - [ ] `args` с `$1`, `$ARGUMENTS`, `$NAME` — корректная подстановка.
   - [ ] `args` без плейсхолдеров в теле → добавляется `ARGUMENTS:` строка.
-  - [ ] XML-экранирование в `<kimi-skill-loaded>` атрибутах.
+  - [ ] XML-экранирование в `<hcode-skill-loaded>` атрибутах.
 - [ ] Обновить `FIX-TOOLS.md`: отметить строку #6 выполненной.
 
 ---

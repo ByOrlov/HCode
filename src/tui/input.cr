@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     enum Key
       Unknown

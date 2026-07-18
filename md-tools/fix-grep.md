@@ -2,8 +2,8 @@
 
 > Источник: `packages/agent-core-v2/src/os/backends/node-local/tools/grep.ts`
 > + `grep.md`, `runRg.ts`, `rgLocator.ts`.
-> Текущий Crystal: `kimi.cr/src/tools/grep.cr`, `kimi.cr/src/tools/run_rg.cr`,
-> `kimi.cr/src/tools/sensitive.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/grep.cr`, `hcode.cr/src/tools/run_rg.cr`,
+> `hcode.cr/src/tools/sensitive.cr`.
 
 ## Текущее состояние (уже в паритете на 95%)
 

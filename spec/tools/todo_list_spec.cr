@@ -1,8 +1,8 @@
 require "../spec_helper"
 
-describe Kimi::Tools::TodoList do
+describe Hcode::Tools::TodoList do
   it "exposes JS-schema parameter names" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     props = todo.parameters["properties"].as_h
     props.has_key?("todos").should be_true
     item_props = props["todos"].as_h["items"].as_h["properties"].as_h
@@ -19,7 +19,7 @@ describe Kimi::Tools::TodoList do
   end
 
   it "creates a todo list with JS status markers" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"task A","status":"pending"},{"title":"task B","status":"done"}]})))
     result.is_error.should be_false
     result.content.should contain("task A")
@@ -29,7 +29,7 @@ describe Kimi::Tools::TodoList do
   end
 
   it "appends the write reminder after a mutation" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"x","status":"in_progress"}]})))
     result.is_error.should be_false
     result.content.should contain("in_progress")
@@ -37,14 +37,14 @@ describe Kimi::Tools::TodoList do
   end
 
   it "accepts in_progress status" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"active","status":"in_progress"}]})))
     result.is_error.should be_false
     result.content.should contain("[in_progress]")
   end
 
   it "handles empty todos (clear mode)" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     # First populate
     todo.execute(JSON.parse(%({"todos":[{"title":"a","status":"pending"}]})))
     # Then clear
@@ -54,7 +54,7 @@ describe Kimi::Tools::TodoList do
   end
 
   it "query mode: omit todos to read the current list without mutation" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     todo.execute(JSON.parse(%({"todos":[{"title":"read me","status":"pending"}]})))
     result = todo.execute(JSON.parse(%({})))
     result.is_error.should be_false
@@ -65,21 +65,21 @@ describe Kimi::Tools::TodoList do
   end
 
   it "query mode on an empty list" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({})))
     result.is_error.should be_false
     result.content.should contain("empty")
   end
 
   it "accepts the legacy `completed` status as an alias for `done`" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"old","status":"completed"}]})))
     result.is_error.should be_false
     result.content.should contain("[done]")
   end
 
   it "defaults status to pending when missing" do
-    todo = Kimi::Tools::TodoList.new
+    todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"no status"}]})))
     result.is_error.should be_false
     result.content.should contain("[pending]")

@@ -4,7 +4,7 @@
 > `todo-list.md`, `todo-list-write-reminder.md`,
 > `session/todo/todoItem.ts`, `sessionTodo.ts`, `sessionTodoService.ts`,
 > `sessionTodo/todoOps.ts`, `todoListReminder.ts`.
-> Текущий Crystal: `kimi.cr/src/tools/todo_list.cr`.
+> Текущий Crystal: `hcode.cr/src/tools/todo_list.cr`.
 
 ## Текущее состояние
 
@@ -27,7 +27,7 @@
 `tools.update_store` (`key: 'todo'`) wire record на main agent.
 
 Crystal — `@todos` в in-memory `Array(TodoItem)`. При перезапуске
-сессии (`kimi resume`) список теряется.
+сессии (`hcode resume`) список теряется.
 
 Нужно:
 

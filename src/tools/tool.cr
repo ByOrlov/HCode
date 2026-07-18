@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     abstract class Tool
       abstract def name : String

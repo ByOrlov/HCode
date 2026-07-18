@@ -1,6 +1,6 @@
 # FIX-TOOLS — Задачи по приведению Crystal-тулов к паритету с JS
 
-Сравнение: JS-движок (`packages/agent-core-v2`) имеет ~26 встроенных инструментов, Crystal-прототип (`kimi.cr`) — 7.
+Сравнение: JS-движок (`packages/agent-core-v2`) имеет ~26 встроенных инструментов, Crystal-прототип (`hcode.cr`) — 7.
 
 ## 1. Отсутствующие в Crystal tools
 

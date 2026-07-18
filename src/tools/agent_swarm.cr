@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     # AgentSwarm — параллельный запуск до 128 дочерних субагентов.
     #

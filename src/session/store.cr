@@ -1,6 +1,6 @@
 require "./index"
 
-module Kimi
+module Hcode
   module Session
     class Store
       property session_dir : String
@@ -17,7 +17,7 @@ module Kimi
 
       def self.new_session(home : String) : Store
         session_id = Random::Secure.hex(12)
-        dir = File.join(home, ".kimi", "sessions", session_id)
+        dir = File.join(home, ".hcode", "sessions", session_id)
         store = new(dir)
         store.write_meta({"id" => session_id, "created_at" => Time.utc.to_rfc3339})
         store
@@ -30,7 +30,7 @@ module Kimi
                                      title : String = "") : Store
         ws_id = Index.workspace_id(cwd)
         session_id = Random::Secure.hex(12)
-        dir = File.join(home, ".kimi", "sessions", ws_id, session_id)
+        dir = File.join(home, ".hcode", "sessions", ws_id, session_id)
         store = new(dir)
         meta = StateMeta.new(session_id)
         meta.cwd = cwd
@@ -164,7 +164,7 @@ module Kimi
       end
 
       def self.list_sessions(home : String) : Array(SessionInfo)
-        sessions_dir = File.join(home, ".kimi", "sessions")
+        sessions_dir = File.join(home, ".hcode", "sessions")
         return [] of SessionInfo unless Dir.exists?(sessions_dir)
 
         sessions = [] of SessionInfo

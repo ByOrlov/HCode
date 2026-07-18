@@ -1,8 +1,8 @@
-module Kimi
+module Hcode
   module LLM
     # Z.AI / Zhipu backend (GLM Coding Plan) over the OpenAI Chat Completions
     # protocol. Auth is a plain API key — no OAuth. Shares the SSE transport
-    # with KimiProvider through OpenAIChatProvider.
+    # with MoonshotProvider through OpenAIChatProvider.
     class ZaiProvider < OpenAIChatProvider
       DEFAULT_MODEL    = "glm-4.6"
       DEFAULT_ENDPOINT = "https://api.z.ai/api/paas/v4"

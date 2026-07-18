@@ -5,7 +5,7 @@
 > `toolSelectService.ts` (impl), `toolSelectAnnouncements.ts`,
 > `toolSelectAnnouncementsService.ts`, `dynamicTools.ts`, `flag.ts`.
 
-Цель — 1 тул `Tools::SelectTools` в `kimi.cr/src/tools/select_tools.cr`,
+Цель — 1 тул `Tools::SelectTools` в `hcode.cr/src/tools/select_tools.cr`,
 предлагаемый в shaped tool view только пока открыт disclosure gate
 (progressive tool disclosure). Тул позволяет модели загрузить
 MCP/deferred-тулы по точному имени из announced tool list.
@@ -121,7 +121,7 @@ True если:
 
 - Модель поддерживает progressive disclosure (capability flag).
 - Disclosure gate открыт (например, активирован experimental flag
-  `KIMI_CODE_EXPERIMENTAL_TOOL_SELECT` или model-config флаг).
+  `HCODE_EXPERIMENTAL_TOOL_SELECT` или model-config флаг).
 
 ### `shape_tools(entries)`
 
@@ -193,12 +193,12 @@ TOOL_SELECT_FLAG = "toolSelect"
 register_flag_definition(FlagDefinition.new(
   id: TOOL_SELECT_FLAG,
   default: false,
-  env_key: "KIMI_CODE_EXPERIMENTAL_TOOL_SELECT",
+  env_key: "HCODE_EXPERIMENTAL_TOOL_SELECT",
 ))
 ```
 
-Включение через `KIMI_CODE_EXPERIMENTAL_TOOL_SELECT=1` или
-`KIMI_CODE_EXPERIMENTAL_FLAG=1`.
+Включение через `HCODE_EXPERIMENTAL_TOOL_SELECT=1` или
+`HCODE_EXPERIMENTAL_FLAG=1`.
 
 `toolSelect.enabled?` → `flags.enabled(TOOL_SELECT_FLAG) && model_capability.supports_progressive_disclosure`.
 
@@ -226,7 +226,7 @@ register_flag_definition(FlagDefinition.new(
       `Context::Memory#add_injection`.
 - [ ] Реализовать динамический MCP-tool loading (подгрузка schema из
       MCP-server при `load`).
-- [ ] Регистрация `select_tools` в `src/kimi.cr:166` — всегда (т.к.
+- [ ] Регистрация `select_tools` в `src/hcode.cr:166` — всегда (т.к.
       сам тул не deferred).
 - [ ] В Loop-runner'е: применять `shape_tools` перед сериализацией в
       provider request, `shape_history` — к message history.

@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Context
     struct ContextMessage
       property message : LLM::Message

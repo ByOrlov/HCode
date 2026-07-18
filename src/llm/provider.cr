@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     # Abstract base for all chat-completion backends.
     #
@@ -8,7 +8,7 @@ module Kimi
     # only on this abstraction, so a new backend can be added by subclassing
     # Provider and appending an entry to KNOWN_PROVIDERS.
     abstract class Provider
-      # Short stable identifier for the backend ("kimi", "openai", ...).
+      # Short stable identifier for the backend ("moonshot", "openai", ...).
       # Surfaced by the /provider selector and the status footer.
       abstract def name : String
 
@@ -59,13 +59,13 @@ module Kimi
       end
     end
 
-    DEFAULT_PROVIDER_NAME = "kimi"
+    DEFAULT_PROVIDER_NAME = "moonshot"
 
-    # Known backends. Kimi is the default; append entries here as new
+    # Known backends. Moonshot is the default; append entries here as new
     # Provider subclasses are implemented so the /provider selector can
     # enumerate them.
     KNOWN_PROVIDERS = [
-      ProviderInfo.new("kimi", "Kimi / Moonshot — Chat Completions (default)"),
+      ProviderInfo.new("moonshot", "Moonshot — Chat Completions (default)"),
       ProviderInfo.new("zai", "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)"),
       ProviderInfo.new("zai-cp", "Z.AI / Zhipu — Coding Plan subscription"),
       ProviderInfo.new("mock", "Mock — scripted self-test provider (testing)"),

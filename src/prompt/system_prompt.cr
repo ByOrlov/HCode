@@ -1,8 +1,8 @@
-module Kimi
+module Hcode
   module Prompt
     class SystemPrompt
       SYSTEM_TEMPLATE = <<-TEXT
-      You are KimiO, an interactive general AI agent running on a user's computer.
+      You are HCode, a lighter-than-air AI agent running on a user's computer.
 
       Your primary goal is to help users with software engineering tasks by taking action — use the tools available to you to make real changes on the user's system. You should also answer questions when asked. Always adhere strictly to the following system instructions and the user's requirements.
 
@@ -78,8 +78,8 @@ module Kimi
 
       ## Operating System
 
-      You are running on **{{KIMI_OS}}**. The Bash tool executes commands using **{{KIMI_SHELL}}**.
-      {% if KIMI_OS == "Windows" %}
+      You are running on **{{HCODE_OS}}**. The Bash tool executes commands using **{{HCODE_SHELL}}**.
+      {% if HCODE_OS == "Windows" %}
 
       IMPORTANT: You are on Windows. The Bash tool runs through Git Bash, so use Unix shell syntax inside Bash commands — `/dev/null` not `NUL`, and forward slashes in paths. For file operations, always prefer the built-in tools (Read, Write, Edit, Glob, Grep) over Bash commands — they work reliably across all platforms.
       {% endif %}
@@ -88,11 +88,11 @@ module Kimi
 
       ## Date and Time
 
-      The current date and time in ISO format is `{{KIMI_NOW}}`. This was captured when the session started and does not update as the session continues, so in a long or resumed session it may be hours or days stale. Treat it only as a rough reference; whenever the real current time matters (web-result freshness, age or expiry checks, anything time-sensitive), get it fresh from the environment — for example by running `date` if you have a shell tool — instead of trusting this value.
+      The current date and time in ISO format is `{{HCODE_NOW}}`. This was captured when the session started and does not update as the session continues, so in a long or resumed session it may be hours or days stale. Treat it only as a rough reference; whenever the real current time matters (web-result freshness, age or expiry checks, anything time-sensitive), get it fresh from the environment — for example by running `date` if you have a shell tool — instead of trusting this value.
 
       ## Working Directory
 
-      The current working directory is `{{KIMI_WORK_DIR}}`. This should be considered as the project root if you are instructed to perform tasks on the project. Tools may require absolute paths for some parameters, IF SO, YOU MUST use absolute paths for these parameters.
+      The current working directory is `{{HCODE_WORK_DIR}}`. This should be considered as the project root if you are instructed to perform tasks on the project. Tools may require absolute paths for some parameters, IF SO, YOU MUST use absolute paths for these parameters.
 
       Use this as your basic understanding of the project structure. The tree only shows the first two levels for normal directories; entries marked "... and N more" indicate additional contents. Hidden directories are shown as entries only; their contents are intentionally omitted to reduce noise.
 
@@ -101,15 +101,15 @@ module Kimi
       The directory listing of current working directory is:
 
       ```
-      {{KIMI_WORK_DIR_LS}}
+      {{HCODE_WORK_DIR_LS}}
       ```
-      {% if KIMI_ADDITIONAL_DIRS_INFO %}
+      {% if HCODE_ADDITIONAL_DIRS_INFO %}
 
       ## Additional Directories
 
       The following directories have been added to the workspace. You can read, write, search, and glob files in these directories as part of your workspace scope.
 
-      {{KIMI_ADDITIONAL_DIRS_INFO}}
+      {{HCODE_ADDITIONAL_DIRS_INFO}}
       {% endif %}
 
       # Project Information
@@ -121,7 +121,7 @@ module Kimi
       The applicable `AGENTS.md` instructions are:
 
       ```````
-      {{KIMI_AGENTS_MD}}
+      {{HCODE_AGENTS_MD}}
       ```````
 
       # Ultimate Reminders
@@ -149,15 +149,15 @@ module Kimi
       def self.build(work_dir : String) : String
         vars = {} of String => String
 
-        vars["KIMI_OS"] = os_name
-        vars["KIMI_SHELL"] = shell_name
-        vars["KIMI_NOW"] = Time.utc.to_rfc3339
-        vars["KIMI_WORK_DIR"] = work_dir
-        vars["KIMI_WORK_DIR_LS"] = directory_listing(work_dir)
-        vars["KIMI_ADDITIONAL_DIRS_INFO"] = ""
+        vars["HCODE_OS"] = os_name
+        vars["HCODE_SHELL"] = shell_name
+        vars["HCODE_NOW"] = Time.utc.to_rfc3339
+        vars["HCODE_WORK_DIR"] = work_dir
+        vars["HCODE_WORK_DIR_LS"] = directory_listing(work_dir)
+        vars["HCODE_ADDITIONAL_DIRS_INFO"] = ""
         agents_md = AgentsMd.discover(work_dir)
-        vars["KIMI_AGENTS_MD"] = agents_md.empty? ? "(none found)" : agents_md
-        vars["KIMI_SKILLS"] = ""
+        vars["HCODE_AGENTS_MD"] = agents_md.empty? ? "(none found)" : agents_md
+        vars["HCODE_SKILLS"] = ""
 
         Template.render(SYSTEM_TEMPLATE, vars)
       end

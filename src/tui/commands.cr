@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     struct CommandInfo
       property name : String

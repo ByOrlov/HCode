@@ -1,8 +1,8 @@
 require "../spec_helper"
 
-describe Kimi::Tools::Grep do
+describe Hcode::Tools::Grep do
   # Shared test directory — created once, cleaned up at the end.
-  test_dir = "/tmp/kimi-test-grep"
+  test_dir = "/tmp/hcode-test-grep"
   FileUtils.rm_rf(test_dir) if Dir.exists?(test_dir)
   Dir.mkdir_p(test_dir)
 
@@ -16,14 +16,14 @@ describe Kimi::Tools::Grep do
   end
 
   it "returns error for empty pattern" do
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({})))
     result.is_error.should be_true
   end
 
   it "searches content and returns matching lines" do
     File.write(File.join(test_dir, "a.txt"), "hello world\nfoo bar\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "hello", "output_mode": "content"})))
     result.is_error.should be_false
     result.content.should contain("hello world")
@@ -32,7 +32,7 @@ describe Kimi::Tools::Grep do
 
   it "defaults to files_with_matches mode" do
     File.write(File.join(test_dir, "b.txt"), "searchterm here\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "searchterm"})))
     result.is_error.should be_false
     result.content.should contain("b.txt")
@@ -41,7 +41,7 @@ describe Kimi::Tools::Grep do
 
   it "supports count_matches mode" do
     File.write(File.join(test_dir, "c.txt"), "dup\ndup\ndup\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "dup", "output_mode": "count_matches"})))
     result.is_error.should be_false
     result.content.should contain("Found")
@@ -50,7 +50,7 @@ describe Kimi::Tools::Grep do
 
   it "supports case-insensitive search with -i" do
     File.write(File.join(test_dir, "d.txt"), "Hello World\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "hello", "output_mode": "content", "-i": true})))
     result.is_error.should be_false
     result.content.should contain("Hello World")
@@ -58,7 +58,7 @@ describe Kimi::Tools::Grep do
 
   it "supports context lines with -A" do
     File.write(File.join(test_dir, "e.txt"), "line1\nMATCH\nline3\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "MATCH", "output_mode": "content", "-A": 1})))
     result.is_error.should be_false
     result.content.should contain("MATCH")
@@ -67,7 +67,7 @@ describe Kimi::Tools::Grep do
 
   it "supports context lines with -B" do
     File.write(File.join(test_dir, "f.txt"), "line1\nMATCH\nline3\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "MATCH", "output_mode": "content", "-B": 1})))
     result.is_error.should be_false
     result.content.should contain("line1")
@@ -77,7 +77,7 @@ describe Kimi::Tools::Grep do
   it "supports glob filter" do
     File.write(File.join(test_dir, "g.cr"), "crystal_match\n")
     File.write(File.join(test_dir, "g.txt"), "crystal_match\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "crystal_match", "glob": "*.cr"})))
     result.is_error.should be_false
     result.content.should contain("g.cr")
@@ -86,7 +86,7 @@ describe Kimi::Tools::Grep do
 
   it "filters sensitive files" do
     File.write(File.join(test_dir, ".env"), "SECRET_KEY=hunter2\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "SECRET_KEY", "output_mode": "content"})))
     result.is_error.should be_false
     result.content.should_not contain("hunter2")
@@ -95,7 +95,7 @@ describe Kimi::Tools::Grep do
 
   it "filters .env files even in files_with_matches mode" do
     File.write(File.join(test_dir, ".env.local"), "API_TOKEN=xyz\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "API_TOKEN"})))
     result.is_error.should be_false
     # Content must never leak, but the filtered-file notice (listing the path) is expected.
@@ -106,7 +106,7 @@ describe Kimi::Tools::Grep do
     vcs_dir = File.join(test_dir, ".git")
     Dir.mkdir_p(vcs_dir)
     File.write(File.join(vcs_dir, "config"), "vcs_secret_data\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "vcs_secret_data"})))
     result.is_error.should be_false
     result.content.should_not contain("vcs_secret_data")
@@ -114,7 +114,7 @@ describe Kimi::Tools::Grep do
 
   it "supports head_limit for pagination" do
     File.write(File.join(test_dir, "h.txt"), "pagetest\npagetest\npagetest\npagetest\npagetest\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "pagetest", "output_mode": "content", "head_limit": 2})))
     result.is_error.should be_false
     result.content.should contain("truncated")
@@ -122,7 +122,7 @@ describe Kimi::Tools::Grep do
 
   it "supports offset for pagination" do
     File.write(File.join(test_dir, "i.txt"), "offsetline\noffsetline\noffsetline\noffsetline\noffsetline\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "offsetline", "output_mode": "content", "head_limit": 0})))
     result.is_error.should be_false
     result.content.should_not contain("truncated")
@@ -130,7 +130,7 @@ describe Kimi::Tools::Grep do
 
   it "returns no matches message for non-existent pattern" do
     File.write(File.join(test_dir, "j.txt"), "some content\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "ZZZ_NOT_FOUND_ZZZ", "output_mode": "content"})))
     result.is_error.should be_false
     result.content.should contain("No matches")
@@ -140,7 +140,7 @@ describe Kimi::Tools::Grep do
     Dir.mkdir_p(test_dir)
     File.write(File.join(test_dir, ".gitignore"), "ignored_file.txt\n")
     File.write(File.join(test_dir, "ignored_file.txt"), "ignored_content_here\n")
-    grep = Kimi::Tools::Grep.new(test_dir)
+    grep = Hcode::Tools::Grep.new(test_dir)
     # Without include_ignored, the file is excluded by .gitignore
     result1 = grep.execute(JSON.parse(%({"pattern": "ignored_content_here"})))
     result1.content.should_not contain("ignored_file.txt")

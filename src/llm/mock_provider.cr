@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     # One scripted step of a MockProvider replay: the MessageParts to stream
     # through the block and the stop_reason to report. A step whose stop_reason
@@ -25,7 +25,7 @@ module Kimi
     # the agent's run_turn / parallel tool batch / termination all execute
     # against real tool calls — with no network or API key.
     #
-    # Select it at runtime via `KIMI_PROVIDER=mock` or `[provider] default =
+    # Select it at runtime via `HCODE_PROVIDER=mock` or `[provider] default =
     # "mock"` to exercise the loop without burning tokens.
     class MockProvider < Provider
       DEFAULT_MODEL = "mock"
@@ -57,7 +57,7 @@ module Kimi
 
       # Thinking-only demo: ~5 s of streamed reasoning (10 ThinkParts × 500 ms),
       # then a short text answer. Use with:
-      #   KIMI_PROVIDER=mock KIMI_MOCK_SCRIPT=thinking
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking
       THINKING_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -81,7 +81,7 @@ module Kimi
 
       # Thinking + tools demo: ~3 s of reasoning, then a Glob tool call, then
       # a final text answer. Tests the thinking → tool-call transition.
-      #   KIMI_PROVIDER=mock KIMI_MOCK_SCRIPT=thinking-tools
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking-tools
       THINKING_TOOLS_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -106,7 +106,7 @@ module Kimi
       # Markdown rendering demo: streams a reply that exercises the TUI's
       # markdown renderer — headings, emphasis, inline code, lists, a fenced
       # code block, a table, a blockquote and a horizontal rule. Use with:
-      #   KIMI_PROVIDER=mock KIMI_MOCK_SCRIPT=markdown
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown
       MARKDOWN_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -123,7 +123,7 @@ module Kimi
             TextPart.new("greet(\"world\")\n"),
             TextPart.new("```\n\n"),
             TextPart.new("## Table\n\n"),
-            TextPart.new("| File | Purpose |\n| --- | --- |\n| `src/kimi.cr` | Entry point |\n| `src/llm/` | Provider layer |\n| `src/tui/` | Terminal UI |\n| `src/tui/markdown.cr` | Markdown renderer with ANSI-aware wrapping, cell overflow, and inline code styling — handles tables, lists, blockquotes, code fences, horizontal rules, headings, bold, italic, strikethrough, links, task lists, nested structures, wide characters, emoji width measurement, and proportional column shrinking when content exceeds terminal width |\n\n"),
+            TextPart.new("| File | Purpose |\n| --- | --- |\n| `src/hcode.cr` | Entry point |\n| `src/llm/` | Provider layer |\n| `src/tui/` | Terminal UI |\n| `src/tui/markdown.cr` | Markdown renderer with ANSI-aware wrapping, cell overflow, and inline code styling — handles tables, lists, blockquotes, code fences, horizontal rules, headings, bold, italic, strikethrough, links, task lists, nested structures, wide characters, emoji width measurement, and proportional column shrinking when content exceeds terminal width |\n\n"),
             TextPart.new("> Markdown renders cleanly in the terminal.\n\n"),
             TextPart.new("---\n\n"),
             TextPart.new("That covers every block the renderer supports."),
@@ -141,10 +141,10 @@ module Kimi
       def initialize(@script : Array(MockStep) = DEFAULT_SCRIPT.dup, @model : String = DEFAULT_MODEL)
       end
 
-      # Select a named demo script via KIMI_MOCK_SCRIPT env var.
+      # Select a named demo script via HCODE_MOCK_SCRIPT env var.
       # Returns nil if the env var is unset or doesn't match a known script.
       def self.script_from_env : Array(MockStep)?
-        case ENV["KIMI_MOCK_SCRIPT"]?
+        case ENV["HCODE_MOCK_SCRIPT"]?
         when "thinking"       then THINKING_DEMO_SCRIPT.dup
         when "thinking-tools" then THINKING_TOOLS_DEMO_SCRIPT.dup
         when "markdown"       then MARKDOWN_DEMO_SCRIPT.dup

@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     struct ReadGroupEntry
       property tool_call_id : String
@@ -45,7 +45,7 @@ module Kimi
       STATUS_BULLET             = "● "
       USER_BULLET               = "✨ "
       DEFAULT_KEEP_RECENT_STEPS = 30
-      KEEP_RECENT_STEPS_ENV     = "KIMI_CODE_TUI_KEEP_RECENT_STEPS"
+      KEEP_RECENT_STEPS_ENV     = "HCODE_TUI_KEEP_RECENT_STEPS"
 
       @terminal : Terminal
       @input : Input
@@ -68,7 +68,7 @@ module Kimi
       @pasted_lines : Int32 = 0
       @status : String = ""
       @model : String = "kimi-for-coding"
-      @provider_name : String = "kimi"
+      @provider_name : String = "moonshot"
       @permission_mode : String = "manual"
       @context_percent : Float64 = 0.0
       @context_tokens : Int32 = 0
@@ -689,7 +689,7 @@ module Kimi
       private def handle_external_editor : Nil
         editor_cmd = ENV["EDITOR"]? || ENV["VISUAL"]? || "vim"
         tmp_dir = ENV["TMPDIR"]? || "/tmp"
-        tmp_file = File.join(tmp_dir, "kimi-cr-edit-#{Random::Secure.hex(4)}.md")
+        tmp_file = File.join(tmp_dir, "hcode-edit-#{Random::Secure.hex(4)}.md")
         File.write(tmp_file, @editor.text)
 
         @terminal.restore!
@@ -1529,7 +1529,7 @@ module Kimi
 
         lines << "#{bc}╭#{"─" * (box_w - 2)}╮#{r}"
 
-        welcome_text = "#{ANSI.bold}Welcome to KimiO!#{r}"
+        welcome_text = "#{ANSI.bold}Welcome to HCode!#{r}"
         content_w = visible_len(welcome_text)
         used = 2 + logo_lines[0].size + 2 + content_w
         pad = inner_w + 2 - used

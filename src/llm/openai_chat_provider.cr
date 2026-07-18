@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     # Mutable holder shared between the fiber driving the HTTP request and the
     # fiber consuming its chunks, so the consumer can close the connection on
@@ -9,7 +9,7 @@ module Kimi
     end
 
     # Shared transport for any backend that speaks the OpenAI Chat Completions
-    # wire format over SSE (Kimi/Moonshot, Z.AI/Zhipu, ...).
+    # wire format over SSE (Moonshot, Z.AI/Zhipu, ...).
     #
     # Subclasses supply the auth token (api key, OAuth, ...) via `token` and a
     # short backend id via `name`. Everything else — request shaping, SSE
@@ -22,7 +22,7 @@ module Kimi
       property temperature : Float64?
       property max_tokens : Int32?
       # Configured hard cap on output tokens. When set it overrides `max_tokens`
-      # on the wire (Kimi prefers `max_completion_tokens` for reasoning models,
+      # on the wire (Moonshot prefers `max_completion_tokens` for reasoning models,
       # which share the budget with `reasoning_content`).
       property max_completion_tokens : Int32?
       # Stable session key reused across steps so the backend caches the prompt
@@ -37,8 +37,8 @@ module Kimi
       # Reasoning models share the output budget with reasoning; without an
       # explicit cap a large input can leave no room for a visible answer.
       @used_context_tokens : Int32 = 0
-      # How this backend transmits the effort hint on the wire. Kimi uses the
-      # Moonshot `thinking` object; OpenAI-compatible backends (ZAI / GLM) use
+      # How this backend transmits the effort hint on the wire. Moonshot uses
+      # the `thinking` object; OpenAI-compatible backends (ZAI / GLM) use
       # the top-level `reasoning_effort` string; others send nothing.
       property thinking_wire : ThinkingWire = ThinkingWire::None
       # Effort levels this model accepts, parsed from the backend's `/models`
@@ -48,7 +48,7 @@ module Kimi
       property valid_efforts : Array(String)? = nil
       property default_effort : String? = nil
       @meta_fetched : Bool = false
-      # Whether to send the completion budget as `max_completion_tokens` (Kimi
+      # Whether to send the completion budget as `max_completion_tokens` (Moonshot
       # transport + OpenAI reasoning models) instead of the legacy `max_tokens`
       # (GLM / other OpenAI-compatible endpoints). Mirrors TS
       # `usesMaxCompletionTokens`.
@@ -124,7 +124,7 @@ module Kimi
       def chat(messages : Array(Message), tools : Array(ToolDefinition)?,
                system_prompt : String? = nil, aborted? : -> Bool = -> { false },
                &block : MessagePart ->) : StepResult
-        # Resolve the model's supported effort levels once (Kimi wire only) so
+        # Resolve the model's supported effort levels once (Moonshot wire only) so
         # build_request can decide whether to include the `effort` subfield.
         # A failure here degrades gracefully to boolean-only thinking.
         refresh_model_metadata
@@ -221,8 +221,8 @@ module Kimi
 
       # Assemble the wire request, folding in the per-session / per-step runtime
       # config: prompt-cache key (session affinity), the completion budget clamp
-      # (as `max_completion_tokens` for the Kimi transport, the legacy
-      # `max_tokens` alias for plain OpenAI-compatible backends), and the
+        # (as `max_completion_tokens` for the Moonshot transport, the legacy
+        # `max_tokens` alias for plain OpenAI-compatible backends), and the
       # reasoning-effort object for backends that speak it. Extracted from
       # `chat` so the request shape is unit-testable without a network call.
       def build_request(messages : Array(Message), tools : Array(ToolDefinition)?) : ChatRequest
@@ -246,12 +246,12 @@ module Kimi
           end
         end
         # Reasoning effort — transmitted in the provider-specific wire shape.
-        # Kimi speaks the top-level `thinking` object (effort only when the
+        # Moonshot speaks the top-level `thinking` object (effort only when the
         # model supports it); OpenAI-compatible backends (ZAI/GLM) speak the
         # top-level `reasoning_effort` string; others send nothing.
         case @thinking_wire
-        in ThinkingWire::Kimi
-          request.thinking = build_kimi_thinking
+        in ThinkingWire::Moonshot
+          request.thinking = build_moonshot_thinking
         in ThinkingWire::ReasoningEffort
           request.reasoning_effort = build_reasoning_effort
         in ThinkingWire::None
@@ -263,7 +263,7 @@ module Kimi
         request
       end
 
-      # Kimi/Moonshot `thinking` object. `off`/`none` → disabled; `on` →
+      # Moonshot `thinking` object. `off`/`none` → disabled; `on` →
       # enabled with no effort; a concrete effort → enabled, but only with an
       # `effort` subfield when the model declares it in `valid_efforts`.
       # Sending an unsupported effort (e.g. "medium" to the boolean-only
@@ -271,7 +271,7 @@ module Kimi
       # the model offers no valid efforts the field is omitted and an unknown
       # requested effort falls back to the model default (if any) or to plain
       # enable. Mirrors TS `normalizeThinkingEffortForModel`.
-      private def build_kimi_thinking : ThinkingConfig?
+      private def build_moonshot_thinking : ThinkingConfig?
         effort = @thinking_effort
         return nil if effort.nil?
         case effort.downcase
@@ -311,15 +311,15 @@ module Kimi
       end
 
       # Fetch the model's `think_efforts` from the backend's `/models` once and
-      # cache the supported effort levels. Only meaningful for the Kimi wire
+      # cache the supported effort levels. Only meaningful for the Moonshot wire
       # (OpenAI-style `reasoning_effort` needs no model lookup). Failures are
       # swallowed: a missing or unparseable response leaves `valid_efforts`
-      # nil, which makes `build_kimi_thinking` omit the `effort` subfield —
+        # nil, which makes `build_moonshot_thinking` omit the `effort` subfield —
       # always a valid request.
       private def refresh_model_metadata : Nil
         return if @meta_fetched
         @meta_fetched = true
-        return unless @thinking_wire.kimi?
+        return unless @thinking_wire.moonshot?
 
         begin
           uri = URI.parse("#{@endpoint}/models")
@@ -359,7 +359,7 @@ module Kimi
 
         body = request.to_json
 
-        if ENV["KIMI_DEBUG"]?
+        if ENV["HCODE_DEBUG"]?
           STDERR.puts "[debug] Request body size: #{body.size} bytes"
         end
 
@@ -394,7 +394,7 @@ module Kimi
                     chunk = StreamChunk.from_json(data)
                     chunks.send(chunk)
                   rescue ex : JSON::ParseException
-                    if ENV["KIMI_DEBUG"]?
+                    if ENV["HCODE_DEBUG"]?
                       STDERR.puts "[debug] Failed to parse SSE: #{ex.message}"
                       STDERR.puts "[debug] Data: #{data[0..200]}"
                     end

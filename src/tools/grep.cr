@@ -1,6 +1,6 @@
 require "./sensitive"
 
-module Kimi
+module Hcode
   module Tools
     class Grep < Tool
       DEFAULT_TIMEOUT_S  = 20

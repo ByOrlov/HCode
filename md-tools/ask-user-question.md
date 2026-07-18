@@ -6,7 +6,7 @@
 >   `session/interaction/interaction.ts`,
 >   `agent/task/notificationXml.ts`.
 
-Цель — тул `AskUserQuestion` в `kimi.cr/src/tools/ask_user_question.cr` с
+Цель — тул `AskUserQuestion` в `hcode.cr/src/tools/ask_user_question.cr` с
 идентичным LLM-контрактом и инжекченным `QuestionService` для фактического
 взаимодействия с пользователем.
 
@@ -338,7 +338,7 @@ end
   - [ ] `execute_in_background` (§6.1 + рендер §4.5).
   - [ ] Хелперы: `question_description`, `question_uniqueness_error`,
         `dismissed_result`, `normalize_result`.
-- [ ] Зарегистрировать тул в `Tools::Registry` (`src/kimi.cr`).
+- [ ] Зарегистрировать тул в `Tools::Registry` (`src/hcode.cr`).
 - [ ] Тесты в `spec/tools/ask_user_question_spec.cr`:
   - [ ] Схема: пустой `questions`, 1 option, пустой `question`/`label`,
         дубликат вопроса, дубликат label внутри вопроса.

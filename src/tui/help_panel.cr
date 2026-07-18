@@ -1,6 +1,6 @@
-module Kimi
+module Hcode
   module TUI
-    # Modal `/help` overlay — mirrors `apps/kimi-code`'s `HelpPanelComponent`.
+    # Modal `/help` overlay — mirrors Moonshot kimi-code's `HelpPanelComponent`.
     #
     # Replaces the editor while visible: the host renders `render(cols)` in the
     # editor slot and routes all keys to `handle_input`. Dismissed via Esc /
@@ -119,7 +119,7 @@ module Kimi
 
         lines << rule
         lines << truncate("#{primary}#{ANSI.bold} help #{r}#{muted}· Esc / Enter / q to cancel · ↑↓ scroll#{r}", cols)
-        lines << truncate("  #{dim}Sure, KimiO is ready to help! Just send a message to get started.#{r}", cols)
+        lines << truncate("  #{dim}Sure, HCode is ready to help! Just send a message to get started.#{r}", cols)
         lines << ""
 
         lines << truncate("  #{ANSI.bold}Keyboard shortcuts#{r}", cols)

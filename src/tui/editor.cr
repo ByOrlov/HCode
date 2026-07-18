@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module TUI
     class Editor < Component
       @lines : Array(String) = [""]

@@ -11,7 +11,7 @@
 > `image-originals.ts`, `imageConfigBridge.ts`, `mediaToolsRegistrar.ts`,
 > `registerMediaTools.ts`, `configSection.ts`.
 
-Цель — 1 тул `Tools::ReadMediaFile` в `kimi.cr/src/tools/read_media.cr`,
+Цель — 1 тул `Tools::ReadMediaFile` в `hcode.cr/src/tools/read_media.cr`,
 регистрируемый **только** если активная модель поддерживает image/video
 input.
 

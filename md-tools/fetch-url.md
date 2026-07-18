@@ -4,7 +4,7 @@
 > + `fetch-url-types.ts`, `fetch-url.md`, `web.ts`, `webService.ts`,
 >   `providers/local-fetch-url.ts`, `providers/moonshot-fetch-url.ts`.
 
-Цель — тул `FetchURL` в `kimi.cr/src/tools/fetch_url.cr` с идентичным
+Цель — тул `FetchURL` в `hcode.cr/src/tools/fetch_url.cr` с идентичным
 LLM-контрактом. HTTP-фечинг — через инжекченный `UrlFetcher`; есть две
 реализации: `LocalFetcher` (HTTP::Client + простая HTML-очистка) и
 `MoonshotFetcher` (через managed-OAuth `/fetch` endpoint).
@@ -199,10 +199,10 @@ class ManagedWebFetchService < WebFetchService
   end
 
   def get_url_fetcher : UrlFetcher
-    return @local unless @provider.type == "kimi" && (oauth = @provider.oauth)
+    return @local unless @provider.type == "moonshot" && (oauth = @provider.oauth)
     token_provider = @oauth.resolve_token_provider("managed:kimi-code", oauth)
     return @local unless token_provider
-    base_url = (@provider.base_url || KIMI_CODE_BASE_URL).rstrip("/") + "/fetch"
+    base_url = (@provider.base_url || MOONSHOT_CODE_BASE_URL).rstrip("/") + "/fetch"
     MoonshotFetcher.new(base_url, token_provider, @host_headers, @provider.custom_headers, @local)
   end
 end
@@ -275,9 +275,9 @@ end
 
 Сам тул не читает env. Влияют:
 
-- `KIMI_CODE_BASE_URL` (по умолчанию `"https://api.kimi.com/coding/v1"`,
+- `MOONSHOT_CODE_BASE_URL` (по умолчанию `"https://api.kimi.com/coding/v1"`,
   обрезанные trailing slashes) — fallback для provider base URL.
-- Константа `KIMI_CODE_PROVIDER_NAME = "managed:kimi-code"` (не env).
+- Константа `MOONSHOT_CODE_PROVIDER_NAME = "managed:kimi-code"` (не env).
 
 `[services.moonshot_fetch]` TOML-секция в JS парсится, но не используется
 `WebFetchService` (только managed OAuth).
@@ -337,5 +337,5 @@ end
 - `custom_headers` provider'а — пока захардкодить пустой `Hash(String,String)`;
   подключение к `[providers]` TOML секции — отдельная задача.
 - Token provider для managed OAuth — пока заглушка; пока нет OAuth в
-  `kimi.cr`, `WebFetchService` остаётся local-only. Контракт тула от этого
+  `hcode.cr`, `WebFetchService` остаётся local-only. Контракт тула от этого
   не меняется.

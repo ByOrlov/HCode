@@ -1,4 +1,4 @@
-# kimi.cr — Crystal reimplementation of kimi-code agent
+# hcode.cr — Crystal reimplementation of kimi-code agent
 
 ## Goal
 
@@ -7,7 +7,7 @@ enabling the operation of dozens of concurrent agents on a single machine.
 
 Target: full TUI parity with the TypeScript version's core features. Provider
 support is staged — see "5g. Runtime provider switching":
-  - Kimi/Moonshot — default backend (in place).
+  - Moonshot — default backend (in place).
   - Z.AI / Zhipu (GLM) — runtime switching, the immediate next target.
   - Anthropic / OpenAI / Google — OPTIONAL, not required now (future work).
 
@@ -15,7 +15,7 @@ support is staged — see "5g. Runtime provider switching":
 
 ## Memory Targets
 
-| Scenario            | Node.js (current) | kimi.cr (target) |
+| Scenario            | Node.js (current) | hcode.cr (target) |
 |---------------------|--------------------|-------------------|
 | 1 agent             | 80-150 MB          | 5-15 MB           |
 | 50 agents (process) | 4-7.5 GB           | 250-750 MB        |
@@ -39,16 +39,16 @@ support is staged — see "5g. Runtime provider switching":
 ### Source structure
 
 ```
-kimi.cr/
+hcode.cr/
 ├── PLAN.md
 ├── shard.yml
 ├── src/
-│   ├── kimi.cr                    # entry point
+│   ├── hcode.cr                    # entry point
 │   │
 │   ├── llm/
 │   │   ├── provider.cr            # ChatProvider abstraction
 │   │   ├── stream.cr              # SSE parser → Channel(MessagePart)
-│   │   ├── kimi_provider.cr       # Kimi/Moonshot Chat Completions API
+│   │   ├── moonshot_provider.cr       # Moonshot Chat Completions API
 │   │   ├── token_counter.cr       # token estimation
 │   │   └── types.cr               # Message, ContentPart, ToolCall, Usage
 │   │
@@ -94,8 +94,8 @@ kimi.cr/
 │   │   └── queue.cr               # message queue (type-ahead while agent runs)
 │   │
 │   ├── config/
-│   │   ├── config.cr              # TOML config struct (KimiConfig)
-│   │   ├── paths.cr               # ~/.kimi/ path resolution, XDG, HOME expansion
+│   │   ├── config.cr              # TOML config struct (HcodeConfig)
+│   │   ├── paths.cr               # ~/.hcode/ path resolution, XDG, HOME expansion
 │   │   ├── provider_config.cr     # API key, endpoint, model aliases
 │   │   └── proxy.cr               # HTTP/SOCKS proxy support (HTTP_PROXY, ALL_PROXY env)
 │   │
@@ -106,7 +106,7 @@ kimi.cr/
 │   │   └── template.cr            # simple {{var}} templating (throw on undefined)
 │   │
 │   ├── auth/
-│   │   └── oauth.cr               # Kimi OAuth / device-code flow
+│   │   └── oauth.cr               # Moonshot OAuth / device-code flow
 │   │
 │   ├── hooks/
 │   │   └── engine.cr              # PreToolUse/PostToolUse/Stop/UserPromptSubmit hooks
@@ -215,7 +215,7 @@ No VSCode-style decorator container. Simple composition root:
 
 ```crystal
 class Agent
-  getter llm : LLM::KimiProvider
+  getter llm : LLM::MoonshotProvider
   getter context : Context::Memory
   getter tools : Tool::Registry
   getter permission : Permission::Manager
@@ -227,9 +227,9 @@ end
 
 ---
 
-## Kimi Provider
+## Moonshot Provider
 
-Only Kimi/Moonshot Chat Completions API. Based on `packages/kosong/src/providers/kimi.ts`.
+Only Moonshot Chat Completions API. Based on `packages/kosong/src/providers/kimi.ts`.
 
 - Endpoint: `https://api.moonshot.ai/v1/chat/completions` (or configurable)
 - Streaming: SSE (Server-Sent Events) via HTTP::Client
@@ -237,7 +237,7 @@ Only Kimi/Moonshot Chat Completions API. Based on `packages/kosong/src/providers
 - Features: tool_calls, system prompt, streaming text/thinking
 
 ```crystal
-class KimiProvider < LLM::Provider
+class MoonshotProvider < LLM::Provider
   def generate(messages, tools, system_prompt) : Channel(MessagePart)
     channel = Channel(MessagePart).new
     spawn do
@@ -303,18 +303,18 @@ from multiple sources at session start and re-rendered after compaction:
 ```
 SystemPrompt =
   base_instructions          # from prompt/system_prompt.md template
-  + KIMI_OS / KIMI_SHELL     # platform info
-  + KIMI_WORK_DIR_LS         # cwd file tree (2 levels deep)
-  + KIMI_AGENTS_MD           # hierarchical AGENTS.md merge:
-                              #   ~/.kimi/AGENTS.md (user-level)
+  + HCODE_OS / HCODE_SHELL     # platform info
+  + HCODE_WORK_DIR_LS         # cwd file tree (2 levels deep)
+  + HCODE_AGENTS_MD           # hierarchical AGENTS.md merge:
+                              #   ~/.hcode/AGENTS.md (user-level)
                               #   → project root AGENTS.md
                               #   → ... down to cwd AGENTS.md
-  + KIMI_ADDITIONAL_DIRS     # /add-dir directory listings
+  + HCODE_ADDITIONAL_DIRS     # /add-dir directory listings
   + tool_descriptions         # auto-generated from tool schemas
 ```
 
 AGENTS.md discovery: walk from git root → cwd, find `AGENTS.md` and
-`.kimi/AGENTS.md` at each level, deduplicate, concatenate with path annotations.
+`.hcode/AGENTS.md` at each level, deduplicate, concatenate with path annotations.
 Soft 32 KB budget (warn, don't truncate).
 
 Template engine: simple `{{var}}` replacement. **Must throw on undefined var**
@@ -327,7 +327,7 @@ Ref: `packages/agent-core/src/profile/context.ts`, `profile/resolve.ts`
 Tool outputs > 50,000 chars are truncated:
 
 ```
-1. Write full output to ~/.kimi/tool-results/<tool>-<id>-<uuid>.txt
+1. Write full output to ~/.hcode/tool-results/<tool>-<id>-<uuid>.txt
 2. Replace model-facing result with:
    "[Output truncated. N chars total. Use Read with output_path to view full output.]"
    + 2,000-char preview
@@ -592,14 +592,14 @@ Based on `packages/agent-core/src/agent/records/`.
 Format: **JSONL append-only** (one JSON object per line), compatible with TS version.
 
 ```
-~/.kimi/sessions/<workspace_id>/<session_id>/
+~/.hcode/sessions/<workspace_id>/<session_id>/
   ├── wire.jsonl          # event log
   └── state.json          # session metadata (title, cwd, archived, custom)
 ```
 
 This mirrors the v2 (`agent-core-v2`) on-disk layout. A legacy fallback reads
-old flat layout `~/.kimi/sessions/<session_id>/meta.json` + `wire.jsonl` when
-no v2 directory exists, so sessions created by earlier kimi.cr builds remain
+old flat layout `~/.hcode/sessions/<session_id>/meta.json` + `wire.jsonl` when
+no v2 directory exists, so sessions created by earlier hcode.cr builds remain
 resumable.
 
 There is **no HTTP server** and no `/sessions` REST API. Session management is
@@ -624,11 +624,11 @@ No HTTP server. The kap-server `/sessions` REST surface is replaced by local
 CLI flags and TUI slash commands acting directly on `Session::Index` /
 `Session::Lifecycle`.
 
-| TS server endpoint                | `kimi.cr` equivalent                          |
+| TS server endpoint                | `hcode.cr` equivalent                          |
 |-----------------------------------|-----------------------------------------------|
-| `POST /sessions`                  | `kimi.cr --new` or TUI `/new`                 |
-| `GET /sessions`                   | `kimi.cr --list` or TUI `/sessions`           |
-| `GET /sessions/{id}`              | `kimi.cr -s <id>`                             |
+| `POST /sessions`                  | `hcode.cr --new` or TUI `/new`                 |
+| `GET /sessions`                   | `hcode.cr --list` or TUI `/sessions`           |
+| `GET /sessions/{id}`              | `hcode.cr -s <id>`                             |
 | `POST /sessions/{id}:fork`        | TUI `/fork`                                   |
 | `POST /sessions/{id}:archive`     | TUI `/archive`                                |
 | `POST /sessions/{id}:restore`     | TUI `/restore`                                |
@@ -653,14 +653,14 @@ thinking_effort = "medium"
 [permission]
 mode = "manual"
 
-[provider.kimi]
+[provider.moonshot]
 api_key = ""
 endpoint = "https://api.moonshot.ai/v1"
 ```
 
 Crystal TOML shard: `crystal-community/toml.cr`.
 
-Path resolution: `~/.kimi/config.toml`, XDG-aware, `KIMI_HOME` env override.
+Path resolution: `~/.hcode/config.toml`, XDG-aware, `HCODE_HOME` env override.
 
 ---
 
@@ -669,7 +669,7 @@ Path resolution: `~/.kimi/config.toml`, XDG-aware, `KIMI_HOME` env override.
 This is a **net-new feature** with no direct TS equivalent. The TS version
 only emits terminal-desktop notifications (OSC 9 + BEL fallback) on a few
 hard-coded events — see `apps/kimi-code/src/tui/utils/terminal-notification.ts`.
-kimi.cr generalises this into a status-driven notification system with three
+hcode.cr generalises this into a status-driven notification system with three
 independent delivery channels, plus first-class agent-status tracking.
 
 ### Agent status model
@@ -724,7 +724,7 @@ translates those into `StatusTracker#transition!`. `request_approval`
 ### Delivery channels
 
 All channels are independently toggleable. A disabled channel is a no-op
-(in no allocation / no fork), so a headless `kimi.cr -p` run pays nothing
+(in no allocation / no fork), so a headless `hcode.cr -p` run pays nothing
 for the TUI-less paths.
 
 #### 1. Terminal desktop notification (port of TS)
@@ -763,7 +763,7 @@ cross-platform fallback (bundled with ffmpeg) and also covers mp3 where the
 native players only accept wav.
 
 ```crystal
-module Kimi::Notify
+module Hcode::Notify
   class Player
     @cmd : {String, Array(String)}?  # resolved at init
 
@@ -777,7 +777,7 @@ module Kimi::Notify
 end
 ```
 
-Bundled sounds ship under `~/.kimi/sounds/` (`done.mp3`, `alert.mp3`) and
+Bundled sounds ship under `~/.hcode/sounds/` (`done.mp3`, `alert.mp3`) and
 are created on first run if absent (generated or vendored CC0 files). Users
 can override paths in config.
 
@@ -804,7 +804,7 @@ Fire a user-configured HTTP request on a transition. JSON body:
 ```
 
 ```crystal
-module Kimi::Notify
+module Hcode::Notify
   class Webhook
     def fire(payload : WebhookPayload) : Nil
       spawn do
@@ -819,7 +819,7 @@ end
 Runs in a detached fiber with a configurable timeout (default 5s). Network
 errors are swallowed and logged at debug level — a flaky webhook endpoint
 must never break a turn. Method defaults to `POST`; `method`, custom
-`headers`, and a `secret` (sent as `X-Kimi-Webhook-Secret`) are optional.
+`headers`, and a `secret` (sent as `X-HCode-Webhook-Secret`) are optional.
 
 ### Config
 
@@ -833,8 +833,8 @@ condition = "unfocused"            # "unfocused" | "always"  (terminal channel o
 
 [notifications.sound]
 enabled = true
-done = "~/.kimi/sounds/done.mp3"
-input_required = "~/.kimi/sounds/alert.mp3"
+done = "~/.hcode/sounds/done.mp3"
+input_required = "~/.hcode/sounds/alert.mp3"
 working = ""                       # optional, empty = silent
 
 [notifications.terminal]
@@ -845,7 +845,7 @@ enabled = false
 url = "https://example.com/notify"
 method = "POST"                    # POST (default) — also accepts PUT
 timeout_ms = 5000
-secret = ""                        # sent as X-Kimi-Webhook-Secret header
+secret = ""                        # sent as X-HCode-Webhook-Secret header
 # headers = { Authorization = "Bearer ..." }   # optional custom headers
 ```
 
@@ -866,7 +866,7 @@ instances and is called once per transition. It respects per-channel
 (off = the whole subsystem is inert, including the status enum wiring).
 
 ```crystal
-class Kimi::Notify::Dispatcher
+class Hcode::Notify::Dispatcher
   def initialize(@terminal : Terminal?, @player : Player?, @webhook : Webhook?)
   end
 
@@ -880,7 +880,7 @@ end
 ```
 
 The dispatcher is owned by `App` (TUI) or constructed inline in the headless
-`kimi.cr -p` path. `StatusTracker#transition!` calls `dispatcher.on_transition`
+`hcode.cr -p` path. `StatusTracker#transition!` calls `dispatcher.on_transition`
 directly, so the agent loop itself stays unaware of channels.
 
 ### Implementation plan
@@ -895,7 +895,7 @@ directly, so the agent loop itself stays unaware of channels.
    `notify_once`.
 3. **`Notify::Player`** (`notify/player.cr`). Probe OS player at init; cache
    the resolved command; `play(path)` spawns a detached fiber. Vendor default
-   `done.mp3` / `alert.mp3` under `~/.kimi/sounds/`.
+   `done.mp3` / `alert.mp3` under `~/.hcode/sounds/`.
 4. **`Notify::Webhook`** (`notify/webhook.cr`). Async POST with timeout,
    secret header, swallow errors.
 5. **`Notify::Dispatcher`** (`notify/dispatcher.cr`). Fan-out + per-channel
@@ -907,7 +907,7 @@ directly, so the agent loop itself stays unaware of channels.
    `Config::Config` (parse + save).
 8. **Wire-up.** `App` constructs the dispatcher from config on startup; TUI
    `request_approval` (`app.cr:294`) and turn-end (`app.cr:531`) become
-   status transitions. Headless `kimi.cr -p` builds a dispatcher too (useful
+   status transitions. Headless `hcode.cr -p` builds a dispatcher too (useful
    for CI/automation webhooks).
 9. **Tests** (`spec/notify/`). Status transitions fan out to stubbed
    channels; player command resolution per fake `OSTYPE`; webhook payload
@@ -956,7 +956,7 @@ Each dialog is just a data array:
 
 | Selector              | Data source                          |
 |-----------------------|--------------------------------------|
-| Provider selector     | `LLM::KNOWN_PROVIDERS` (kimi, zai)   |
+| Provider selector     | `LLM::KNOWN_PROVIDERS` (moonshot, zai)   |
 | Model selector        | Hardcoded list of models             |
 | Permission selector   | manual / auto / yolo                 |
 | Effort selector       | low / medium / high                  |
@@ -965,7 +965,7 @@ Each dialog is just a data array:
 
 ### Simplified (works, but less polished)
 
-| Feature               | TS version                              | kimi.cr version                     |
+| Feature               | TS version                              | hcode.cr version                     |
 |-----------------------|-----------------------------------------|-------------------------------------|
 | Syntax highlighting   | cli-highlight, 30+ langs, auto-detect   | Basic: TS/JS/Python/bash/go/rust    |
 | Diff highlighting     | Word-level intra-line diff              | Line-level +/- with color           |
@@ -1014,10 +1014,10 @@ Each dialog is just a data array:
 
 ### Phase 1: Bare agent loop + headless CLI (1-2 weeks)
 
-Goal: `kimi.cr -p "fix this bug"` works end-to-end, output to stdout.
+Goal: `hcode.cr -p "fix this bug"` works end-to-end, output to stdout.
 
 - [ ] Project scaffold: `shard.yml`, directory structure
-- [ ] `LLM::KimiProvider` — Chat Completions API, SSE streaming
+- [ ] `LLM::MoonshotProvider` — Chat Completions API, SSE streaming
 - [ ] `LLM::TokenCounter` — estimation
 - [ ] `LLM::types.cr` — Message, ContentPart, ToolCall, Usage, Chunk
 - [ ] `Loop::Agent` — run_turn() main loop
@@ -1044,7 +1044,7 @@ Goal: `kimi.cr -p "fix this bug"` works end-to-end, output to stdout.
 - [ ] `Prompt::SystemPrompt` — assemble from workspace + AGENTS.md + platform
 - [ ] `Prompt::AgentsMd` — hierarchical AGENTS.md discovery + merge
 - [ ] `Prompt::Template` — {{var}} replacement, throw on undefined
-- [ ] `Auth::OAuth` — Kimi device-code flow (or API key fallback)
+- [ ] `Auth::OAuth` — Moonshot device-code flow (or API key fallback)
 - [ ] `Session::Index` — local session registry: list/get/filter by workspace, archived, empty
 - [ ] `Session::Lifecycle` — create/fork/archive/restore/child (CLI-only, no server)
 - [ ] CLI session flags: `-s <id>`, `-c/--continue`, `--new`, workspace-aware home dir
@@ -1052,7 +1052,7 @@ Goal: `kimi.cr -p "fix this bug"` works end-to-end, output to stdout.
 - [ ] Headless CLI: `-p "prompt"`, stream output to stdout
 - [ ] Tests: loop, tools, context, system prompt
 
-**Milestone:** `kimi.cr -p "list files in this project"` → agent builds system
+**Milestone:** `hcode.cr -p "list files in this project"` → agent builds system
 prompt with workspace context → runs Bash → prints result. Under 15 MB RSS.
 
 ### Phase 2: TUI core (1-2 weeks)
@@ -1137,7 +1137,7 @@ agent feel sluggish.
   - one failing/timeout tool does not prevent other results
   - result order matches input order regardless of completion order
 
-**Milestone:** `kimi.cr -p "read src/a.cr, src/b.cr, src/c.cr and summarize"` issues
+**Milestone:** `hcode.cr -p "read src/a.cr, src/b.cr, src/c.cr and summarize"` issues
 three `Read` calls concurrently and returns the combined answer in one step
 without blocking on each file.
 
@@ -1266,7 +1266,7 @@ Goal: close every gap identified in the TS-vs-Crystal TUI comparison.
 
 #### 5e. Missing supporting infrastructure (TUI-dependent)
 
-- [ ] `Auth::OAuth` — Kimi device-code / refresh-token flow (directory exists, empty)
+- [ ] `Auth::OAuth` — Moonshot device-code / refresh-token flow (directory exists, empty)
 - [ ] `Context::Compaction` — LLM-based context summarization
 - [ ] `Context::Overflow` — 413 recovery (media-degrade → strip → compaction)
 - [ ] `Context::Undo` — walk-back with compaction boundary stop
@@ -1314,7 +1314,7 @@ for providers.
       `swap_provider(provider : LLM::Provider)` method (or a setter) that replaces
       the stored instance. Decide: hard-swap vs. agent restart.
 - [ ] Add a provider-builder entry point callable from the running TUI (today
-      `build_provider` runs once at startup in `src/kimi.cr`); expose a factory
+      `build_provider` runs once at startup in `src/hcode.cr`); expose a factory
       that reconstructs a `LLM::Provider` from a name + current config.
 - [ ] `App#select_provider(name)` calls the factory, then `agent.swap_provider(...)`,
       updates `@provider_name`, and emits a confirmation message.
@@ -1328,7 +1328,7 @@ for providers.
 
 | Backend                     | Status                                  |
 |-----------------------------|-----------------------------------------|
-| Kimi / Moonshot             | Default, in place.                      |
+| Moonshot             | Default, in place.                      |
 | Z.AI / Zhipu (GLM)          | **Now** — first runtime-switch target.  |
 | Anthropic / OpenAI / Google | **OPTIONAL — not required now.**        |
 
@@ -1367,11 +1367,11 @@ PTY (for background tasks) deferred to Phase 4.
 | Config TOML           | Yes         | Same structure, same paths                       |
 | Auth tokens           | Yes         | Same OAuth token storage, same refresh flow      |
 | Tool schemas          | Yes         | Same JSON schema for tool definitions            |
-| Model API             | Yes         | Same Kimi Chat Completions endpoint              |
+| Model API             | Yes         | Same Moonshot Chat Completions endpoint              |
 | Slash commands        | Partial     | Core set compatible, TS-only commands ignored    |
 | `/sessions` REST API  | N/A         | Console-only: no HTTP server, no REST endpoints  |
 
-Users can switch between kimi-code TS and kimi.cr freely — sessions and config
+Users can switch between kimi-code TS and hcode.cr freely — sessions and config
 are interchangeable.
 
 ---
@@ -1408,7 +1408,7 @@ are interchangeable.
 | TOML shard maturity           | Low    | Multiple shards exist; fallback to YAML     |
 | Markdown parser perf          | Low    | `markd` exists; can optimize or write custom |
 | Crystal preview_mt bugs       | Medium | Stay single-threaded (fibers only)          |
-| Kimi API changes              | Low    | Pin API version, add compatibility layer    |
+| Moonshot API changes              | Low    | Pin API version, add compatibility layer    |
 | Terminal compat (raw mode)    | Medium | Test on common terminals (xterm, kitty, ghostty, iTerm2) |
 | SOCKS proxy in Crystal        | Medium | Crystal stdlib has HTTP proxy; SOCKS needs custom connector |
 | SIGWINCH edge cases (tmux)    | Low    | Force full re-render on resize; test in tmux/screen |
@@ -1420,9 +1420,9 @@ are interchangeable.
 
 ## Success Criteria
 
-1. `kimi.cr -p "what files are in this repo?"` completes with < 15 MB RSS
+1. `hcode.cr -p "what files are in this repo?"` completes with < 15 MB RSS
 2. Interactive TUI session feels responsive (streaming ≤ 50ms latency)
-3. Session saved by kimi.cr can be resumed by kimi-code TS and vice versa
+3. Session saved by hcode.cr can be resumed by kimi-code TS and vice versa
 4. Config file shared between both versions without conflicts
 5. 10 concurrent agents (separate processes) use < 150 MB total RSS
 6. All Phase 3 features working and tested

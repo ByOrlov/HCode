@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     module TokenCounter
       CHARS_PER_TOKEN = 4

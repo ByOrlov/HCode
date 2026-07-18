@@ -9,7 +9,7 @@
 > hasFireWithinYears), `cronTask.ts` (CronTask type), `format.ts`
 > (formatLocalIsoWithOffset).
 
-Цель — 3 тула в `kimi.cr/src/tools/cron.cr` (`Tools::CronCreate`,
+Цель — 3 тула в `hcode.cr/src/tools/cron.cr` (`Tools::CronCreate`,
 `Tools::CronList`, `Tools::CronDelete`) + минимальная `SessionCronService`
 абстракция. Инфраструктура срабатывания (polling, jitter, coalesce,
 stale-авто-удаление) — отдельная задача (см. §6).
@@ -79,7 +79,7 @@ end
 - 7-day stale — auto-delete after final `stale: true` fire.
 - Jitter — recurring: forward ≤ min(10% period, 15 min);
   one-shot: backward ≤ 90s если `:00`/`:30`.
-- Session lifetime — persists on `kimi resume`.
+- Session lifetime — persists on `hcode resume`.
 - Limits: max 50, prompt 8 KiB, no-fire-within-5-years rejected.
 - Returned fields: `id`, `cron`, `humanSchedule`, `recurring`,
   `nextFireAt`.
@@ -115,7 +115,7 @@ end
 ### 2.4. Validation flow (`resolveExecution`)
 
 1. **Killswitch**: `cron.is_disabled?` →
-   `ToolResult.error("Cron scheduling is disabled (KIMI_DISABLE_CRON=1).")`.
+   `ToolResult.error("Cron scheduling is disabled (HCODE_DISABLE_CRON=1).")`.
 2. **Normalize**: `cron.trim.split(/\s+/).join(" ")`.
 3. **Parse**: `parse_cron_expression(normalized)` → rescue →
    `ToolResult.error("Invalid cron expression: #{err.message}")`.
@@ -337,7 +337,7 @@ end
 ```crystal
 def stale?(task : CronTask) : Bool
   return false unless task.recurring
-  return false if ENV.has_key?("KIMI_CRON_NO_STALE")
+  return false if ENV.has_key?("HCODE_CRON_NO_STALE")
   (now - task.created_at) >= STALE_THRESHOLD_MS
 end
 ```
@@ -355,7 +355,7 @@ state при resume не пересчитывался.
 ### Persistence
 
 - On session close → save `{session_dir}/cron.json` со списком задач.
-- On `kimi resume` → load, восстановить `created_at`, вычислить
+- On `hcode resume` → load, восстановить `created_at`, вычислить
   `coalesced_count` для missed fires (только последняя).
 - Tasks не переносятся в новый session.
 
@@ -445,8 +445,8 @@ ISO 8601 с numeric offset:
       `Context::Memory#add_injection` при tick-срабатывании.
 - [ ] Реализовать coalesce (single delivery on wake) + stale
       auto-delete.
-- [ ] Регистрация тулов в `src/kimi.cr:166` для main agent.
-- [ ] Уважать `KIMI_DISABLE_CRON=1` (killswitch).
+- [ ] Регистрация тулов в `src/hcode.cr:166` для main agent.
+- [ ] Уважать `HCODE_DISABLE_CRON=1` (killswitch).
 - [ ] Тесты в `spec/tools/cron_spec.cr`:
   - [ ] CronCreate — parse errors, 5-year reject, cap reached,
         prompt too large, one-shot too far, killswitch, success output
@@ -466,7 +466,7 @@ ISO 8601 с numeric offset:
 - Tick-loop в Crystal — `spawn` + `sleep` с условием прерывания на
   `stop`. В отличие от JS `setInterval`, нет автоматического interrupt;
   использовать `Channel(Nil)` для wake-up.
-- `KIMI_CRON_NO_STALE` — env-var disable для stale behavior.
+- `HCODE_CRON_NO_STALE` — env-var disable для stale behavior.
 - Доставка cron-fire envelope — через `Context::Memory#add_injection`
   (как skill/plan-mode/task notifications). Помечается
   `MessageOrigin::Injection`.

@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     # Glob — file pattern matching via ripgrep.
     #

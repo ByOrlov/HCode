@@ -1,7 +1,7 @@
 require "./danger"
 require "./policies"
 
-module Kimi
+module Hcode
   module Permission
     enum Mode
       Manual

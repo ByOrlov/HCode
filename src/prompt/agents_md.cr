@@ -1,13 +1,13 @@
-module Kimi
+module Hcode
   module Prompt
     class AgentsMd
       def self.discover(cwd : String) : String
         home = ENV["HOME"]? || "/tmp"
-        kimi_home = ENV["KIMI_HOME"]? || File.join(home, ".kimi")
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
 
         paths = [] of String
 
-        user_agents = File.join(kimi_home, "AGENTS.md")
+        user_agents = File.join(hcode_home, "AGENTS.md")
         paths << user_agents if File.exists?(user_agents)
 
         user_agents2 = File.join(home, ".agents", "AGENTS.md")
@@ -21,7 +21,7 @@ module Kimi
             paths << p
           end
 
-          Dir.glob(File.join(git_root, "**", ".kimi", "AGENTS.md")).each do |p|
+          Dir.glob(File.join(git_root, "**", ".hcode", "AGENTS.md")).each do |p|
             next if p.includes?("/node_modules/") || p.includes?("/.git/")
             next if paths.includes?(p)
             paths << p

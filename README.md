@@ -1,6 +1,7 @@
-# KimiO
+# HCode
 
-> A featherweight, multi-provider coding agent — written in Crystal.
+> **HCode by Orlov** — a lighter-than-air AI agent. Written in Crystal.
+> Hydrogen-light: H for the lightest element, Code for what you ship.
 > **Vibe-code even on a potato.**
 
 **Crystal 1.14 · GPL-2.0-or-later · Native Binary · No Runtime**
@@ -18,9 +19,9 @@ ships a Node.js runtime pays for it — per process, forever.
 | 5 × opencode (Node.js)      | **≈ 2–10 GB**  |
 | 5 × kimi-code (Node.js)     | **> 1 GB**     |
 | 5 × Claude Code (Node.js)   | **≈ 600 MB**   |
-| 5 × KimiO (Crystal, native) | **≈ 15 MB**    |
+| 5 × HCode (Crystal, native) | **≈ 15 MB**    |
 
-Each KimiO process sits around 3 MB resident while it waits for the next
+Each HCode process sits around 3 MB resident while it waits for the next
 prompt — not 120, not 250, not 2 GB. That's **~40× less than Claude
 Code**, **~80× less than kimi-code**, and hundreds of times less than
 opencode — which leaks past 2 GB per process once it warms up. Your
@@ -29,7 +30,7 @@ swapping. You can finally run a swarm of agents on the machine you
 already own.
 
 > The Rust agents — Codex, grok-build, Goose — are native and lean too.
-> Against them KimiO's edge isn't RAM, it's **readability and license**.
+> Against them HCode's edge isn't RAM, it's **readability and license**.
 > See [The Landscape](#the-landscape) below.
 
 ---
@@ -66,17 +67,17 @@ One language. Three wins. Zero runtime.
 **Memory is a feature, not a footnote.** Most agent frameworks treat RAM
 as somebody else's problem. They ship a full V8 runtime, a bundler, a
 transpiler, and a `node_modules` tree — and they tax you for each of
-those, per process, forever. KimiO refuses. An idle agent should be
+those, per process, forever. HCode refuses. An idle agent should be
 invisible. A laptop running ten agents should feel like a laptop running
 none.
 
-**The wire belongs to everyone.** KimiO is built on the OpenAI Chat
+**The wire belongs to everyone.** HCode is built on the OpenAI Chat
 Completions wire format over SSE. Any compatible endpoint — Moonshot,
 Z.AI, Zhipu, OpenAI, a local model — plugs into the same transport. No
 vendor lock-in. Bring your own key, your own model, your own endpoint,
 and swap them at runtime from the TUI.
 
-**Open source, irrevocably.** KimiO is GPL-2.0-or-later. Every derivative
+**Open source, irrevocably.** HCode is GPL-2.0-or-later. Every derivative
 must ship its source. You can study it, fork it, run it in production,
 embed it in your product — as long as the source comes along.
 
@@ -89,7 +90,7 @@ backend — which also means they inherit that vendor's country blocklist.
 Install them from the wrong region and they refuse to start. grok-build
 is open source but xAI-shaped.
 
-KimiO speaks the open wire. Point it at any OpenAI-compatible endpoint —
+HCode speaks the open wire. Point it at any OpenAI-compatible endpoint —
 Moonshot, Z.AI, OpenAI, a local Ollama box, a model on your own GPU.
 **No vendor account required to install. No "unsupported country." No
 proxy you pay a markup for.** Your reach is bounded by your provider,
@@ -101,7 +102,7 @@ never by the agent.
 
 - 🪶 **Tiny footprint** — ~3 MB resident per idle agent; Boehm GC starts
   at ~1 MB; fibers cost ~8 KB of stack each.
-- 🔌 **Many providers, one binary** — Kimi/Moonshot, Z.AI/Zhipu
+- 🔌 **Many providers, one binary** — Moonshot, Z.AI/Zhipu
   (pay-as-you-go + Coding Plan), and any OpenAI-compatible endpoint.
   Switch live from the TUI without restarting.
 - ⚡ **Native compilation** — `crystal build` produces a single static
@@ -125,18 +126,18 @@ never by the agent.
 
 ## Providers
 
-KimiO speaks the OpenAI Chat Completions wire format over SSE. Anything
+HCode speaks the OpenAI Chat Completions wire format over SSE. Anything
 that speaks it works.
 
 | Provider                     | Status | Notes                                            |
 |------------------------------|--------|--------------------------------------------------|
-| Kimi / Moonshot              | ✅     | Default backend. OAuth or API key.               |
+| Moonshot                     | ✅     | Default backend. OAuth or API key.               |
 | Z.AI / Zhipu (pay-as-you-go) | ✅     | OpenAI-compatible.                               |
 | Z.AI / Zhipu (Coding Plan)   | ✅     | Subscription endpoint.                           |
 | Any OpenAI-compatible        | ✅     | Point at any endpoint that speaks the wire.      |
 | Mock                         | ✅     | Scripted provider for self-tests and demos.      |
 
-Switch live from the TUI (`/provider`), or pin one in `~/.kimi/config.toml`.
+Switch live from the TUI (`/provider`), or pin one in `~/.hcode/config.toml`.
 
 ---
 
@@ -149,24 +150,24 @@ brew install crystal          # macOS
 # see docs for Debian/Ubuntu/Windows
 
 # Build
-git clone https://github.com/YOU/kimio
-cd kimio
+git clone https://github.com/YOU/hcode
+cd hcode
 shards install
-rake build            # → ./kimio (release flags)
+rake build            # → ./hcode (release flags)
 
 # Smoke-test your credentials
-./kimio --hi
+./hcode --hi
 
 # Headless — one-shot prompt, streams to stdout
-./kimio -p "explain this repo's entry point"
+./hcode -p "explain this repo's entry point"
 
 # Interactive TUI
-./kimio
+./hcode
 ```
 
-Keys via env: `KIMI_API_KEY`, `ZAI_API_KEY` / `ZHIPU_API_KEY`, … or
-`[provider.*]` blocks in `~/.kimi/config.toml`. Sessions live under
-`~/.kimi/sessions/`; resume with `-c` or pick one from the TUI.
+Keys via env: `MOONSHOT_API_KEY`, `ZAI_API_KEY` / `ZHIPU_API_KEY`, … or
+`[provider.*]` blocks in `~/.hcode/config.toml`. Sessions live under
+`~/.hcode/sessions/`; resume with `-c` or pick one from the TUI.
 
 ---
 
@@ -182,7 +183,7 @@ From featherweight to heavyweight.
 
 | # | Agent       | Lang       | Idle RAM         | License             | Source |
 |---|-------------|------------|------------------|---------------------|--------|
-| 1 | KimiO       | Crystal    | **~3 MB**        | GPL-2.0-or-later    | [1]    |
+| 1 | HCode       | Crystal    | **~3 MB**        | GPL-2.0-or-later    | [1]    |
 | 2 | Codex CLI   | Rust       | ~30 MB           | Apache-2.0          | [2]    |
 | 3 | grok-build  | Rust       | ~30–60 MB (est)  | Apache-2.0          | [3]    |
 | 4 | Goose       | Rust + TS  | ~50–100 MB (est) | Apache-2.0          | [4]    |
@@ -191,12 +192,12 @@ From featherweight to heavyweight.
 | 7 | kimi-code   | TS / Node  | ~250 MB+         | MIT                 | [5]    |
 | 8 | opencode    | TS / Bun   | **~1–2 GB+**     | MIT                 | [8]    |
 
-**The gap.** KimiO sits ~10× under the nearest Rust agent (Codex), ~40×
+**The gap.** HCode sits ~10× under the nearest Rust agent (Codex), ~40×
 under the lightest Node agent (Claude Code), ~80× under kimi-code, and
 **~300–600× under opencode.** The Node family spans an enormous range —
 from ~120 MB up to 2 GB+ — because each one ships a V8 runtime per
 process and grows with use. The Rust agents (Codex, grok-build, Goose)
-are native and lean; KimiO keeps pace with them on RAM and beats them on
+are native and lean; HCode keeps pace with them on RAM and beats them on
 readability and license (see [Why Crystal?](#why-crystal)).
 
 > Aider (est. ~150–250 MB) and kimi-code (~250 MB+) sit on the border of
@@ -216,21 +217,21 @@ allowed to run it, and where your prompts actually go.
 | Aider       | Apache-2.0          | no              | no              | yes          |
 | opencode    | MIT                 | no              | no              | yes          |
 | kimi-code   | MIT                 | no              | Moonshot        | yes          |
-| **KimiO**   | **GPL-2.0-or-later**| **no**          | **no**          | **yes**      |
+| **HCode**   | **GPL-2.0-or-later**| **no**          | **no**          | **yes**      |
 
 **Two stories, one agent.** Against the Node agents (opencode, Claude
-Code, kimi-code), KimiO wins on RAM by 40–600×. Against the Rust agents
-(Codex, grok-build, Goose), the RAM gap is small — there KimiO wins on
+Code, kimi-code), HCode wins on RAM by 40–600×. Against the Rust agents
+(Codex, grok-build, Goose), the RAM gap is small — there HCode wins on
 **readability** (no borrow checker, Ruby-like syntax) and **license**
 (GPL stays open forever; Apache can be closed). Against the
-vendor-locked (Codex, Claude Code), KimiO wins on **freedom**: no
-country block, no paid middleman. KimiO is the only agent that is at
+vendor-locked (Codex, Claude Code), HCode wins on **freedom**: no
+country block, no paid middleman. HCode is the only agent that is at
 once the lightest, the most readable native one, the only copyleft one,
 and the only one with zero vendor strings attached.
 
 ### Sources
 
-- **[1] KimiO** — author measurement, idle RSS. Baseline documented in
+- **[1] HCode** — author measurement, idle RSS. Baseline documented in
   [`PLAN.md`](./PLAN.md) (Crystal + Boehm GC, ~1 MB GC baseline, ~8 KB
   per fiber stack).
 - **[2] Codex CLI** — author measurement, idle RSS (~30 MB). Native Rust
@@ -262,19 +263,19 @@ for agents that publish no memory data.*
 
 ## License
 
-KimiO is released under the **GPL-2.0-or-later**.
+HCode is released under the **GPL-2.0-or-later**.
 
 Copyright © 2026 **Oleg Orlov** <orelcokolov@gmail.com> · byorlov.com.
 All rights reserved. See [LICENSE](./LICENSE) for the full text.
 
 > **Why GPL-2.0, not MIT?** opencode and kimi-code are both MIT — anyone
-> can absorb them into a closed-source product and never give back. KimiO
+> can absorb them into a closed-source product and never give back. HCode
 > is copyleft: every derivative must ship its source under the same terms.
 > The community always has a free, usable version that cannot be re-closed.
 >
 > **Dual licensing.** The copyright is held solely by the author so the
 > project can additionally offer a separate commercial license to parties
-> that need to avoid GPL copyleft (e.g. embedding KimiO inside a
+> that need to avoid GPL copyleft (e.g. embedding HCode inside a
 > closed-source product). To keep that option viable, outside
 > contributions require a CLA that grants the author a license to
 > relicense. See [CONTRIBUTING.md](./CONTRIBUTING.md).

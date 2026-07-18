@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Loop
     # Result produced by one fiber in a parallel tool batch.
     struct ToolBatchResult

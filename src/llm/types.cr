@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     alias StopReason = String
 
@@ -128,7 +128,7 @@ module Kimi
     # backend speaks a different dialect, so the chosen shape is per-provider
     # (mirrors the TS kosong adapters):
     #
-    #   Kimi            — top-level `thinking:{type, effort?}` object
+    #   Moonshot        — top-level `thinking:{type, effort?}` object
     #                     (Moonshot-proprietary). `effort` only when the model
     #                     declares it in its `think_efforts.valid_efforts`.
     #   ReasoningEffort — top-level `reasoning_effort` string
@@ -136,7 +136,7 @@ module Kimi
     #   None            — backend has no effort control; nothing is sent.
     enum ThinkingWire
       None
-      Kimi
+      Moonshot
       ReasoningEffort
     end
 
@@ -167,7 +167,7 @@ module Kimi
       property temperature : Float64?
       property max_tokens : Int32?
       # Preferred over the legacy `max_tokens` alias on the wire (matches the
-      # Kimi/Moonshot API contract). When both are set `max_completion_tokens`
+      # Moonshot API contract). When both are set `max_completion_tokens`
       # is emitted and `max_tokens` is dropped.
       property max_completion_tokens : Int32?
       # Session affinity: the stable key under which the provider caches the

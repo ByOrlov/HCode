@@ -15,7 +15,7 @@ lib LibCExtra
   fun isatty(fd : Int32) : Int32
 end
 
-module Kimi
+module Hcode
   module TUI
     class Terminal
       @original_termios : LibC::Termios?

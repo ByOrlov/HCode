@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module LLM
     class OAuthCredentials
       include JSON::Serializable
@@ -56,10 +56,10 @@ module Kimi
       end
     end
 
-    # Kimi / Moonshot backend over the OpenAI Chat Completions protocol.
+    # Moonshot (Kimi) backend over the OpenAI Chat Completions protocol.
     # Auth is either an API key or a refreshable OAuth token created by the
     # managed `kimi-code` login.
-    class KimiProvider < OpenAIChatProvider
+    class MoonshotProvider < OpenAIChatProvider
       property oauth_host : String = "https://auth.kimi.com"
       property oauth_client_id : String = "17e5f671-d194-4dfb-9706-5516cb48c098"
       property oauth : OAuthCredentials?
@@ -71,16 +71,16 @@ module Kimi
                      temperature : Float64? = nil,
                      max_tokens : Int32? = nil)
         super(model, endpoint, api_key, temperature, max_tokens)
-        # Kimi/Moonshot speaks the top-level `thinking:{type,effort?}` object
+        # Moonshot speaks the top-level `thinking:{type,effort?}` object
         # for reasoning control, so this backend resolves effort through the
-        # Kimi wire dialect.
-        @thinking_wire = ThinkingWire::Kimi
-        # Kimi transport speaks `max_completion_tokens` (not the legacy alias).
+        # Moonshot wire dialect.
+        @thinking_wire = ThinkingWire::Moonshot
+        # Moonshot transport speaks `max_completion_tokens` (not the legacy alias).
         @uses_max_completion_tokens = true
       end
 
       def name : String
-        "kimi"
+        "moonshot"
       end
 
       def token : String

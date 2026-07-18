@@ -1,4 +1,4 @@
-module Kimi
+module Hcode
   module Tools
     class Registry
       @tools : Hash(String, Tool) = {} of String => Tool

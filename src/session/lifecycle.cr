@@ -2,7 +2,7 @@ require "file_utils"
 require "./index"
 require "./store"
 
-module Kimi
+module Hcode
   module Session
     # Session lifecycle operations — create / fork / archive / restore /
     # rename. CLI- and TUI-only: there is no HTTP server, so every action
