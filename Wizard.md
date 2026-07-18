@@ -112,7 +112,7 @@ def provider_configured? : Bool
   case provider_name
   when "moonshot"     then !api_key.blank? || oauth_credentials_present?
   when "zai"      then !zai_api_key.blank?
-  when "zai-cp"   then !zai_api_key.blank?
+  when "zai-coding-plan"   then !zai_api_key.blank?
   when "openai"   then !api_key.blank?
   when "openrouter" then !api_key.blank?
   when "ollama"   then true  # local, no key needed
@@ -172,7 +172,7 @@ end
 KNOWN_PROVIDERS = [
   ProviderInfo.new("moonshot",       "Moonshot — Chat Completions"),
   ProviderInfo.new("zai",        "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)"),
-  ProviderInfo.new("zai-cp",     "Z.AI / Zhipu — Coding Plan subscription"),
+  ProviderInfo.new("zai-coding-plan",     "Z.AI / Zhipu — Coding Plan subscription"),
   ProviderInfo.new("openai",     "OpenAI — official API"),
   ProviderInfo.new("openrouter", "OpenRouter — 300+ models, single key"),
   ProviderInfo.new("ollama",     "Local Ollama server (no API key)"),
@@ -242,7 +242,7 @@ Note: проектный env-префикс — `HCODE_*` (конфиг, debug, 
 
 - `src/config/config.cr`: сменить дефолты 4 полей на `nil`.
 - Обновить `parse_toml` — секции `[provider.moonshot]`, `[provider.zai]`,
-  `[provider.zai-cp]` продолжают работать как есть.
+  `[provider.zai-coding-plan]` продолжают работать как есть.
 - `save` писать только заполненные секции (не писать `endpoint = ""`).
 
 ### Шаг 2. Провайдеры-обёртки

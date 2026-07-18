@@ -262,16 +262,16 @@ module Hcode
           api_key: config.zai_api_key,
           provider_label: "zai",
         )
-      when "zai-cp"
+      when "zai-coding-plan"
         if config.zai_api_key.empty?
           raise ProviderConfigError.new(
             "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
         end
         LLM::ZaiProvider.new(
-          model: config.zai_cp_model,
-          endpoint: config.zai_cp_endpoint,
+          model: config.zai_coding_plan_model,
+          endpoint: config.zai_coding_plan_endpoint,
           api_key: config.zai_api_key,
-          provider_label: "zai-cp",
+          provider_label: "zai-coding-plan",
         )
       when "mock"
         LLM::MockProvider.new(LLM::MockProvider.script_from_env || LLM::MockProvider::DEFAULT_SCRIPT.dup)
@@ -515,8 +515,8 @@ module Hcode
             config.model = model
           when "zai"
             config.zai_model = model
-          when "zai-cp"
-            config.zai_cp_model = model
+          when "zai-coding-plan"
+            config.zai_coding_plan_model = model
           end
           provider = build_named_provider(config.provider_name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
@@ -687,7 +687,7 @@ module Hcode
           MOONSHOT_API_KEY        API key for Moonshot
           MOONSHOT_ENDPOINT       API endpoint (default: https://api.kimi.com/coding/v1)
           MOONSHOT_MODEL          Default model name
-          HCODE_PROVIDER          Provider: moonshot | zai | zai-cp | mock
+          HCODE_PROVIDER          Provider: moonshot | zai | zai-coding-plan | mock
           HCODE_HOME              Config directory (default: ~/.hcode)
           HTTP_PROXY              HTTP/HTTPS proxy URL
           ALL_PROXY               SOCKS proxy URL

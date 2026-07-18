@@ -1514,9 +1514,11 @@ module Hcode
         inner_w = box_w - 4
 
         logo_lines = [
-          "  ▐█▛█▛█▌  ",
-          "▐█████████▌",
-          "▐█▙▄▄▄▄▄▟█▌",
+          "    █   █     ",
+          "  █████████   ",
+          "  ██🔴█🔴██   ",
+          "█████████████ ",
+          "██▙▄▄▄▄▄▄▄▟██ ",
         ]
 
         lines = [] of String
@@ -1529,24 +1531,27 @@ module Hcode
 
         lines << "#{bc}╭#{"─" * (box_w - 2)}╮#{r}"
 
-        welcome_text = "#{ANSI.bold}Welcome to HCode!#{r}"
-        content_w = visible_len(welcome_text)
-        used = 2 + logo_lines[0].size + 2 + content_w
-        pad = inner_w + 2 - used
-        pad = 1 if pad < 1
-        lines << "#{bc}│#{r}  #{ac}#{logo_lines[0]}#{r}  #{tc}#{welcome_text}#{" " * pad}#{bc}│#{r}"
+        # Optional side text + color matched to each logo line by index.
+        # Logo lines beyond this list render on their own (logo only), so
+        # adding rows to `logo_lines` is automatically reflected in the box.
+        side_texts = [
+          {"#{ANSI.bold}Welcome to HCode!#{r}", tc},
+          {"Send /help for help information.", mc},
+          {"", tc},
+        ] of Tuple(String, String)
 
-        help_text = "Send /help for help information."
-        used = 2 + logo_lines[1].size + 2 + help_text.size
-        pad = inner_w + 2 - used
-        pad = 1 if pad < 1
-        lines << "#{bc}│#{r}  #{ac}#{logo_lines[1]}#{r}  #{mc}#{help_text}#{" " * pad}#{bc}│#{r}"
-
-        mouth_text = ""
-        used = 2 + logo_lines[2].size + 2 + mouth_text.size
-        pad = inner_w + 2 - used
-        pad = 1 if pad < 1
-        lines << "#{bc}│#{r}  #{ac}#{logo_lines[2]}#{r}  #{tc}#{mouth_text}#{" " * pad}#{bc}│#{r}"
+        logo_lines.each_with_index do |logo, i|
+          text = ""
+          color = tc
+          if entry = side_texts[i]?
+            text, color = entry
+          end
+          content_w = visible_len(text)
+          used = 2 + visible_len(logo) + 2 + content_w
+          pad = inner_w + 2 - used
+          pad = 1 if pad < 1
+          lines << "#{bc}│#{r}  #{ac}#{logo}#{r}  #{color}#{text}#{" " * pad}#{bc}│#{r}"
+        end
 
         lines << "#{bc}│#{r}#{" " * (box_w - 2)}#{bc}│#{r}"
 
@@ -1661,8 +1666,7 @@ module Hcode
       end
 
       private def visible_len(s : String) : Int32
-        clean = s.gsub(/\e\[[0-9;]*m/, "")
-        clean.size
+        CharWidth.visible_width(s)
       end
 
       # Collapse older intermediate thinking/tool blocks within the current turn

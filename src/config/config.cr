@@ -10,8 +10,8 @@ module Hcode
       property zai_api_key : String = ""
       property zai_endpoint : String = "https://api.z.ai/api/paas/v4"
       property zai_model : String = "glm-4.6"
-      property zai_cp_endpoint : String = "https://api.z.ai/api/coding/paas/v4"
-      property zai_cp_model : String = "glm-5.2"
+      property zai_coding_plan_endpoint : String = "https://api.z.ai/api/coding/paas/v4"
+      property zai_coding_plan_model : String = "glm-5.2"
       property max_steps : Int32 = 100
       property max_context_tokens : Int32 = 262144
       property temperature : Float64? = nil
@@ -45,8 +45,8 @@ module Hcode
         if ep = ENV["ZAI_ENDPOINT"]?
           config.zai_endpoint = ep
         end
-        if ep = ENV["ZAI_CP_ENDPOINT"]?
-          config.zai_cp_endpoint = ep
+        if ep = ENV["ZAI_CODING_PLAN_ENDPOINT"]?
+          config.zai_coding_plan_endpoint = ep
         end
         if model = ENV["MOONSHOT_MODEL"]?
           config.model = model
@@ -54,8 +54,8 @@ module Hcode
         if model = ENV["ZAI_MODEL"]?
           config.zai_model = model
         end
-        if model = ENV["ZAI_CP_MODEL"]?
-          config.zai_cp_model = model
+        if model = ENV["ZAI_CODING_PLAN_MODEL"]?
+          config.zai_coding_plan_model = model
         end
         if provider = ENV["HCODE_PROVIDER"]?
           config.provider_name = provider
@@ -100,8 +100,8 @@ module Hcode
             when {"provider.zai", "api_key"}  then config.zai_api_key = val
             when {"provider.zai", "endpoint"} then config.zai_endpoint = val
             when {"provider.zai", "model"}    then config.zai_model = val
-            when {"provider.zai-cp", "endpoint"} then config.zai_cp_endpoint = val
-            when {"provider.zai-cp", "model"}    then config.zai_cp_model = val
+            when {"provider.zai-coding-plan", "endpoint"} then config.zai_coding_plan_endpoint = val
+            when {"provider.zai-coding-plan", "model"}    then config.zai_coding_plan_model = val
             when {"agent", "max_steps"}      then config.max_steps = val.to_i? || 100
             when {"agent", "max_context_tokens"} then config.max_context_tokens = val.to_i? || 262144
             when {"agent", "temperature"}    then config.temperature = val.to_f64?
@@ -137,9 +137,9 @@ module Hcode
           s << "endpoint = \"#{@zai_endpoint}\"\n"
           s << "model = \"#{@zai_model}\"\n"
           s << '\n'
-          s << "[provider.zai-cp]\n"
-          s << "endpoint = \"#{@zai_cp_endpoint}\"\n"
-          s << "model = \"#{@zai_cp_model}\"\n"
+          s << "[provider.zai-coding-plan]\n"
+          s << "endpoint = \"#{@zai_coding_plan_endpoint}\"\n"
+          s << "model = \"#{@zai_coding_plan_model}\"\n"
           s << '\n'
           s << "[agent]\n"
           s << "max_steps = #{@max_steps}\n"
