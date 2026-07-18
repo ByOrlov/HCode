@@ -91,7 +91,7 @@ module Hcode
 
             new_content = content.split(old_str).join(new_str)
             File.write(full_path, LineEndings.materialize(new_content, model_view.line_ending_style))
-            ToolResult.success("Replaced #{count} occurrences in #{path}")
+            build_edit_result("Replaced #{count} occurrences in #{path}", path, old_str, new_str)
           else
             count = count_occurrences(content, old_str)
             case count
@@ -100,7 +100,7 @@ module Hcode
             when 1
               new_content = replace_once(content, old_str, new_str)
               File.write(full_path, LineEndings.materialize(new_content, model_view.line_ending_style))
-              ToolResult.success("Edited #{path}")
+              build_edit_result("Edited #{path}", path, old_str, new_str)
             else
               ToolResult.error(
                 "old_string is not unique in #{path} (found #{count} occurrences). " \
@@ -134,6 +134,16 @@ module Hcode
       private def not_found_message(path : String) : String
         "old_string not found in #{path}, the file contents may be out of date. " \
         "Please use the Read Tool to reload the content."
+      end
+
+      # Build a successful Edit result and attach a structured `file_io`
+      # display so the TUI can render the diff without re-parsing `tool_args`
+      # (which is brittle w.r.t. argument key naming).
+      private def build_edit_result(message : String, path : String,
+                                    old_str : String, new_str : String) : ToolResult
+        res = ToolResult.success(message)
+        res.display = ToolDisplay.new("file_io", "edit", path, old_str, new_str)
+        res
       end
 
       private def read_string(input : JSON::Any, primary : String, legacy : String) : String

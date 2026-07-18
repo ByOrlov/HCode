@@ -37,54 +37,77 @@ module Hcode
         total_usage = LLM::Usage.new
         steps = 0
         sys_prompt = system_prompt
+        cancelled = false
+        return_value : TurnResult? = nil
 
-        loop do
-          @abort_controller.throw_if_aborted!
+        begin
+          loop do
+            @abort_controller.throw_if_aborted!
 
-          if steps >= @max_steps
-            on_event.call(Event.error("Max steps (#{@max_steps}) exceeded"))
-            return TurnResult.new("max_steps", steps, total_usage)
+            if steps >= @max_steps
+              on_event.call(Event.error("Max steps (#{@max_steps}) exceeded"))
+              return_value = TurnResult.new("max_steps", steps, total_usage)
+              break
+            end
+
+            steps += 1
+            on_event.call(Event.step_begin(steps))
+
+            if @context.near_limit? && sys_prompt
+              on_event.call(Event.info("Context near limit, triggering compaction..."))
+              sys_prompt = trigger_compaction(sys_prompt, on_event)
+            end
+
+            @context.prune_injections
+            inject_step_reminders(steps)
+
+            step_result = execute_step(sys_prompt, on_event)
+
+            # The provider's usage object carries the authoritative context
+            # fill; feed it back into memory so the percent/count reflect the
+            # real window usage instead of the local heuristic estimate.
+            @context.update_token_count_from_usage(
+              step_result.usage.prompt_tokens,
+              step_result.usage.completion_tokens,
+            )
+
+            total_usage = total_usage + step_result.usage
+            on_event.call(Event.step_end(steps, step_result.usage))
+
+            unless step_result.text.empty? && step_result.tool_calls.empty?
+              @context.add_assistant(step_result.text, step_result.tool_calls)
+              on_event.call(Event.assistant_text(step_result.text)) unless step_result.text.empty?
+            end
+
+            if step_result.tool_use?
+              tool_results = run_tool_batch(step_result.tool_calls, on_event)
+            else
+              return_value = TurnResult.new(step_result.stop_reason, steps, total_usage)
+              break
+            end
           end
-
-          steps += 1
-          on_event.call(Event.step_begin(steps))
-
-          if @context.near_limit? && sys_prompt
-            on_event.call(Event.info("Context near limit, triggering compaction..."))
-            sys_prompt = trigger_compaction(sys_prompt, on_event)
-          end
-
-          @context.prune_injections
-          inject_step_reminders(steps)
-
-          step_result = execute_step(sys_prompt, on_event)
-
-          # The provider's usage object carries the authoritative context
-          # fill; feed it back into memory so the percent/count reflect the
-          # real window usage instead of the local heuristic estimate.
-          @context.update_token_count_from_usage(
-            step_result.usage.prompt_tokens,
-            step_result.usage.completion_tokens,
-          )
-
-          total_usage = total_usage + step_result.usage
-          on_event.call(Event.step_end(steps, step_result.usage))
-
-          unless step_result.text.empty? && step_result.tool_calls.empty?
-            @context.add_assistant(step_result.text, step_result.tool_calls)
-            on_event.call(Event.assistant_text(step_result.text)) unless step_result.text.empty?
-          end
-
-          if step_result.tool_use?
-            tool_results = run_tool_batch(step_result.tool_calls, on_event)
-          else
-            return TurnResult.new(step_result.stop_reason, steps, total_usage)
-          end
+        rescue ex : UserCancellationError
+          cancelled = true
+          raise ex
+        ensure
+          on_event.call(Event.turn_end(cancelled))
         end
+
+        return_value.not_nil!
       end
 
       def cancel : Nil
         @abort_controller.abort("user requested cancel")
+      end
+
+      # Inject a steering message into the running turn. Unlike a queued
+      # message (which starts a fresh turn), a steered message is appended
+      # to the context immediately so the model sees it on its next step,
+      # without ending the current turn. Mirrors `session.steer(text)` in
+      # the TS version. Safe to call from any fiber; no-op if no turn is
+      # running (caller decides to send immediately instead).
+      def steer(text : String) : Nil
+        @context.add_user(text)
       end
 
       # Hot-swap the LLM backend so the `/provider` selector can switch

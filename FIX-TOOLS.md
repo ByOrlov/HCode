@@ -6,26 +6,26 @@
 
 | # | Tool | Группа | Задача | Приоритет |
 |---|---|---|---|---|
-| 1 | `Agent` | Субагенты | Реализовать tool для запуска дочернего субагента с поддержкой `resume` и фонового выполнения (`run_in_background`) | Высокий |
-| 2 | `AgentSwarm` | Субагенты | ✅ DONE — `src/tools/agent_swarm.cr` (контракт 1:1 с JS + опциональный `SwarmRunner`-инжект; реальный subagent-runtime подключается позже). План: `md-tools/swarm.md`, тесты: `spec/tools/agent_swarm_spec.cr` (14 spec). | Высокий |
-| 3 | `AskUserQuestion` | Взаимодействие с пользователем | Реализовать tool для 1–4 структурированных вопросов (single/multi select), блокирующе и в фоне (`background`) | Высокий |
-| 4 | `FetchURL` | Веб | Реализовать скачивание публичного URL и возврат извлечённого текста/тела ответа | Средний |
-| 5 | `WebSearch` | Веб | Реализовать поиск в интернете через настроенный Moonshot-бэкенд | Средний |
-| 6 | `Skill` | Навыки | Реализовать вызов зарегистрированного skill с аргументами и встраивание его промпта в текущий ход | Средний |
-| 7 | `EnterPlanMode` | Планирование | Реализовать перевод агента в режим планирования (plan mode) | Средний |
-| 8 | `ExitPlanMode` | Планирование | Реализовать выход из plan mode с отдачей пользователю готового плана и до 3 альтернатив | Средний |
-| 9 | `CreateGoal` | Цели | Реализовать создание новой цели (`goal`) с `objective` и `completionCriterion` | Средний |
-| 10 | `GetGoal` | Цели | Реализовать получение текущей цели, статуса и бюджетов | Средний |
-| 11 | `UpdateGoal` | Цели | Реализовать обновление статуса цели (`active`/`complete`/`blocked`) | Средний |
-| 12 | `SetGoalBudget` | Цели | Реализовать установку runtime-бюджета цели (turns/tokens/time) | Средний |
-| 13 | `TaskList` | Фоновые задачи | Реализовать перечисление управляемых фоновых задач (`active_only`, `limit`) | Средний |
-| 14 | `TaskOutput` | Фоновые задачи | Реализовать чтение статуса и превью вывода фоновой задачи | Средний |
-| 15 | `TaskStop` | Фоновые задачи | Реализовать остановку фоновой задачи по `task_id` | Средний |
-| 16 | `CronCreate` | Планировщик | Реализовать создание one-shot или recurring cron-задания с 5-полевым выражением | Средний |
-| 17 | `CronList` | Планировщик | Реализовать просмотр списка запланированных cron-заданий | Средний |
-| 18 | `CronDelete` | Планировщик | Реализовать удаление cron-задания по `id` | Средний |
-| 19 | `ReadMediaFile` | Мультимодальность | Реализовать чтение изображения/видео для моделей с поддержкой `image_in`/`video_in` | Средний |
-| 20 | `select_tools` | Управление инструментами | Реализовать подгрузку MCP/пользовательских инструментов по имени при progressive disclosure | Средний |
+| 1 | `Agent` | Субагенты | ✅ DONE — `src/tools/agent.cr` (13/13 specs). Subagent launch (foreground/background), profile catalog, `AgentRunner` abstract contract. |
+| 2 | `AgentSwarm` | Субагенты | ✅ DONE — `src/tools/agent_swarm.cr` (14 spec). |
+| 3 | `AskUserQuestion` | Взаимодействие с пользователем | ✅ DONE — `src/tools/ask_user_question.cr` (19/19 specs). 1-4 structured questions, `QuestionService` + `AgentTaskService` contracts. |
+| 4 | `FetchURL` | Веб | ✅ DONE — `src/tools/fetch_url.cr` (18/18 specs). SSRF protection, HTML extraction, `UrlFetcher`/`WebFetchService`/`LocalFetcher` contracts. |
+| 5 | `WebSearch` | Веб | ✅ DONE — `src/tools/web_search.cr` (11/11 specs). Moonshot provider, error classification, truncation. |
+| 6 | `Skill` | Навыки | ✅ DONE — `src/tools/skill.cr` (14/14 specs). Placeholder substitution (`$1`, `$ARGUMENTS`, `$NAME`), `SkillCatalog`/`InMemorySkillCatalog`. |
+| 7 | `EnterPlanMode` | Планирование | ✅ DONE — `src/tools/plan_mode.cr` (15/15 specs shared). `EnterPlanMode` + `ExitPlanMode`, `PlanService`/`AgentPlanService`. |
+| 8 | `ExitPlanMode` | Планирование | ✅ DONE — combined with `EnterPlanMode` in `src/tools/plan_mode.cr`. |
+| 9 | `CreateGoal` | Цели | ✅ DONE — `src/tools/goal.cr` (25/25 specs shared). `GoalService`/`AgentGoalService`, `GoalStatus`/`GoalSnapshot`/`GoalBudgetLimits`/`GoalBudgetReport`. |
+| 10 | `GetGoal` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
+| 11 | `UpdateGoal` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
+| 12 | `SetGoalBudget` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
+| 13 | `TaskList` | Фоновые задачи | ✅ DONE — `src/tools/task.cr` (39/39 specs shared). `TaskService`/`InMemoryTaskService`, `AgentTaskInfo`/`AgentTaskOutputSnapshot`. |
+| 14 | `TaskOutput` | Фоновые задачи | ✅ DONE — combined with `TaskList` in `src/tools/task.cr`. |
+| 15 | `TaskStop` | Фоновые задачи | ✅ DONE — combined with `TaskList` in `src/tools/task.cr`. |
+| 16 | `CronCreate` | Планировщик | ✅ DONE — `src/tools/cron.cr` (40/40 specs shared). `SessionCronService`/`InMemoryCronService`, cron parser `Cron.parse_expression`/`compute_next_cron_run`/`to_human`. |
+| 17 | `CronList` | Планировщик | ✅ DONE — combined with `CronCreate` in `src/tools/cron.cr`. |
+| 18 | `CronDelete` | Планировщик | ✅ DONE — combined with `CronCreate` in `src/tools/cron.cr`. |
+| 19 | `ReadMediaFile` | Мультимодальность | ✅ DONE — `src/tools/read_media.cr` (25/25 specs). `MediaFileSystem`/`LocalMediaFileSystem`, `MediaKind` enum, `detect_media_file_type`/`sniff_image_dimensions`. |
+| 20 | `select_tools` | Управление инструментами | ✅ DONE — `src/tools/select_tools.cr` (12/12 specs). `ToolSelectService`/`InMemoryToolSelectService`, `LoadToolsResult` (to_load/already_available/unknown). |
 
 ## 2. Доработка существующих Crystal tools до паритета с JS
 

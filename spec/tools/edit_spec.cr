@@ -13,6 +13,46 @@ describe Hcode::Tools::Edit do
     File.read(path).should eq("hello world\nbaz qux\n")
   end
 
+  it "attaches a file_io display with before/after for rendering" do
+    path = "/tmp/hcode-test-edit-disp.txt"
+    File.write(path, "hello world\nfoo bar\n")
+
+    edit = Hcode::Tools::Edit.new("/tmp")
+    result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-disp.txt","old_string":"foo bar","new_string":"baz qux"})))
+
+    display = result.display
+    display.should_not be_nil
+    display.not_nil!.kind.should eq("file_io")
+    display.not_nil!.operation.should eq("edit")
+    display.not_nil!.path.should eq("hcode-test-edit-disp.txt")
+    display.not_nil!.before.should eq("foo bar")
+    display.not_nil!.after.should eq("baz qux")
+  end
+
+  it "attaches display with replace_all too" do
+    path = "/tmp/hcode-test-edit-disp2.txt"
+    File.write(path, "dup\ndup\n")
+
+    edit = Hcode::Tools::Edit.new("/tmp")
+    result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-disp2.txt","old_string":"dup","new_string":"x","replace_all":true})))
+
+    display = result.display.not_nil!
+    display.operation.should eq("edit")
+    display.before.should eq("dup")
+    display.after.should eq("x")
+  end
+
+  it "does not attach display on error" do
+    path = "/tmp/hcode-test-edit-disp3.txt"
+    File.write(path, "hello\n")
+
+    edit = Hcode::Tools::Edit.new("/tmp")
+    result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-disp3.txt","old_string":"missing","new_string":"x"})))
+
+    result.is_error.should be_true
+    result.display.should be_nil
+  end
+
   it "errors when old_string not found" do
     path = "/tmp/hcode-test-edit2.txt"
     File.write(path, "hello world\n")

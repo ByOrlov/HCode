@@ -1,0 +1,208 @@
+require "../spec_helper"
+require "../../src/tools/fetch_url"
+
+# Тестовый fetcher: возвращает заданные данные / ошибки.
+private class FakeFetcher < Hcode::Tools::UrlFetcher
+  def initialize(@behaviour : Proc(String, Hcode::Tools::UrlFetchResult))
+  end
+
+  def fetch(url : String, tool_call_id : String? = nil, signal : Hcode::Tools::AbortController? = nil) : Hcode::Tools::UrlFetchResult
+    @behaviour.call(url)
+  end
+end
+
+private class FakeService < Hcode::Tools::WebFetchService
+  def initialize(@fetcher : Hcode::Tools::UrlFetcher)
+  end
+
+  def get_url_fetcher : Hcode::Tools::UrlFetcher
+    @fetcher
+  end
+end
+
+describe Hcode::Tools::FetchURL do
+  after_each do
+    Hcode::Tools::FetchURL.service = Hcode::Tools::LocalWebFetchService.new
+  end
+
+  it "exposes JS-name and identical schema" do
+    tool = Hcode::Tools::FetchURL.new
+    tool.name.should eq("FetchURL")
+    tool.description.should contain("http")
+    props = tool.parameters["properties"].as_h
+    props.has_key?("url").should be_true
+    tool.parameters["additionalProperties"].as_bool.should be_false
+  end
+
+  it "returns error on empty url" do
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "" })))
+    result.is_error.should be_true
+    result.content.should contain("URL is required")
+  end
+
+  it "renders passthrough note for text/plain content" do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      Hcode::Tools::UrlFetchResult.new("plain text content", Hcode::Tools::UrlFetchKind::Passthrough)
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_false
+    result.content.should contain("full response body, returned verbatim")
+    result.content.should contain("cite this page as a markdown link")
+    result.content.should contain("plain text content")
+  end
+
+  it "renders extracted note for HTML content" do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      Hcode::Tools::UrlFetchResult.new("# Title\n\nbody", Hcode::Tools::UrlFetchKind::Extracted)
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_false
+    result.content.should contain("main text extracted from the page")
+    result.content.should contain("# Title")
+  end
+
+  it "returns empty-body message when content is empty" do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      Hcode::Tools::UrlFetchResult.new("", Hcode::Tools::UrlFetchKind::Passthrough)
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_false
+    result.content.should eq("The response body is empty.")
+  end
+
+  it "formats HttpFetchError with status code" do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      raise Hcode::Tools::HttpFetchError.new(404, "Not Found")
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_true
+    result.content.should contain("Failed to fetch URL. Status: 404")
+    result.content.should contain("Not Found")
+  end
+
+  it "formats generic network error" do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      raise Exception.new("Connection refused")
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_true
+    result.content.should contain("network error")
+    result.content.should contain("Connection refused")
+  end
+
+  it "truncates content above MAX_CHARS and sets truncated flag" do
+    big = "a" * (Hcode::Tools::FetchURL::MAX_CHARS + 5000)
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+      Hcode::Tools::UrlFetchResult.new(big, Hcode::Tools::UrlFetchKind::Passthrough)
+    end))
+
+    tool = Hcode::Tools::FetchURL.new
+    result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
+    result.is_error.should be_false
+    result.content.size.should be < (Hcode::Tools::FetchURL::MAX_CHARS + 200)
+    result.content.should contain(Hcode::Tools::FetchURL::TRUNCATION_MARKER)
+    result.content.should contain(Hcode::Tools::FetchURL::TRUNCATION_MESSAGE)
+    result.truncated?.should be_true
+  end
+
+  describe "LocalFetcher URL validation" do
+    it "rejects non-http schemes" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Unsupported URL scheme/) do
+        fetcher.fetch("file:///etc/passwd")
+      end
+    end
+
+    it "rejects localhost" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Refusing to fetch private host/) do
+        fetcher.fetch("http://localhost/")
+      end
+    end
+
+    it "rejects 127.0.0.1" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Refusing to fetch private address/) do
+        fetcher.fetch("http://127.0.0.1/")
+      end
+    end
+
+    it "rejects 10.x addresses" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Refusing to fetch private address/) do
+        fetcher.fetch("http://10.0.0.1/")
+      end
+    end
+
+    it "rejects 192.168.x addresses" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Refusing to fetch private address/) do
+        fetcher.fetch("http://192.168.1.1/")
+      end
+    end
+
+    it "rejects malformed URLs" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      # "not a url" parses as a relative URI without scheme/host; either
+      # "Unsupported URL scheme" or "missing host" is acceptable here.
+      err = expect_raises(Exception) do
+        fetcher.fetch("not a url")
+      end
+      err.message.to_s.should contain("Unsupported URL scheme")
+    end
+  end
+
+  describe "LocalFetcher HTML extraction" do
+    it "extracts title and strips script/style" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      html = <<-HTML
+        <html><head><title>Hello World</title>
+        <style>body { color: red; }</style>
+        <script>console.log('hack');</script>
+        </head><body>
+        <h1>Heading</h1>
+        <p>First paragraph.</p>
+        <p>Second paragraph.</p>
+        </body></html>
+      HTML
+      result = fetcher.extract_main_content(html, "text/html")
+      result.kind.passthrough?.should be_false
+      result.content.should contain("# Hello World")
+      result.content.should contain("Heading")
+      result.content.should contain("First paragraph.")
+      result.content.should_not contain("hack")
+      result.content.should_not contain("color")
+    end
+
+    it "passes through text/plain unchanged" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      result = fetcher.extract_main_content("hello plain", "text/plain; charset=utf-8")
+      result.kind.passthrough?.should be_true
+      result.content.should eq("hello plain")
+    end
+
+    it "passes through text/markdown unchanged" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      result = fetcher.extract_main_content("# md", "text/markdown")
+      result.kind.passthrough?.should be_true
+    end
+
+    it "raises when extraction yields nothing meaningful" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      expect_raises(Exception, /Failed to extract meaningful content/) do
+        fetcher.extract_main_content("<html><body><script>x</script></body></html>", "text/html")
+      end
+    end
+  end
+end

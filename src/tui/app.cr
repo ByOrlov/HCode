@@ -17,6 +17,7 @@ module Hcode
       property tool_name : String?
       property tool_args : String?
       property tool_result : String?
+      property tool_display : Tools::ToolDisplay? = nil
       property is_error : Bool = false
       property? expanded : Bool = false
       property step : Int32 = 0
@@ -35,6 +36,18 @@ module Hcode
       property danger : String?
 
       def initialize(@tool_name : String, @args : String, @danger : String?)
+      end
+    end
+
+    # A message typed while the agent is mid-turn. Mirrors the TS
+    # `QueuedMessage` (mode 'prompt' = normal message, 'bash' = queued shell
+    # command — not yet used). Drained FIFO on turn end; `Ctrl+S` (steer)
+    # injects it into the *current* turn instead, via `Agent#steer`.
+    struct QueuedMessage
+      property text : String
+      property mode : String  # "prompt" | "bash"
+
+      def initialize(@text : String, @mode : String = "prompt")
       end
     end
 
@@ -75,7 +88,14 @@ module Hcode
       @max_context_tokens : Int32 = 262144
       @running : Bool = true
       @agent_busy : Bool = false
-      @queue : Array(String) = [] of String
+      @is_compacting : Bool = false
+      @defer_user_messages : Bool = false
+      # Set during the brief window between "shifted a queued message out of
+      # the array" and "actually started its turn" so a queued-message
+      # dispatcher doesn't see an empty queue + idle phase and race itself.
+      @dispatch_pending : Bool = false
+      @run_turn_cb : (String -> Nil)?
+      @queue : Array(QueuedMessage) = [] of QueuedMessage
       @spin_phase : Int32 = 0
       @dirty : Bool = true
       @last_render : Time::Span = Time.monotonic
@@ -145,6 +165,13 @@ module Hcode
       property on_fork : (-> Nil)?
       property on_archive : (-> Nil)?
       property on_rename : (String -> Nil)?
+      property on_persist_queued : (String, String -> Nil)?
+      property on_steer : (String -> Nil)?
+      # Persist a queued message to JSONL (so drain survives resume). The
+      # wire event type is the argument: "turn.prompt" or "turn.steer".
+      property on_persist_queued : (String, String -> Nil)?
+      # Steer: inject `text` into the running turn (Agent#steer).
+      property on_steer : (String -> Nil)?
 
       def initialize(
         @terminal : Terminal = Terminal.current,
@@ -168,6 +195,7 @@ module Hcode
       def run(initial_prompt : String? = nil, &run_turn : String -> Nil) : Nil
         @terminal.raw!
         @terminal.refresh_size
+        @run_turn_cb = run_turn
 
         Signal::INT.trap do
           if @agent_busy
@@ -199,14 +227,14 @@ module Hcode
         # Auto-submit an initial prompt (used by mock demo tasks) so the user
         # immediately sees streaming without typing anything.
         if ip = initial_prompt
-          submit_message(ip, run_turn)
+          submit_message(ip)
         end
 
         while @running
           key = @input.read_key
 
           if key
-            handle_key(key, run_turn)
+            handle_key(key)
           end
 
           now = Time.monotonic
@@ -381,6 +409,7 @@ module Hcode
               elsif msg.tool_call_id == event.tool_call_id
                 msg.tool_result = event.text
                 msg.is_error = event.is_error
+                msg.tool_display = event.tool_display
                 @messages[i] = msg
                 break
               end
@@ -392,10 +421,37 @@ module Hcode
           merge_turn_steps
         when .info?
           @status = event.text
+          @is_compacting = true if event.text.starts_with?("Context") && event.text.includes?("compact")
         when .error?
           @messages << Message.new("error", event.text)
           @spinner.stop
           @status = ""
+        when .turn_end?
+          # Turn finished (normal, errored, or cancelled). Reset busy state
+          # and drain the next queued message if any. The TUI is the single
+          # owner of the busy/idle phase so this is the only place busy flips
+          # back to false — run_turn itself runs in a detached fiber and
+          # cannot safely touch @agent_busy on completion.
+          @agent_busy = false
+          @is_compacting = false
+          @defer_user_messages = false
+          @spinner.stop
+          @status = ""
+
+          # A cancelled turn ends the dispatch chain: drop queued messages
+          # so they don't leak into the next prompt the user types fresh.
+          if event.is_error
+            unless @queue.empty?
+              @queue.clear
+              @messages << Message.new("system", "[Queue cleared on interrupt]")
+            end
+          end
+
+          # Drain the next queued message if the user queued one during the
+          # finished turn. Skipped during the dispatch-pending gap.
+          if (cb = @run_turn_cb) && !@dispatch_pending
+            drain_next_queued
+          end
         end
 
         @dirty = true
@@ -412,7 +468,7 @@ module Hcode
         end
       end
 
-      private def handle_key(key : KeyEvent, run_turn : String -> Nil) : Nil
+      private def handle_key(key : KeyEvent) : Nil
         if @exit_confirm
           case key.key
           when .ctrl_c?
@@ -480,35 +536,33 @@ module Hcode
                 @editor.clear
 
                 if final_text.starts_with?('/')
-                  handle_slash_command(final_text, run_turn)
+                  handle_slash_command(final_text)
                 else
-                  submit_message(final_text, run_turn)
+                  submit_message(final_text)
                 end
               elsif !@editor.empty?
                 text = @editor.submit!
 
                 if text.starts_with?('/')
-                  handle_slash_command(text, run_turn)
+                  handle_slash_command(text)
                 else
-                  submit_message(text, run_turn)
+                  submit_message(text)
                 end
               end
             elsif !@editor.empty?
               text = @editor.submit!
 
               if text.starts_with?('/')
-                handle_slash_command(text, run_turn)
+                handle_slash_command(text)
               else
-                submit_message(text, run_turn)
+                submit_message(text)
               end
             end
           end
         when .ctrl_s?
-          if @agent_busy && !@editor.empty?
+          if !@editor.empty?
             text = @editor.submit!
-            @queue << text
-            @messages << Message.new("system", "[Queued: #{text[0...40]}...]")
-            @dirty = true
+            steer_or_queue(text)
           end
         when .ctrl_o?
           last_expandable = @messages.reverse.find { |m|
@@ -631,10 +685,35 @@ module Hcode
         @pasted_lines = 0
       end
 
-      private def submit_message(text : String, run_turn : String -> Nil) : Nil
+      private def submit_message(text : String) : Nil
         text = text.strip
         return if text.empty?
 
+        # Gate mirrors the TS three-flag rule: defer the message (queue it)
+        # when a turn is running, compaction is in flight, or a meta-command
+        # asked us to defer. Idle + nothing-deferred → send immediately.
+        if @agent_busy || @is_compacting || @defer_user_messages
+          enqueue_message(text)
+          return
+        end
+
+        start_turn(text)
+      end
+
+      # Append a message to the queue and persist it so drain survives a
+      # resume. The hint shown in the queue pane depends on the current
+      # phase (see `queue_hint`).
+      private def enqueue_message(text : String, mode : String = "prompt") : Nil
+        @queue << QueuedMessage.new(text, mode)
+        @on_persist_queued.try(&.call("turn.prompt", text))
+        @messages << Message.new("system", "[Queued: #{truncate_preview(text)}]")
+        @dirty = true
+      end
+
+      # Begin a turn for `text`: add to transcript, flip busy, spawn the
+      # run_turn fiber. Called for the first message and for each drained
+      # queued message.
+      private def start_turn(text : String) : Nil
         @messages << Message.new("user", text)
         @current_step = 0
         @step_tool_count = 0
@@ -644,30 +723,69 @@ module Hcode
         @spinner.start
         @dirty = true
 
-        spawn do
-          run_turn.call(text)
-          @agent_busy = false
-          @spinner.stop
-          @status = ""
-          @dirty = true
+        spawn { @run_turn_cb.not_nil!.call(text) }
+      end
 
-          unless @queue.empty?
-            next_msg = @queue.shift
-            @messages << Message.new("user", next_msg)
-            @current_step = 0
-            @step_tool_count = 0
-            @agent_busy = true
-            @status = "Thinking..."
-            @spinner.start
-            @dirty = true
-            spawn do
-              run_turn.call(next_msg)
-              @agent_busy = false
-              @spinner.stop
-              @dirty = true
-            end
-          end
+      # Shift one queued message (FIFO) and start a fresh turn for it.
+      # Called from `on_event(TurnEnd)` once the previous turn finishes and
+      # the queue is non-empty. Recursive via the drain in `on_event` — each
+      # turn-end pulls the next item until the queue empties.
+      private def drain_next_queued : Nil
+        return if @queue.empty?
+
+        next_msg = @queue.shift
+        @dispatch_pending = true
+
+        # The tiny async hop lets the TurnEnd handler finish flipping phase
+        # back to idle before we start the next turn (otherwise start_turn
+        # would see agent_busy=true and re-queue the message).
+        spawn(same_thread: true) do
+          @dispatch_pending = false
+          start_turn(next_msg.text)
         end
+      end
+
+      private def truncate_preview(text : String) : String
+        return text if text.size <= 40
+        "#{text[0...40]}..."
+      end
+
+      # The user-visible hint above the queue pane, mirroring the TS
+      # queue-pane copy. Context-sensitive to the current phase.
+      private def queue_hint : String
+        if @is_compacting
+          "will send after compaction"
+        elsif @agent_busy
+          "Ctrl+S to steer immediately · sends after current turn"
+        else
+          "will send next"
+        end
+      end
+
+      # Ctrl+S handler. Three branches (mirrors TS `steerMessage`):
+      #   - compacting/deferred  → enqueue (can't steer mid-compaction)
+      #   - idle                 → send immediately (no turn to steer)
+      #   - busy                 → inject into running turn via Agent#steer
+      private def steer_or_queue(text : String) : Nil
+        text = text.strip
+        return if text.empty?
+
+        if @is_compacting || @defer_user_messages
+          enqueue_message(text)
+          return
+        end
+
+        unless @agent_busy
+          start_turn(text)
+          return
+        end
+
+        # Busy: inject into the live turn.
+        @on_steer.try(&.call(text))
+        @on_persist_queued.try(&.call("turn.steer", text))
+        @messages << Message.new("user", text)
+        @messages << Message.new("system", "[Steered into running turn]")
+        @dirty = true
       end
 
       private def update_command_hints : Nil
@@ -704,10 +822,10 @@ module Hcode
         @dirty = true
       end
 
-      private def handle_slash_command(input : String, run_turn : String -> Nil) : Nil
+      private def handle_slash_command(input : String) : Nil
         parsed = CommandRegistry.parse(input)
         unless parsed
-          submit_message(input, run_turn)
+          submit_message(input)
           return
         end
 
@@ -776,6 +894,16 @@ module Hcode
         when "/undo"
           @on_undo.try(&.call)
           @messages << Message.new("system", "Undid last turn.")
+        when "/queue"
+          if args.strip == "clear"
+            @queue.clear
+            @messages << Message.new("system", "Queue cleared.")
+          elsif @queue.empty?
+            @messages << Message.new("system", "Queue is empty.")
+          else
+            preview = @queue.map_with_index { |qm, i| "  #{i + 1}. #{truncate_preview(qm.text)}" }.join("\n")
+            @messages << Message.new("system", "Queue (#{@queue.size}):\n#{preview}\n— #{queue_hint}")
+          end
         when "/yolo"
           @permission_mode = "yolo"
           @messages << Message.new("system", "Permission mode: yolo (auto-approve all)")
@@ -1085,6 +1213,9 @@ module Hcode
         end
 
         editor_start = new_lines.size
+        unless @queue.empty?
+          new_lines.concat(render_queue_pane(cols))
+        end
         if @help_panel.visible?
           # Modal `/help` replaces the editor — mirrors JS `mountEditorReplacement`.
           # Skip command hints too: the editor (and its autocomplete) is hidden.
@@ -1296,7 +1427,7 @@ module Hcode
                 end
 
                 if name == "Edit"
-                  render_edit_diff(args).each { |l| lines << l }
+                  render_edit_diff(msg.tool_display, args).each { |l| lines << l }
                 end
               end
               if result = msg.tool_result
@@ -1650,6 +1781,24 @@ module Hcode
         end
       end
 
+      # Queue pane: lists messages typed while the agent was busy, plus a
+      # context-sensitive hint. Mirrors TS `components/panes/queue-pane.ts`.
+      # Shown only when `@queue` is non-empty.
+      private def render_queue_pane(cols : Int32) : Array(String)
+        lines = [] of String
+        accent = @theme.colors.primary
+        dim = @theme.colors.dim
+
+        lines << "#{ANSI.color(accent, nil)}#{ANSI.bold}  Queued (#{@queue.size})#{ANSI.reset} " \
+                 "#{ANSI.color(dim, nil)}#{queue_hint}#{ANSI.reset}"
+        @queue.each_with_index do |qm, i|
+          preview = truncate_preview(qm.text)
+          prefix = i == 0 ? "  ▶ " : "    "
+          lines << "#{ANSI.color(dim, nil)}#{prefix}#{preview}#{ANSI.reset}"
+        end
+        lines
+      end
+
       private def render_footer(cols : Int32) : String
         parts = [
           @provider_name,
@@ -1897,10 +2046,25 @@ module Hcode
         [] of String
       end
 
-      private def render_edit_diff(args : String) : Array(String)
-        parsed = JSON.parse(args)
-        old_str = parsed["oldString"]?.try(&.to_s) || ""
-        new_str = parsed["newString"]?.try(&.to_s) || ""
+      private def render_edit_diff(display : Tools::ToolDisplay?, args : String) : Array(String)
+        # Prefer the structured display carried on the tool result (populated
+        # by the Edit tool itself); fall back to parsing the raw `tool_args`
+        # for sessions recorded before the display channel existed. Both the
+        # snake_case canonical names (`old_string`/`new_string`, as declared
+        # in the Edit schema) and the legacy camelCase aliases are accepted,
+        # mirroring `extract_key_argument`'s `path`/`filePath` form.
+        old_str = ""
+        new_str = ""
+
+        if display
+          old_str = display.before || ""
+          new_str = display.after || ""
+        else
+          parsed = JSON.parse(args)
+          old_str = (parsed["old_string"]? || parsed["oldString"]?).try(&.to_s) || ""
+          new_str = (parsed["new_string"]? || parsed["newString"]?).try(&.to_s) || ""
+        end
+
         lines = [] of String
 
         old_lines = old_str.split('\n')

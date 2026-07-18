@@ -31,6 +31,17 @@ require "./tools/glob"
 require "./tools/grep"
 require "./tools/todo_list"
 require "./tools/agent_swarm"
+require "./tools/agent"
+require "./tools/ask_user_question"
+require "./tools/fetch_url"
+require "./tools/web_search"
+require "./tools/skill"
+require "./tools/plan_mode"
+require "./tools/goal"
+require "./tools/task"
+require "./tools/cron"
+require "./tools/read_media"
+require "./tools/select_tools"
 require "./context/memory"
 require "./context/budget"
 require "./context/undo"
@@ -172,6 +183,25 @@ module Hcode
       tools.register(Tools::Grep.new(work_dir))
       tools.register(Tools::TodoList.new)
       tools.register(Tools::AgentSwarm.new)
+      tools.register(Tools::Agent.new)
+      tools.register(Tools::AskUserQuestion.new)
+      tools.register(Tools::FetchURL.new)
+      tools.register(Tools::WebSearch.new)
+      tools.register(Tools::Skill.new)
+      tools.register(Tools::EnterPlanMode.new)
+      tools.register(Tools::ExitPlanMode.new)
+      tools.register(Tools::CreateGoal.new)
+      tools.register(Tools::GetGoal.new)
+      tools.register(Tools::UpdateGoal.new)
+      tools.register(Tools::SetGoalBudget.new)
+      tools.register(Tools::TaskList.new)
+      tools.register(Tools::TaskOutput.new)
+      tools.register(Tools::TaskStop.new)
+      tools.register(Tools::CronCreate.new)
+      tools.register(Tools::CronList.new)
+      tools.register(Tools::CronDelete.new)
+      tools.register(Tools::ReadMediaFile.new)
+      tools.register(Tools::SelectTools.new)
 
       permission = Permission::Manager.new(Permission::Mode.parse(config.permission_mode))
 
@@ -536,6 +566,20 @@ module Hcode
         agent.provider.fetch_models
       end
 
+      # Steer: inject the text into the running turn's context so the model
+      # sees it on its next step. Mirrors `session.steer(text)` in TS.
+      app.on_steer = ->(text : String) do
+        agent.steer(text)
+        nil
+      end
+
+      # Persist queued / steered messages to the wire log so the queue
+      # survives a resume. Wire type distinguishes the two flows.
+      app.on_persist_queued = ->(wire_type : String, text : String) do
+        store.append_simple(wire_type, "prompt", text)
+        nil
+      end
+
       app.session_id = store.meta_id? || ""
 
       app.run(initial_prompt: initial_prompt) do |prompt_text|
@@ -564,7 +608,7 @@ module Hcode
                 "content"      => JSON::Any.new(event.text),
               })
               app.on_event(event)
-            when .step_begin?, .step_end?, .info?, .error?
+            when .step_begin?, .step_end?, .info?, .error?, .turn_end?
               app.on_event(event)
               app.context_percent = agent.context.token_usage_percent
               app.context_tokens = agent.context.token_count

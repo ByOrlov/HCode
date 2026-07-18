@@ -6,9 +6,10 @@ module Hcode
       property tool_call_id : String
       property content : String
       property is_error : Bool
+      property display : Tools::ToolDisplay? = nil
 
       def initialize(@index : Int32, @tool_call_id : String,
-                     @content : String, @is_error : Bool)
+                     @content : String, @is_error : Bool, @display : Tools::ToolDisplay? = nil)
       end
     end
 
@@ -66,7 +67,7 @@ module Hcode
         approved.size.times do
           result = channel.receive
           results_by_index[result.index] = result
-          on_event.call(Event.tool_result(result.tool_call_id, result.content, result.is_error))
+          on_event.call(Event.tool_result(result.tool_call_id, result.content, result.is_error, result.display))
         end
 
         assemble_results(tool_calls, planned, results_by_index)
@@ -149,7 +150,7 @@ module Hcode
           @abort_controller.throw_if_aborted!
 
           budgeted_content, _truncated = Context::Budget.budget(tc.name, tc.id, result.content)
-          channel.send(ToolBatchResult.new(pc.index, tc.id, budgeted_content, result.is_error))
+          channel.send(ToolBatchResult.new(pc.index, tc.id, budgeted_content, result.is_error, result.display))
         rescue ex : UserCancellationError
           channel.send(ToolBatchResult.new(pc.index, tc.id, "Cancelled: #{ex.reason}", true))
         rescue ex

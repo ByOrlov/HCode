@@ -12,6 +12,7 @@ module Hcode
       StepEnd
       Info
       Error
+      TurnEnd
     end
 
     class Event
@@ -23,6 +24,7 @@ module Hcode
       property tool_name : String = ""
       property tool_args : String = ""
       property is_error : Bool = false
+      property tool_display : Tools::ToolDisplay? = nil
 
       def initialize(@type : EventType)
       end
@@ -67,11 +69,13 @@ module Hcode
         e
       end
 
-      def self.tool_result(id : String, content : String, is_error : Bool) : Event
+      def self.tool_result(id : String, content : String, is_error : Bool,
+                           display : Tools::ToolDisplay? = nil) : Event
         e = new(EventType::ToolResult)
         e.tool_call_id = id
         e.text = content
         e.is_error = is_error
+        e.tool_display = display
         e
       end
 
@@ -98,6 +102,16 @@ module Hcode
         e = new(EventType::Error)
         e.text = text
         e.is_error = true
+        e
+      end
+
+      # Emitted exactly once at the end of a turn (whether it completed
+      # normally, was cancelled, or errored out). The TUI uses this to drain
+      # queued messages — see App#on_event. `cancelled` is true when the turn
+      # ended via UserCancellationError / Agent#cancel.
+      def self.turn_end(cancelled : Bool = false) : Event
+        e = new(EventType::TurnEnd)
+        e.is_error = cancelled
         e
       end
     end
