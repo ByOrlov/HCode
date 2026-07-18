@@ -21,6 +21,7 @@ module Hcode
         property tool_result : Int32
         property link : Int32
         property code : Int32
+        property logo : Int32
 
         def initialize(
           @primary = 52,
@@ -42,6 +43,7 @@ module Hcode
           @tool_result = 245,
           @link = 52,
           @code = 228,
+          @logo = 144,
         )
         end
       end
@@ -70,6 +72,7 @@ module Hcode
           tool_result: 245,
           link: 75,
           code: 75,
+          logo: 144,
         ))
       end
 
@@ -94,6 +97,7 @@ module Hcode
           tool_result: 59,
           link: 32,
           code: 32,
+          logo: 137,
         ))
       end
 

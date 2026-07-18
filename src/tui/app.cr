@@ -1524,7 +1524,8 @@ module Hcode
         lines = [] of String
 
         bc = ANSI.color(@theme.colors.border, nil)
-        ac = ANSI.color(@theme.colors.primary, nil)
+        gc = ANSI.color(@theme.colors.logo, nil)
+        rc = ANSI.color(@theme.colors.error, nil)
         mc = ANSI.color(@theme.colors.muted, nil)
         tc = ANSI.color(@theme.colors.text, nil)
         r = ANSI.reset
@@ -1550,7 +1551,7 @@ module Hcode
           used = 2 + visible_len(logo) + 2 + content_w
           pad = inner_w + 2 - used
           pad = 1 if pad < 1
-          lines << "#{bc}│#{r}  #{ac}#{logo}#{r}  #{color}#{text}#{" " * pad}#{bc}│#{r}"
+          lines << "#{bc}│#{r}  #{colorize_logo(logo, gc, rc, r)}  #{color}#{text}#{" " * pad}#{bc}│#{r}"
         end
 
         lines << "#{bc}│#{r}#{" " * (box_w - 2)}#{bc}│#{r}"
@@ -1571,6 +1572,23 @@ module Hcode
 
         lines << "#{bc}╰#{"─" * (box_w - 2)}╯#{r}"
         lines
+      end
+
+      # Render a logo line with two-tone coloring: the body uses `gray`, while
+      # the 🔴 eye markers use `red`. Splitting on the eye marker (kept via the
+      # capture group) lets us recolor each segment independently, so the eyes
+      # stay red regardless of how the terminal applies ANSI fg to emoji.
+      private def colorize_logo(logo : String, gray : String, red : String, r : String) : String
+        return "#{gray}#{logo}#{r}" unless logo.includes?('🔴')
+        String.build do |io|
+          logo.split(/(🔴)/).each do |seg|
+            if seg == "🔴"
+              io << red << seg << r
+            else
+              io << gray << seg << r
+            end
+          end
+        end
       end
 
       private def render_editor_box(cols : Int32) : Array(String)
