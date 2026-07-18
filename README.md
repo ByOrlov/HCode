@@ -9,6 +9,41 @@
 
 ---
 
+## Origin Story
+
+One day I opened the system monitor of my agents and was horrified. Two
+opencode instances were devouring 1 GB of RAM, and five kimi-code chats
+were doing the same — guaranteed — because each one dragged a full Node.js
+runtime along for the ride.
+
+I remembered 2007. My mother bought me **512 MB of RAM** so I could play
+*S.T.A.L.K.E.R.: Shadow of Chernobyl* — a full 3D game that ran on a
+machine with 1 GB of RAM. And now, in 2026, we can't run two chats on
+1 GB. What? The world has gone mad.
+
+I couldn't make peace with it, mostly because these "chats" are hard to
+call **real software**. They aren't software — they're software prototypes
+with a pile of useful features bolted on. Real software cannot be this
+horrifying on performance. And the scariest part is that they are
+**eternal prototypes**. **Eternal temporary solutions.** Shipped as
+finished products.
+
+What's worse — other developers reach for Rust to build agents. Rust is a
+language where you're forced to fight the compiler instead of building
+things. That's the opposite extreme. And the punchline: the Rust-based
+competitors sit at **~10× my app's memory while idle**.
+
+So I took Moonshot-AI's TypeScript agent as a baseline and rewrote its
+logic in Crystal, with help from Kimi 2.6 and GLM 5. The first results
+were striking: **~3 MB idle** versus kimi-code's ~200 MB. The core loop
+already worked. Peak consumption did start climbing afterward — up to
+~130 MB — which is horrifying for a **chat-notepad**, but still less than
+kimi-code at idle.
+
+That gap is what HCode exists to close.
+
+---
+
 ## The Problem
 
 Spin up five coding agents in parallel. Watch your RAM. Every agent that
@@ -260,6 +295,38 @@ marked (est.) are not lab-measured — they are order-of-magnitude estimates
 for agents that publish no memory data.*
 
 ---
+
+## RAM Consumption
+
+HCode is designed to keep memory bounded per process.
+
+### Idle
+
+~**3 MB RSS** per idle agent. This is the Crystal runtime, Boehm GC baseline,
+and a small TUI state. No Node.js/V8 runtime per process.
+
+### Peak
+
+Measured on Linux with the benchmarks in `benchmarks/`:
+
+| Scenario | Peak RSS | Notes |
+|---|---|---|
+| 2 000 turns (5 KB assistant + 50 KB tool result, with compaction) | ~37 MB | TUI stores only tool previews; full history lives in `wire.jsonl` |
+| 10 000 small tool calls | ~20 MB | |
+| Single 10 MB tool result (Bash `MAX_OUTPUT_BYTES`) | ~31 MB | Context holds the full output; TUI preview is ~1 KB |
+| Single 10 MB assistant response | ~67 MB | Synthetic stress; a 10 MB response is larger than the 262k-token context window allows |
+
+A typical turn with a 50 KB tool result is roughly **13 000 tokens**. With a
+262 144-token context window, one full context length is about **20 turns**.
+So **2 000 turns is already well over 10 full context lengths** in a single
+process, and peak RSS stays under ~40 MB.
+
+### Why RSS can stay high after a peak
+
+Boehm GC does not return freed pages to the OS immediately. After a large
+allocation (e.g. `request.to_json` on a big context) the RSS may remain
+inflated even though `live` memory has dropped. This is allocator behavior,
+not a leak of application objects.
 
 ## License
 
