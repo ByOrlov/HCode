@@ -574,6 +574,23 @@ module Hcode
         agent.provider.fetch_models
       end
 
+      # Expose the TodoList tool's state to the TUI so it can render a
+      # progress panel above the editor. Returns nil if the tool isn't
+      # registered (no TodoList in this agent) or the list is empty.
+      app.on_fetch_todos = -> : Array({String, String})? do
+        todo_tool = agent.tools.get("TodoList")
+        return nil unless todo_tool.is_a?(Hcode::Tools::TodoList)
+        todos = todo_tool.todos
+        return nil if todos.empty?
+        todos.map { |t| {t.title, t.status.to_s.downcase} }
+      end
+      app.on_clear_todos = -> : Nil do
+        todo_tool = agent.tools.get("TodoList")
+        return nil unless todo_tool.is_a?(Hcode::Tools::TodoList)
+        todo_tool.todos.clear
+        nil
+      end
+
       # Thinking-effort selector (off/low/medium/high/...). Backed by the
       # provider's `thinking_effort` property; setting it persists into the
       # next chat request via `build_request`.

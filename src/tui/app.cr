@@ -73,6 +73,12 @@ module Hcode
       @last_cols : Int32 = 0
       @last_rows : Int32 = 0
       @cursor_line : Int32 = 0
+      # Cursor position within the editor box, resolved against the soft-wrapped
+      # layout (computed in `render_editor_box`, read in `position_cursor`).
+      # `visual_row` is the 0-based content row; `visual_col` is the visible
+      # column offset from the content start on that row.
+      @editor_cursor_visual_row : Int32 = 0
+      @editor_cursor_visual_col : Int32 = 0
       @first_render : Bool = true
       @streaming_text : String = ""
       @streaming_thinking : String = ""
@@ -177,6 +183,14 @@ module Hcode
       # Plan-mode toggle: receives the next desired state, returns true if it
       # was applied (false → not wired up / not supported by this provider).
       property on_plan_mode : (Bool -> Bool)?
+      # Returns the current TodoList items (or nil if the tool isn't loaded).
+      # The TUI renders these in a panel above the editor when non-empty.
+      @on_fetch_todos : (-> Array({String, String})?)? = nil
+      property on_fetch_todos : (-> Array({String, String})?)?
+      # Clear the TodoList tool's state (only meaningful when the agent has
+      # registered a TodoList tool).
+      @on_clear_todos : (-> Nil)? = nil
+      property on_clear_todos : (-> Nil)?
       # Persist a queued message to JSONL (so drain survives resume). The
       # wire event type is the argument: "turn.prompt" or "turn.steer".
       property on_persist_queued : (String, String -> Nil)?
@@ -1055,6 +1069,24 @@ module Hcode
           else
             @messages << Message.new("error", "Plan mode is not wired up.")
           end
+        when "/todos"
+          todos = current_todos
+          if todos.nil? || todos.empty?
+            @messages << Message.new("system", "No todos.")
+          elsif args.strip.downcase == "clear"
+            @on_clear_todos.try(&.call)
+            @messages << Message.new("system", "Todo list cleared (visible to the agent next step).")
+          else
+            body = todos.map_with_index do |(title, status), i|
+              marker = case status
+                       when "done"        then "✓"
+                       when "in_progress" then "▶"
+                       else                    "○"
+                       end
+              "  #{i + 1}. #{marker} #{title}"
+            end.join("\n")
+            @messages << Message.new("system", "Todos (#{todos.size}):\n#{body}")
+          end
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
@@ -1329,6 +1361,9 @@ module Hcode
         end
 
         editor_start = new_lines.size
+        if todos = current_todos
+          new_lines.concat(render_todo_panel(todos, cols))
+        end
         unless @queue.empty?
           new_lines.concat(render_queue_pane(cols))
         end
@@ -1341,10 +1376,11 @@ module Hcode
 
           if @show_command_hints && @command_hints.size > 0
             @command_hints.each_with_index do |hint, i|
+              usage_part = hint.usage.empty? ? "" : " #{ANSI.color(@theme.colors.dim, nil)}#{hint.usage}#{ANSI.reset}"
               if i == @command_hint_selected
-                new_lines << "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}  → #{hint.name.ljust(14)} #{hint.description}#{ANSI.reset}"
+                new_lines << "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}  → #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               else
-                new_lines << "#{ANSI.color(@theme.colors.dim, nil)}    #{hint.name.ljust(14)} #{hint.description}#{ANSI.reset}"
+                new_lines << "#{ANSI.color(@theme.colors.dim, nil)}    #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               end
             end
           end
@@ -1483,9 +1519,11 @@ module Hcode
 
         return if new_size <= 0
 
-        cursor_row, cursor_col = @editor.cursor_position
-
-        target_row = {editor_content_line + cursor_row, new_size - 1}.min
+        # Cursor row/col are resolved against the soft-wrapped editor layout by
+        # `render_editor_box` (which may wrap one logical line across several
+        # terminal rows). Falling back to the raw editor cursor would misplace
+        # the hardware cursor whenever the active line wraps.
+        target_row = {editor_content_line + @editor_cursor_visual_row, new_size - 1}.min
         row_delta = target_row - @hardware_cursor_row
         if row_delta > 0
           output << "\e[#{row_delta}B"
@@ -1493,7 +1531,7 @@ module Hcode
           output << "\e[#{-row_delta}A"
         end
 
-        editor_text_col = 5 + cursor_col
+        editor_text_col = 5 + @editor_cursor_visual_col
         output << "\r\e[#{editor_text_col}G"
         @hardware_cursor_row = target_row
       end
@@ -1846,40 +1884,183 @@ module Hcode
         dc = ANSI.color(@theme.colors.dim, nil)
         r = ANSI.reset
 
+        dash = "─" * {0, box_w - 2}.max
         lines = [] of String
-
-        top = "#{bc}╭#{"─" * (box_w - 2)}╮#{r}"
-        bot = "#{bc}╰#{"─" * (box_w - 2)}╯#{r}"
-        lines << top
+        lines << "#{bc}╭#{dash}╮#{r}"
 
         if @editor.empty?
-          content = "#{bc}│#{r} #{pc}#{ANSI.bold}>#{r} #{dc}Send a message...#{r} #{tc}#{ANSI.bold} #{r}"
-          pad = box_w - 2 - visible_len(content)
-          pad = 0 if pad < 0
-          lines << "#{content}#{" " * pad}#{bc}│#{r}"
+          # No content: park the cursor on the single placeholder row.
+          prompt = "#{pc}#{ANSI.bold}>#{r} "
+          body = "#{dc}Send a message...#{r}"
+          lines << build_editor_row(box_w, bc, r, prompt, body)
+          @editor_cursor_visual_row = 0
+          @editor_cursor_visual_col = 0
         else
           cursor_row, cursor_col = @editor.cursor_position
           editor_lines = @editor.text.split('\n')
+
+          # Inner content width: left border(1) + prompt(3) + content + right
+          # border(1) = box_w ⇒ content = box_w - 5. Each rendered row is then
+          # padded to exactly box_w so the right `│` lines up with the corners.
+          inner_w = box_w - 5
+          inner_w = 1 if inner_w < 1
+          # Wrap one column narrower than the content area so the end-of-line
+          # cursor (a highlighted trailing space) always fits without pushing
+          # the right border past the box edge. Mirrors pi-tui's
+          # `layoutWidth = contentWidth - 1`.
+          wrap_w = inner_w - 1
+          wrap_w = 1 if wrap_w < 1
+
+          visual_row = 0
+          found_cursor = false
           editor_lines.each_with_index do |eline, i|
-            prefix = i == 0 ? "#{bc}│#{r} #{pc}#{ANSI.bold}>#{r} " : "#{bc}│#{r}   "
+            is_cursor_line = (i == cursor_row)
+            chunks = wrap_editor_line(eline, wrap_w)
+            chunks.each_with_index do |(chunk_text, chunk_start, chunk_end), ci|
+              first = (i == 0 && ci == 0)
+              prompt = first ? "#{pc}#{ANSI.bold}>#{r} " : "  "
 
-            if i == cursor_row
-              before = eline[0...cursor_col]? || ""
-              char_at = eline[cursor_col]? || " "
-              after = eline[(cursor_col + 1)..]? || ""
-              content = "#{prefix}#{tc}#{before}#{r}#{ANSI.color(nil, @theme.colors.primary)}#{char_at}#{r}#{tc}#{after}#{r}"
-            else
-              content = "#{prefix}#{tc}#{eline}#{r}"
+              # Mirror pi-tui's layoutText cursor resolution: the cursor lives
+              # in the chunk whose [start, end) covers cursor_col, except for
+              # the final chunk which also owns the line-end position (>=).
+              has_cursor = false
+              local = 0
+              if is_cursor_line
+                is_last_chunk = (ci == chunks.size - 1)
+                if is_last_chunk
+                  has_cursor = cursor_col >= chunk_start
+                else
+                  has_cursor = cursor_col >= chunk_start && cursor_col < chunk_end
+                end
+                local = ({cursor_col - chunk_start, 0}.max)
+                local = {local, chunk_text.size}.min if has_cursor
+              end
+
+              if has_cursor
+                before = chunk_text[0...local]? || ""
+                char_at = chunk_text[local]? || " "
+                after = chunk_text[(local + 1)..]? || ""
+                body = "#{tc}#{before}#{r}#{ANSI.color(nil, @theme.colors.primary)}#{char_at}#{r}#{tc}#{after}#{r}"
+                @editor_cursor_visual_col = visible_len(before)
+                found_cursor = true
+              else
+                body = "#{tc}#{chunk_text}#{r}"
+              end
+
+              lines << build_editor_row(box_w, bc, r, prompt, body)
+              visual_row += 1 unless found_cursor
             end
+          end
 
-            pad = box_w - 2 - visible_len(content)
-            pad = 0 if pad < 0
-            lines << "#{content}#{" " * pad}#{bc}│#{r}"
+          @editor_cursor_visual_row = found_cursor ? visual_row : 0
+        end
+
+        lines << "#{bc}╰#{dash}╯#{r}"
+        lines
+      end
+
+      # Build one editor content row padded to exactly `box_w` columns:
+      # `│ <prompt><body>    │`. ANSI escapes are zero-width, so padding is
+      # computed from visible widths, keeping the right border aligned with
+      # the box corners even when `body` carries cursor/colour SGR codes.
+      private def build_editor_row(box_w : Int32, bc : String, r : String, prompt : String, body : String) : String
+        left = "#{bc}│#{r} #{prompt}"
+        right = "#{bc}│#{r}"
+        pad = box_w - visible_len(left) - visible_len(body) - visible_len(right)
+        pad = 0 if pad < 0
+        "#{left}#{body}#{" " * pad}#{right}"
+      end
+
+      # Soft-wrap one logical editor line into display chunks that each fit
+      # `max_w` visible columns. Returns `{text, start_index, end_index}` per
+      # chunk, where the indices are codepoint offsets into `line` (matching
+      # the editor's codepoint-based cursor). Mirrors pi-tui's `wordWrapLine`:
+      # word-boundary wrapping (break after whitespace) with a force-break
+      # fallback for tokens longer than `max_w`, and CJK-aware break points.
+      # Keeping grapheme clusters (base + combining marks, ZWJ emoji) intact
+      # relies on `CharWidth.zero_width?` / `cjk_break?`.
+      private def wrap_editor_line(line : String, max_w : Int32) : Array({String, Int32, Int32})
+        return [{"", 0_i32, 0_i32}] if line.empty? || max_w <= 0
+        cps = line.codepoints.map(&.to_u32)
+        n = cps.size
+
+        # Pre-split into grapheme clusters with their start index, visible
+        # width, whitespace flag, and base codepoint (for CJK break detection).
+        clusters = [] of Tuple(Int32, Int32, Bool, UInt32)
+        i = 0
+        while i < n
+          base = i
+          k = i + 1
+          while k < n
+            cpk = cps[k]
+            if CharWidth.zero_width?(cpk)
+              k += 1
+            elsif cps[k - 1] == 0x200D_u32 # ZWJ keeps the joined emoji in-cluster
+              k += 1
+            else
+              break
+            end
+          end
+          text = cps_to_string(cps, base, k)
+          clusters << {base.to_i32, CharWidth.visible_width(text), text == " " || text == "\t", cps[base]}
+          i = k
+        end
+
+        chunks = [] of {String, Int32, Int32}
+        current_w = 0
+        chunk_start = 0
+        # Wrap opportunity: codepoint index where a break is allowed, plus the
+        # visible width consumed up to that point (exclusive).
+        wrap_idx = -1
+        wrap_w = 0
+
+        clusters.each_with_index do |(idx, w, is_space, base_cp), ci|
+          if current_w + w > max_w
+            if wrap_idx >= 0 && current_w - wrap_w + w <= max_w
+              # Backtrack to the last word boundary — the remaining tail plus
+              # this cluster still fits within max_w.
+              chunks << {cps_to_string(cps, chunk_start, wrap_idx), chunk_start, wrap_idx}
+              chunk_start = wrap_idx
+              current_w -= wrap_w
+            elsif chunk_start < idx
+              # No viable word boundary (or backtracking wouldn't help): force
+              # a break at the current cluster boundary.
+              chunks << {cps_to_string(cps, chunk_start, idx), chunk_start, idx}
+              chunk_start = idx
+              current_w = 0
+            end
+            wrap_idx = -1
+            wrap_w = 0
+          end
+
+          current_w += w
+
+          if nxt = clusters[ci + 1]?
+            _, _, next_space, next_cp = nxt
+            if is_space && !next_space
+              # Word boundary: whitespace immediately before non-whitespace.
+              wrap_idx = idx + 1
+              wrap_w = current_w
+            elsif !is_space && !next_space && (CharWidth.cjk_break?(base_cp) || CharWidth.cjk_break?(next_cp))
+              # CJK allows line breaks between any two adjacent characters.
+              wrap_idx = idx + 1
+              wrap_w = current_w
+            end
           end
         end
 
-        lines << bot
-        lines
+        # Flush the trailing chunk (or the whole line when it never overflowed).
+        if chunk_start < n || chunks.empty?
+          chunks << {cps_to_string(cps, chunk_start, n), chunk_start, n}
+        end
+        chunks
+      end
+
+      private def cps_to_string(cps : Array(UInt32), start_idx : Int32, end_idx : Int32) : String
+        return "" if start_idx >= end_idx
+        String.build do |io|
+          (start_idx...end_idx).each { |k| io << cps[k].chr }
+        end
       end
 
       # Footer context readout. Mirrors the TS TUI's `formatContextStatus`:
@@ -1895,6 +2076,39 @@ module Hcode
         else
           "context: #{@context_percent.round(0).to_i}%"
         end
+      end
+
+      # Returns the current TodoList items via the `on_fetch_todos` callback
+      # (wired in `hcode.cr` to `Tools::TodoList#todos`). Returns nil if the
+      # tool isn't registered or no todos exist, so the panel is hidden.
+      private def current_todos : Array({String, String})?
+        return nil unless cb = @on_fetch_todos
+        cb.call
+      end
+
+      # Todo panel: mirrors TS `components/chrome/todo-panel.ts`. Shows the
+      # agent's structured TODO list (title + status) above the editor so
+      # the user sees progress without scrolling through the transcript.
+      private def render_todo_panel(todos : Array({String, String}), cols : Int32) : Array(String)
+        lines = [] of String
+        accent = @theme.colors.primary
+        dim = @theme.colors.dim
+        success = @theme.colors.success
+        warning = @theme.colors.warning
+
+        pending = todos.count { |(_, s)| s != "done" }
+        done = todos.size - pending
+        lines << "#{ANSI.color(accent, nil)}#{ANSI.bold}  Todos (#{done}/#{todos.size})#{ANSI.reset}"
+        todos.each do |(title, status)|
+          marker, color = case status
+                          when "done"        then {"✓", success}
+                          when "in_progress" then {"▶", warning}
+                          else                    {"○", dim}
+                          end
+          lines << "#{ANSI.color(color, nil)}  #{marker} #{title}#{ANSI.reset}"
+        end
+        lines << "" if pending > 0
+        lines
       end
 
       # Queue pane: lists messages typed while the agent was busy, plus a
@@ -1927,12 +2141,30 @@ module Hcode
         ctx_str = build_context_status
 
         left = parts.join("  ")
-        right = ctx_str
+        # Right side: context usage + a rotating tip when idle, or just
+        # context when the agent is busy (the status line owns the message
+        # in that case). Mirrors TS footer tips rotation.
+        tip = @agent_busy ? "" : "  " + current_tip
+        right = ctx_str + tip
 
         gap = cols - visible_len(left) - visible_len(right)
         gap = 1 if gap < 1
 
         "#{ANSI.color(@theme.colors.dim, nil)}#{left}#{" " * gap}#{right}#{ANSI.reset}"
+      end
+
+      # Rotating keyboard / workflow hint shown in the footer when idle.
+      # Picked by wall-clock seconds so it cycles without per-render state.
+      TIPS = [
+        "Ctrl+S steer · Ctrl+G editor",
+        "↑↓ scroll · Ctrl+O expand",
+        "/help for all commands",
+        "/usage for tokens · /queue clear",
+        "Ctrl+C twice to exit",
+      ]
+
+      private def current_tip : String
+        TIPS[(Time.utc.to_unix // 5) % TIPS.size]
       end
 
       private def thinking_status : String
