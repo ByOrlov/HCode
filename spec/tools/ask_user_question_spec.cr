@@ -3,11 +3,11 @@ require "../../src/tools/ask_user_question"
 
 # Тестовый QuestionService: возвращает заданный результат.
 private class FakeService < Hcode::Tools::QuestionService
-  def initialize(&block : Hcode::Tools::QuestionRequest, Hcode::Tools::AbortController? -> Hcode::Tools::QuestionResult?)
+  def initialize(&block : Hcode::Tools::QuestionRequest, Hcode::Loop::AbortController? -> Hcode::Tools::QuestionResult?)
     @block = block
   end
 
-  def request(req : Hcode::Tools::QuestionRequest, signal : Hcode::Tools::AbortController?) : Hcode::Tools::QuestionResult?
+  def request(req : Hcode::Tools::QuestionRequest, signal : Hcode::Loop::AbortController?) : Hcode::Tools::QuestionResult?
     @block.not_nil!.call(req, signal)
   end
 end
@@ -15,7 +15,7 @@ end
 private class FakeTasks < Hcode::Tools::AgentTaskService
   getter registered = [] of {String, Int32}
 
-  def register_question_task(description : String, question_count : Int32, &run : Hcode::Tools::AbortController? -> String) : String
+  def register_question_task(description : String, question_count : Int32, &run : Hcode::Loop::AbortController? -> String) : String
     @registered << {description, question_count}
     "task-#{registered.size}"
   end

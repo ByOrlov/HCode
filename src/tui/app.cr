@@ -30,6 +30,19 @@ module Hcode
       # result text and rendered as a bordered box — mirrors TS PlanBoxComponent.
       property plan_path : String?
       property plan_kind : String = ""  # "approved" | "auto_approved" | "rejected"
+      # Compaction block: a transcript entry that blinks while compaction is
+      # in flight, then settles into a "complete (N → M tokens)" summary.
+      # Mirrors TS `CompactionComponent`. Ctrl-O expands/collapses the
+      # summary inline (reuses the generic `expanded` flag).
+      property compaction_state : String = ""  # "" | "running" | "done" | "cancelled"
+      property tokens_before : Int32? = nil
+      property tokens_after : Int32? = nil
+      property summary : String = ""
+      property tip : String = ""
+      # Optional RAM-usage line (set by --ram). Rendered inside the tool
+      # block right under the result preview, dim+italic so it visually
+      # separates from the actual tool output.
+      property ram_line : String? = nil
 
       def initialize(@role : String, @content : String = "")
       end
@@ -64,6 +77,12 @@ module Hcode
       USER_BULLET               = "✨ "
       DEFAULT_KEEP_RECENT_STEPS = 30
       KEEP_RECENT_STEPS_ENV     = "HCODE_TUI_KEEP_RECENT_STEPS"
+      # Cross-turn trimming: turns older than this count are collapsed into
+      # a single `step_summary` per turn (thinking/tool counts only). Caps
+      # linear growth of `@messages` in long sessions — see
+      # plans/TOOLS-LEAKS.md §B1. Env: HCODE_TUI_KEEP_RECENT_TURNS.
+      DEFAULT_KEEP_RECENT_TURNS = 50
+      KEEP_RECENT_TURNS_ENV     = "HCODE_TUI_KEEP_RECENT_TURNS"
 
       @terminal : Terminal
       @input : Input
@@ -101,6 +120,7 @@ module Hcode
       @agent_busy : Bool = false
       @is_compacting : Bool = false
       @defer_user_messages : Bool = false
+      @compaction_msg : Message? = nil
       # Set during the brief window between "shifted a queued message out of
       # the array" and "actually started its turn" so a queued-message
       # dispatcher doesn't see an empty queue + idle phase and race itself.
@@ -120,6 +140,7 @@ module Hcode
       @step_tool_count : Int32 = 0
       @pending_read_group : Message? = nil
       property keep_recent_steps : Int32 = DEFAULT_KEEP_RECENT_STEPS
+      property keep_recent_turns : Int32 = DEFAULT_KEEP_RECENT_TURNS
 
       # Command state
       @show_command_hints : Bool = false
@@ -151,6 +172,9 @@ module Hcode
       @permission_list : SelectList
       @effort_list : SelectList
       @theme_list : SelectList
+      @question_dialog : QuestionDialog
+      @undo_dialog : UndoDialog
+      @tasks_browser : TasksBrowser
       @help_panel : HelpPanel
       @session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
       @session_picker_mode : Symbol = :resume
@@ -215,6 +239,23 @@ module Hcode
       # Logout: clear stored credentials (API key from config.toml).
       @on_logout : (-> Nil)? = nil
       property on_logout : (-> Nil)?
+      # Undo N turns (count is the selected turn's index). When wired, opens
+      # the undo selector; falls back to single-turn `on_undo`.
+      @on_undo_count : (Int32 -> Nil)? = nil
+      property on_undo_count : (Int32 -> Nil)?
+      # Returns user-turn candidates that can be undone, oldest→newest.
+      # Each entry: {count, input, label}. nil = not wired up → fallback path.
+      @on_fetch_undo_choices : (-> Array({Int32, String, String})?)? = nil
+      property on_fetch_undo_choices : (-> Array({Int32, String, String})?)?
+      # Tasks browser: data source for the background-task list.
+      @on_fetch_tasks : (-> Array(Tools::AgentTaskInfo))? = nil
+      property on_fetch_tasks : (-> Array(Tools::AgentTaskInfo))?
+      # Tasks browser: stop a task by id (user-confirmed).
+      @on_stop_task : (String -> Nil)? = nil
+      property on_stop_task : (String -> Nil)?
+      # Tasks browser: open the full output for a task.
+      @on_open_task_output : (String -> Nil)? = nil
+      property on_open_task_output : (String -> Nil)?
       # Persist a queued message to JSONL (so drain survives resume). The
       # wire event type is the argument: "turn.prompt" or "turn.steer".
       property on_persist_queued : (String, String -> Nil)?
@@ -237,10 +278,14 @@ module Hcode
         @permission_list = SelectList.new([] of String, @theme)
         @effort_list = SelectList.new([] of String, @theme)
         @theme_list = SelectList.new([] of String, @theme)
+        @question_dialog = QuestionDialog.new(@theme)
+        @undo_dialog = UndoDialog.new(@theme)
+        @tasks_browser = TasksBrowser.new(@theme)
         @help_panel = HelpPanel.new(@theme)
         @work_dir = Dir.current
         @git_branch = detect_git_branch
         @keep_recent_steps = read_keep_recent_steps
+        @keep_recent_turns = read_keep_recent_turns
       end
 
       def run(initial_prompt : String? = nil, &run_turn : String -> Nil) : Nil
@@ -469,6 +514,9 @@ module Hcode
                 # The full structured display (e.g. Edit diff) can be large.
                 # /debug has the full output; the TUI renders from the preview.
                 msg.tool_display = nil
+                # RAM-usage line attached by --ram; rendered inside this
+                # block, right under the result preview.
+                msg.ram_line = event.ram_line
                 @messages[i] = msg
                 break
               end
@@ -490,6 +538,64 @@ module Hcode
             @is_compacting = false
             @spinner.stop
           end
+        when .compaction_started?
+          @is_compacting = true
+          @defer_user_messages = true
+          @status = "Compacting context..."
+          @scroll_offset = 0
+          msg = Message.new("compaction", "")
+          msg.compaction_state = "running"
+          msg.tip = event.tip || ""
+          msg.tokens_before = event.tokens_before
+          @compaction_msg = msg
+          @messages << msg
+        when .compaction_completed?
+          @is_compacting = false
+          @defer_user_messages = false
+          @spinner.stop
+          @status = ""
+          # Update the most recent running compaction block in place.
+          if cmsg = @compaction_msg
+            cmsg.compaction_state = "done"
+            cmsg.tokens_before = event.tokens_before
+            cmsg.tokens_after = event.tokens_after
+            cmsg.summary = event.summary || ""
+          else
+            i = @messages.size - 1
+            while i >= 0
+              m = @messages[i]
+              if m.role == "compaction" && m.compaction_state == "running"
+                m.compaction_state = "done"
+                m.tokens_before = event.tokens_before
+                m.tokens_after = event.tokens_after
+                m.summary = event.summary || ""
+                @messages[i] = m
+                break
+              end
+              i -= 1
+            end
+          end
+          @compaction_msg = nil
+        when .compaction_cancelled?
+          @is_compacting = false
+          @defer_user_messages = false
+          @spinner.stop
+          @status = ""
+          if cmsg = @compaction_msg
+            cmsg.compaction_state = "cancelled"
+          else
+            i = @messages.size - 1
+            while i >= 0
+              m = @messages[i]
+              if m.role == "compaction" && m.compaction_state == "running"
+                m.compaction_state = "cancelled"
+                @messages[i] = m
+                break
+              end
+              i -= 1
+            end
+          end
+          @compaction_msg = nil
         when .error?
           @messages << Message.new("error", event.text)
           @spinner.stop
@@ -536,6 +642,24 @@ module Hcode
         end
       end
 
+      # Launch a structured multi-question prompt. Mirrors TS
+      # `reverse-rpc/question-adapter.ts` mounting a QuestionDialogComponent
+      # and awaiting the user's answers. Returns the answers map
+      # (question text → answer), empty when the user dismissed the dialog.
+      def request_questions(questions : Array(Tools::QuestionItem),
+                            on_toggle_tool_output : (-> Nil)? = nil) : Hash(String, String)
+        # Capacity 1 so the dialog's callback can `send` without rendezvous
+        # — otherwise `send` inside `handle_input` would deadlock waiting for
+        # the `receive` that can only run after handle_input returns.
+        received = Channel(Hash(String, String)).new(1)
+        @question_dialog.show(questions, ->(answers : Hash(String, String)) do
+          received.send(answers)
+          nil
+        end, on_toggle_tool_output)
+        @dirty = true
+        received.receive
+      end
+
       private def handle_key(key : KeyEvent) : Nil
         if @exit_confirm
           case key.key
@@ -555,6 +679,25 @@ module Hcode
 
         if @approval_pending
           handle_approval_key(key)
+          return
+        end
+
+        if @tasks_browser.visible?
+          @tasks_browser.rows = @terminal.rows
+          @tasks_browser.handle_input(key)
+          @dirty = true
+          return
+        end
+
+        if @undo_dialog.visible?
+          @undo_dialog.handle_input(key)
+          @dirty = true
+          return
+        end
+
+        if @question_dialog.visible?
+          @question_dialog.handle_input(key)
+          @dirty = true
           return
         end
 
@@ -1114,8 +1257,13 @@ module Hcode
           end
           @messages << Message.new("system", stats.strip)
         when "/undo"
-          @on_undo.try(&.call)
-          @messages << Message.new("system", "Undid last turn.")
+          if args.strip.empty?
+            open_undo_selector
+          else
+            count = args.strip.to_i? || 1
+            @on_undo.try(&.call)
+            @messages << Message.new("system", "Undid last #{count} turn(s).")
+          end
         when "/queue"
           if args.strip == "clear"
             @queue.clear
@@ -1366,11 +1514,98 @@ module Hcode
           else
             @messages << Message.new("error", "Logout is not wired up.")
           end
+        when "/tasks", "/task"
+          open_tasks_browser
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
 
         @show_command_hints = false
+        @dirty = true
+      end
+
+      private def open_tasks_browser : Nil
+        unless cb = @on_fetch_tasks
+          @messages << Message.new("error", "Tasks browser is not wired up (no task service).")
+          return
+        end
+
+        on_select = ->(task_id : String) { nil }
+        on_toggle = -> : Nil do
+          @tasks_browser.filter = @tasks_browser.filter == TasksBrowser::Filter::Active ? TasksBrowser::Filter::All : TasksBrowser::Filter::Active
+          @tasks_browser.refresh_tasks
+          nil
+        end
+        on_refresh = -> : Nil do
+          @tasks_browser.refresh_tasks
+          @tasks_browser.flash_message = "Refreshed."
+          nil
+        end
+        on_stop_confirmed = ->(task_id : String) do
+          @on_stop_task.try(&.call(task_id))
+          @tasks_browser.flash_message = "Stopping #{task_id}..."
+          @tasks_browser.refresh_tasks
+          nil
+        end
+        on_stop_ignored = ->(task_id : String) do
+          @tasks_browser.flash_message = "#{task_id} is already finished."
+          nil
+        end
+        on_open_output = ->(task_id : String) do
+          @on_open_task_output.try(&.call(task_id))
+          @tasks_browser.flash_message = "Opening output for #{task_id}..."
+          nil
+        end
+        on_cancel = -> : Nil do
+          @tasks_browser.hide
+          @dirty = true
+          nil
+        end
+
+        @tasks_browser.show(
+          cb,
+          on_select: on_select,
+          on_toggle_filter: on_toggle,
+          on_refresh: on_refresh,
+          on_stop_confirmed: on_stop_confirmed,
+          on_stop_ignored: on_stop_ignored,
+          on_open_output: on_open_output,
+          on_cancel: on_cancel,
+          initial_filter: TasksBrowser::Filter::Active,
+        )
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def open_undo_selector : Nil
+        unless cb = @on_fetch_undo_choices
+          @on_undo.try(&.call)
+          @messages << Message.new("system", "Undid last turn.")
+          return
+        end
+
+        raw = cb.call
+        if raw.nil? || raw.empty?
+          @messages << Message.new("system", "No turns to undo.")
+          return
+        end
+
+        choices = raw.map_with_index do |(count, input, label), i|
+          UndoDialog::Choice.new("undo-#{i}", count, input, label)
+        end
+
+        on_select = ->(c : UndoDialog::Choice) do
+          if cb2 = @on_undo_count
+            cb2.call(c.count)
+          else
+            @on_undo.try(&.call)
+          end
+          @messages << Message.new("system", "Undid #{c.count} turn(s).")
+          nil
+        end
+
+        @undo_dialog.show(choices, on_select)
+        @input.drain_pending_enters
         @dirty = true
       end
 
@@ -1707,6 +1942,13 @@ module Hcode
       private def build_rendered_lines(cols : Int32) : {Array(String), Int32}
         new_lines = [] of String
 
+        # Full-screen modal takeovers (tasks browser) replace the entire
+        # layout — mirrors TS container-swap mount of TasksBrowserApp.
+        if @tasks_browser.visible?
+          @tasks_browser.rows = @terminal.rows
+          return {@tasks_browser.render(cols), 0}
+        end
+
         if @show_welcome
           new_lines.concat(render_welcome_box(cols))
           new_lines << ""
@@ -1738,6 +1980,14 @@ module Hcode
 
         if req = @approval_pending
           new_lines.concat(render_approval_panel(req, cols))
+        end
+
+        if @question_dialog.visible?
+          new_lines.concat(@question_dialog.render(cols))
+        end
+
+        if @undo_dialog.visible?
+          new_lines.concat(@undo_dialog.render(cols))
         end
 
         if @provider_list.visible?
@@ -1995,6 +2245,12 @@ module Hcode
                   lines << "#{ANSI.color(@theme.colors.tool_result, nil)}  #{l}#{ANSI.reset}"
                 end
               end
+              # --ram: dim+italic line right under the result preview, so the
+              # RSS progression stays visually attached to the tool that
+              # caused it instead of floating off as a separate info block.
+              if ram = msg.ram_line
+                lines << "#{ANSI.color(@theme.colors.dim, nil)}#{ANSI.italic}  #{ram}#{ANSI.reset}"
+              end
               lines << ""
             end
           end
@@ -2021,6 +2277,8 @@ module Hcode
           lines.concat(render_step_summary(msg))
         when "plan_box"
           lines.concat(render_plan_box(msg, cols))
+        when "compaction"
+          lines.concat(render_compaction_block(msg, cols))
         end
 
         lines
@@ -2108,6 +2366,57 @@ module Hcode
       # `PlanBoxComponent`: "  ┌── plan: name ──┐", "  │ body │", "  └──┘".
       # The title embeds the plan filename (when known) and a Rejected
       # badge in error colour for rejected plans.
+      # Compaction block — port of TS `CompactionComponent`. While running,
+      # the bullet blinks (white ↔ blank); once done the bullet turns solid
+      # green with "(N → M tokens)"; cancelled turns it warning-yellow. The
+      # summary can be toggled with Ctrl-O via the generic `expanded` flag.
+      private def render_compaction_block(msg : Message, cols : Int32) : Array(String)
+        lines = [] of String
+        success = @theme.colors.success
+        warning = @theme.colors.warning
+        primary = @theme.colors.primary
+        dim = @theme.colors.dim
+        text_c = @theme.colors.text
+
+        case msg.compaction_state
+        when "done"
+          bullet = "#{ANSI.color(success, nil)}#{STATUS_BULLET}#{ANSI.reset}"
+          label = "#{ANSI.color(success, nil)}#{ANSI.bold}Compaction complete#{ANSI.reset}"
+          detail = ""
+          if (tb = msg.tokens_before) && (ta = msg.tokens_after)
+            detail = " #{ANSI.color(dim, nil)}(#{tb} → #{ta} tokens)#{ANSI.reset}"
+          end
+          hint = ""
+          unless msg.summary.empty?
+            hint = " #{ANSI.color(dim, nil)}(Ctrl-O to #{msg.expanded? ? "hide" : "show"} compaction summary)#{ANSI.reset}"
+          end
+          lines << ""
+          lines << "#{bullet}#{label}#{detail}#{hint}"
+          if msg.expanded? && !msg.summary.empty?
+            msg.summary.split('\n').each do |sl|
+              lines << "#{ANSI.color(dim, nil)}  #{sl}#{ANSI.reset}"
+            end
+          end
+        when "cancelled"
+          bullet = "#{ANSI.color(warning, nil)}#{STATUS_BULLET}#{ANSI.reset}"
+          label = "#{ANSI.color(warning, nil)}#{ANSI.bold}Compaction cancelled#{ANSI.reset}"
+          lines << ""
+          lines << "#{bullet}#{label}"
+        else
+          # Running: blink the bullet every 500ms — same cadence as TS.
+          blink_on = ((Time.utc.to_unix_ms // 500) % 2) == 0
+          bullet = blink_on ? "#{ANSI.color(text_c, nil)}#{STATUS_BULLET}#{ANSI.reset}" : "  "
+          label = "#{ANSI.color(primary, nil)}#{ANSI.bold}Compacting context...#{ANSI.reset}"
+          tip = ""
+          unless msg.tip.empty?
+            tip = " #{ANSI.color(dim, nil)}· Tip: #{msg.tip}#{ANSI.reset}"
+          end
+          lines << ""
+          lines << "#{bullet}#{label}#{tip}"
+        end
+        lines
+      end
+
       private def render_plan_box(msg : Message, cols : Int32) : Array(String)
         lines = [] of String
         border = ANSI.color(@theme.colors.success, nil)
@@ -2688,6 +2997,11 @@ module Hcode
       # into a single muted summary line, keeping the most recent N steps visible.
       # Mirrors the TypeScript TUI's `mergeCurrentTurnSteps`.
       private def merge_turn_steps : Nil
+        merge_within_current_turn
+        merge_old_turns
+      end
+
+      private def merge_within_current_turn : Nil
         keep = @keep_recent_steps
         return if keep <= 0
 
@@ -2749,6 +3063,66 @@ module Hcode
         end
       end
 
+      # Cross-turn trim: collapse every turn older than `keep_recent_turns`
+      # into a single `step_summary` line, freeing the retained tool/thinking
+      # payloads (tool previews already cap at ~1 KB each, but over hundreds
+      # of turns this still adds up — see plans/TOOLS-LEAKS.md §B1). Non-step
+      # messages (assistant text, status, plan boxes) are preserved.
+      private def merge_old_turns : Nil
+        keep_turns = @keep_recent_turns
+        return if keep_turns <= 0
+
+        user_indices = [] of Int32
+        @messages.each_with_index do |m, idx|
+          user_indices << idx if m.role == "user"
+        end
+        return if user_indices.size <= keep_turns
+
+        # Build (user_idx, next_user_idx) ranges for the turns we collapse
+        # (all except the last `keep_turns`). Process in REVERSE so the
+        # deletions/insertions inside a turn don't invalidate the ranges
+        # of the still-to-process (earlier) turns.
+        collapse_count = user_indices.size - keep_turns
+        ranges = [] of {Int32, Int32}
+        collapse_count.times do |i|
+          u_idx = user_indices.unsafe_fetch(i)
+          n_idx = i + 1 < user_indices.size ? user_indices.unsafe_fetch(i + 1) : @messages.size
+          ranges << {u_idx, n_idx}
+        end
+
+        ranges.reverse_each do |user_idx, next_user_idx|
+          thinking = 0
+          tool = 0
+          to_delete = [] of Int32
+
+          (user_idx + 1...next_user_idx).each do |i|
+            msg = @messages[i]
+            case msg.role
+            when "thinking"
+              thinking += 1
+              to_delete << i
+            when "tool"
+              tool += 1
+              to_delete << i
+            when "step_summary"
+              # Fold any pre-existing summary's counts into the fresh one.
+              thinking += msg.thinking_count
+              tool += msg.tool_count
+              to_delete << i
+            end
+          end
+
+          next if to_delete.empty?
+
+          to_delete.reverse.each { |i| @messages.delete_at(i) }
+
+          summary = Message.new("step_summary", "")
+          summary.thinking_count = thinking
+          summary.tool_count = tool
+          @messages.insert(user_idx + 1, summary)
+        end
+      end
+
       private def render_step_summary(msg : Message) : Array(String)
         lines = [] of String
         parts = [] of String
@@ -2778,6 +3152,17 @@ module Hcode
         value = raw.to_i?
         return DEFAULT_KEEP_RECENT_STEPS unless value
         return DEFAULT_KEEP_RECENT_STEPS if value < 0
+
+        value
+      end
+
+      private def read_keep_recent_turns : Int32
+        raw = ENV[KEEP_RECENT_TURNS_ENV]?
+        return DEFAULT_KEEP_RECENT_TURNS unless raw
+
+        value = raw.to_i?
+        return DEFAULT_KEEP_RECENT_TURNS unless value
+        return DEFAULT_KEEP_RECENT_TURNS if value < 0
 
         value
       end

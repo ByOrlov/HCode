@@ -35,73 +35,96 @@
 ## 3. TUI панели/диалоги (есть в TS, нет в Crystal)
 
 В TS ~30 (`tui/components/dialogs/` + `messages/`), в Crystal только `help_panel`.
-- [ ] `plan_box` (plan mode)
+- [x] `plan_box` — РАБОТАЕТ: `render_plan_box` (бокс `┌── plan: ... ──┐`)
+      + детект ExitPlanMode результата (approved/auto_approved/rejected) +
+      путь файла плана + markdown body через `@markdown.render`
 - [ ] `goal_panel`
-- [ ] `usage_panel` (tokens / context / quotas)
-- [ ] `tasks_browser` + `task_output_viewer`
-- [ ] `todo_panel` (тулза есть, UI нет)
+- [ ] `usage_panel` (tokens / context / quotas) — есть команда `/usage`,
+      нет отдельной панели
+- [x] `tasks_browser` + `task_output_viewer` — РАБОТАЕТ: полный порт
+      `TasksBrowser` (3 панели, рамки, scroll, filter, stop-confirm, vim)
+      + `/tasks` команда + привязка к `InMemoryTaskService`
+- [x] `todo_panel` (тулза есть, UI нет) — РЕАБОТАЕТ: `render_todo_panel` +
+      `on_fetch_todos`/`on_clear_todos` колбэки + `/todos` команда
 - [ ] `cron_message` рендер
 - [ ] `skill_activation` рендер
 - [ ] `agent_group` / `agent_swarm_progress` / `background_agent_status`
 - [ ] `mcp_status_panel`, `plugins_status_panel`
 - [ ] `compaction` диалог
-- [ ] `undo_selector` (preview turns)
-- [ ] `question_dialog` (reverse-rpc для AskUserQuestion)
-- [ ] `session_picker` как интерактивный SelectList
-- [ ] `thinking` / `step_summary` рендер
-- [ ] SelectList-диалоги: model / permission / effort / theme / experiments
+- [x] `undo_selector` (preview turns) — РАБОТАЕТ: `UndoDialog` с choices из
+      `agent.context.history`, навигация ↑↓, выбор Enter, cancel Esc,
+      `/undo` без аргумента открывает селектор
+- [x] `question_dialog` (reverse-rpc для AskUserQuestion) — полный порт
+      TS `QuestionDialogComponent`: табы, single/multi-select, Other free-text,
+      auto-advance, submit review, `AppQuestionService` биндит тулзу к диалогу
+- [x] `session_picker` как интерактивный SelectList — `/sessions` и `/restore`
+- [x] `thinking` / `step_summary` рендер — уже работает (`render_thinking_block`,
+      `render_step_summary`, live streaming preview, ctrl+o expand)
+- [x] SelectList-диалоги permission / effort / theme (model уже был);
+      experiments — будущая работа (нет флаг-системы)
 
 ## 4. Слэш-команды (TS-only, отсутствуют в Crystal)
 
-Из ~38 команд TS не реализованы:
-- [ ] `/plan` — plan mode toggle
 - [ ] `/goal` — autonomous goals (status/pause/resume/cancel/replace/next)
 - [ ] `/swarm` — swarm mode
-- [ ] `/tasks` (`/task`) — background tasks browser
-- [ ] `/init` — сгенерировать AGENTS.md
-- [ ] `/editor` — выбор $EDITOR для Ctrl-G
-- [ ] `/effort` (`/thinking`) — selector low/medium/high
-- [ ] `/usage` — tokens + context window + plan quotas
-- [ ] `/permission` — selector manual/auto/yolo
-- [ ] `/settings` (`/config`) — TUI settings
-- [ ] `/mcp` — MCP server status
-- [ ] `/plugins` — plugin management
-- [ ] `/experiments` (`/experimental`) — feature flags
-- [ ] `/reload`, `/reload-tui` — reload config / tui.toml
+- [x] `/tasks` (`/task`) — РАБОТАЕТ: открывает `TasksBrowser`, привязан к
+      `InMemoryTaskService` (list/stop/open output)
+- [ ] `/reload-tui` — reload tui.toml (`/reload` уже работает)
 - [ ] `/btw` — forked side-agent question
-- [ ] `/feedback` — send feedback
-- [ ] `/login`, `/logout` — auth
-- [ ] `/web` — открыть в Web UI
-- [ ] `/version` — version info
-- [ ] `/copy` — copy last message
-- [ ] `/export-debug-zip` — debug ZIP
+- [x] `/init` — шлёт init-промпт как turn (AGENTS.md генерация через агент)
+- [x] `/mcp` — заглушка: нет MCP-клиента, явное сообщение
+- [x] `/plugins` — заглушка: нет plugin runtime, явное сообщение
+- [x] `/experiments` — env-driven (HCODE_EXPERIMENTAL_*) flags, master switch
+- [x] `/login` — инструкция по ручной настройке api_key/OAuth
+- [x] `/logout` — очистка api_key в config через `on_logout`
+- [x] `/export-debug-zip` — tar.gz: manifest + wire.jsonl + state.json + hcode.log
+- [x] `/plan` — toggle через `on_plan_mode` колбэк
+- [x] `/effort` (`/thinking`) — SelectList selector через `on_get_effort`/`on_set_effort`
+- [x] `/permission` — SelectList selector manual/auto/yolo
+- [x] `/editor` — открытие `$EDITOR`
+- [x] `/usage` — tokens + context window
+- [x] `/version` — version info (Hcode::VERSION + build_date)
+- [x] `/copy` — copy last assistant message (pbcopy/wl-copy/xclip/xsel)
+- [x] `/reload` — колбэк `on_reload`
+- [x] `/settings` — show provider/model/permission/theme/effort/home/work
+- [x] `/feedback` — лог в `~/.hcode/feedback.log` (или через `on_feedback` колбэк)
+- [x] `/web` — session URL для Web UI
 
 ## 5. Рендеринг / полировка
 
 - [ ] Syntax highlighting (TS/JS/Python/bash/go/rust/json) — в TS через `cli-highlight`
 - [ ] Word-level intra-line diff highlighting (сейчас line-level +/-)
-- [ ] Slash autocomplete (имя + описание + arg hints, сейчас простой список)
+- [x] Slash autocomplete (имя + описание + arg hints, сейчас простой список) —
+      `usage` поле в CommandInfo, рендерится с описанием и `<args>` хинтом
 - [ ] Paste markers `[paste #N +48 lines]` (сейчас raw paste в буфер)
-- [ ] Footer badges: git / goal / tips rotation (сейчас model+context%)
+- [x] Footer badges: git / goal / tips rotation (сейчас model+context%) —
+      git branch уже был; добавлены rotating tips (5 шт, цикл по 5с)
 - [ ] Light theme + кастомные темы через `tui.toml`
 - [ ] Inline images (Kitty graphics protocol)
 - [ ] External editor (Ctrl+G — open `$EDITOR`)
 
 ## 6. Поддерживающая инфраструктура
 
-- [ ] **Прокси**: поле есть (`config.cr:18`), читается из env, но в `HTTP::Client`
-      провайдеров не пробрасывается
-- [ ] **Компакция**: алгоритм есть, но `/compact` в TUI только печатает
-      сообщение, реально не запускает `trigger_compaction_tui`
-- [ ] **Сессии**: JSONL write/replay работают, но `/sessions` печатает список,
-      а не интерактивный SelectList
-- [ ] **Danger detection**: код есть, но не интегрирован в approval panel
-      (сейчас y/n без меток опасности)
+- [x] **Прокси**: HTTPS-туннель через `CONNECT` реализован в `make_client`
+      (HTTP-прокси для HTTPS-endpoints), `NO_PROXY` и loopback bypass. HTTP
+      endpoints используют absolute-URI через прокси-хост. OAuth refresh
+      без прокси (см. комментарий в moonshot_provider.cr)
+- [x] **Сессии**: `/sessions` и `/restore` открывают интерактивный `SelectList`
+      с навигацией и resume/restore, `handle_session_key` обрабатывает выбор
+- [x] **Danger detection** — РАБОТАЕТ: `Danger.detect` → `approval_callback`
+      → `ApprovalRequest.danger` → `! DANGER:` в approval panel
+- [x] **`/compact`** — привязан к `trigger_compaction_tui` через `on_compact`,
+      блокирует при busy, ставит `@is_compacting`, сбрасывается при info-event
+      "compacted"
 - [ ] `Context::Compaction` — LLM-based summarization как отдельный модуль
-- [ ] `Loop::Retry` — rate-limit / error retry (429, 500s)
+      (сейчас встроен в `Agent#trigger_compaction`)
+- [ ] `Loop::Retry` — rate-limit / error retry (429, 500s) — частично в
+      `execute_step` (3 retries с backoff), но без отдельных классов
 - [ ] `Config::Paths` — XDG-aware path resolution
 - [ ] `Config::ProviderConfig` — отдельный конфиг per-provider
-- [ ] `Permission::Policies` — полноценное rule matching
+- [x] `Permission::Policies` — полноценный: Rule/RuleSet/glob_match/parse_pattern,
+      4 scope (User/Project/SessionRuntime/TurnOverride), integrated в Manager
+      (deny/allow/ask evaluated до approval prompt)
 - [ ] `Prompt::Workspace` — cwd file tree (2 levels) в system prompt
 
 ## Приоритет починки

@@ -13,6 +13,9 @@ module Hcode
       Info
       Error
       TurnEnd
+      CompactionStarted
+      CompactionCompleted
+      CompactionCancelled
     end
 
     class Event
@@ -25,6 +28,15 @@ module Hcode
       property tool_args : String = ""
       property is_error : Bool = false
       property tool_display : Tools::ToolDisplay? = nil
+      # Optional RAM-usage line attached by the CLI (--ram flag) so the TUI
+      # can render it inside the tool block instead of as a separate info
+      # message. nil when --ram is off.
+      property ram_line : String? = nil
+      # Compaction event payload (CompactionStarted/Completed/Cancelled).
+      property tokens_before : Int32? = nil
+      property tokens_after : Int32? = nil
+      property summary : String = ""
+      property tip : String = ""
 
       def initialize(@type : EventType)
       end
@@ -113,6 +125,27 @@ module Hcode
         e = new(EventType::TurnEnd)
         e.is_error = cancelled
         e
+      end
+
+      def self.compaction_started(instruction : String? = nil, tip : String? = nil) : Event
+        e = new(EventType::CompactionStarted)
+        e.text = instruction || ""
+        e.tip = tip || ""
+        e
+      end
+
+      def self.compaction_completed(tokens_before : Int32? = nil,
+                                     tokens_after : Int32? = nil,
+                                     summary : String? = nil) : Event
+        e = new(EventType::CompactionCompleted)
+        e.tokens_before = tokens_before
+        e.tokens_after = tokens_after
+        e.summary = summary || ""
+        e
+      end
+
+      def self.compaction_cancelled : Event
+        new(EventType::CompactionCancelled)
       end
     end
   end

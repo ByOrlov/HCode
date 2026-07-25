@@ -55,6 +55,7 @@ module Hcode
         CommandInfo.new("/plugins", "Show plugin status"),
         CommandInfo.new("/login", "Show how to configure credentials"),
         CommandInfo.new("/logout", "Clear credentials from config"),
+        CommandInfo.new("/tasks", "Browse background tasks"),
       ]
 
       def self.names : Array(String)

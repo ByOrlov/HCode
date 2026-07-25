@@ -178,4 +178,64 @@ describe Hcode::Permission::Manager do
     manager.detect_danger("Bash", %({"command": "sudo x"})).should eq("elevated privileges")
     manager.detect_danger("Read", %({"filePath": "x"})).should be_nil
   end
+
+  # Fix 2 regression: cache approval key uses SHA256(args) so the Set never
+  # retains the full args JSON (which can be MBs for Edit/Write) — see
+  # plans/TOOLS-LEAKS.md §A3.
+  describe "session approval cache (Fix 2)" do
+    it "ApproveSession skips the prompt for the same args next time" do
+      manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Manual)
+      manager.approval_callback = ->(_t : String, _a : String, _d : String?) : Hcode::Permission::ApprovalChoice {
+        Hcode::Permission::ApprovalChoice::ApproveSession
+      }
+
+      events = [] of Hcode::Loop::Event
+      args = %({"filePath":"/tmp/x","oldString":"a","newString":"b"})
+
+      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+
+      # Second call with the same args must short-circuit (callback not
+      # invoked a second time). Track invocations via a counter closure.
+      calls = 0
+      manager.approval_callback = ->(_t : String, _a : String, _d : String?) : Hcode::Permission::ApprovalChoice {
+        calls += 1
+        Hcode::Permission::ApprovalChoice::ApproveSession
+      }
+      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      calls.should eq(0)
+    end
+
+    it "re-prompts when args differ even slightly" do
+      manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Manual)
+      calls = 0
+      manager.approval_callback = ->(_t : String, _a : String, _d : String?) : Hcode::Permission::ApprovalChoice {
+        calls += 1
+        Hcode::Permission::ApprovalChoice::ApproveSession
+      }
+
+      events = [] of Hcode::Loop::Event
+      manager.check("Edit", %({"filePath":"a","oldString":"x","newString":"y"}), ->(e : Hcode::Loop::Event) { events << e })
+      manager.check("Edit", %({"filePath":"a","oldString":"x","newString":"z"}), ->(e : Hcode::Loop::Event) { events << e })
+      calls.should eq(2)
+    end
+
+    it "does not retain the full args payload in the session-approvals Set" do
+      manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Manual)
+      manager.approval_callback = ->(_t : String, _a : String, _d : String?) : Hcode::Permission::ApprovalChoice {
+        Hcode::Permission::ApprovalChoice::ApproveSession
+      }
+
+      payload = "q" * 200_000
+      args = %({"filePath":"a","oldString":"#{payload}","newString":"y"})
+      events = [] of Hcode::Loop::Event
+      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e })
+
+      # The cached key should be `tool:64-hex-digest`, never the payload.
+      manager.@session_approvals.each do |key|
+        key.should_not contain("q")
+        key.should start_with("Edit:")
+        key.size.should be < 80
+      end
+    end
+  end
 end

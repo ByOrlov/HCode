@@ -1,0 +1,9 @@
+build
+clean
+mock:components:input
+mock:default
+mock:markdown
+mock:thinking
+mock:thinking_tools
+run
+spec

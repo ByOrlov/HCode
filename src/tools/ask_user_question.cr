@@ -382,7 +382,7 @@ module Hcode
 
     abstract class QuestionService
       abstract def request(req : QuestionRequest,
-                           signal : AbortController?) : QuestionResult?
+                           signal : ::Hcode::Loop::AbortController?) : QuestionResult?
     end
 
     # Минимальный контракт фоновой службы задач (используется AskUserQuestion
@@ -393,7 +393,7 @@ module Hcode
       # signal. Возвращает task_id.
       abstract def register_question_task(description : String,
                                           question_count : Int32,
-                                          &run : AbortController? -> String) : String
+                                          &run : ::Hcode::Loop::AbortController? -> String) : String
 
       # Текущий статус задачи по id (или nil если не найдена).
       abstract def task_status(task_id : String) : String?

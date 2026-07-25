@@ -1,3 +1,4 @@
+require "digest/sha256"
 require "./danger"
 require "./policies"
 
@@ -68,7 +69,9 @@ module Hcode
           return true
         end
 
-        cache_key = "#{tool_name}:#{args}"
+        # Cache approval by tool + SHA256(args): the full args JSON (which
+        # for Edit/Write can be megabytes) is never retained on the Set.
+        cache_key = "#{tool_name}:#{Digest::SHA256.hexdigest(args)}"
         return true if @session_approvals.includes?(cache_key)
 
         danger = Danger.detect(tool_name, args)

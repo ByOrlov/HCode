@@ -71,6 +71,9 @@ require "./tui/markdown"
 require "./tui/select_list"
 require "./tui/commands"
 require "./tui/help_panel"
+require "./tui/question_dialog"
+require "./tui/undo_dialog"
+require "./tui/tasks_browser"
 require "./tui/app"
 
 module Hcode
@@ -101,6 +104,46 @@ module Hcode
   end
 
   class CLI
+    # Set by `--ram`. When true, every tool_result event prints RSS + tool
+    # name + result size to stderr so live memory growth can be observed
+    # without a debugger (Crystal + Boehm GC is hard to attach to).
+    class_property? ram_tracing : Bool = false
+
+    # Read current process RSS in MB from /proc/self/status. Returns 0.0
+    # outside Linux.
+    def self.rss_mb : Float64
+      File.read("/proc/self/status").each_line do |line|
+        if line.starts_with?("VmRSS:")
+          return line.split[1].to_i / 1024.0
+        end
+      end
+      0.0
+    rescue
+      0.0
+    end
+
+    # Build an RSS log line for a finished tool call. Returns nil when --ram
+    # is not in effect. The caller is responsible for routing it into the
+    # normal message stream (stdout in headless mode, Event.info in TUI) so
+    # it never smears the diff-rendered frame.
+    @@ram_start_rss : Float64 = 0.0
+    @@ram_initialised : Bool = false
+
+    def self.ram_line(tool_name : String, result_bytes : Int32, is_error : Bool) : String?
+      return nil unless ram_tracing?
+
+      unless @@ram_initialised
+        @@ram_start_rss = rss_mb
+        @@ram_initialised = true
+      end
+
+      current = rss_mb
+      delta = current - @@ram_start_rss
+      tag = is_error ? "!" : " "
+      sprintf("[ram%s] RSS=%6.1f MB  Δ=%+6.1f MB  %s  result=%.1f KB",
+        tag, current, delta, tool_name, result_bytes / 1024.0)
+    end
+
     def self.run(argv : Array(String)) : Nil
       prompt = nil
       tui_prompt = nil
@@ -142,6 +185,8 @@ module Hcode
           permission_mode = "auto"
         when "--hi"
           hi_mode = true
+        when "--ram"
+          CLI.ram_tracing = true
         when "-h", "--help"
           show_help = true
         when "-v", "--version"
@@ -435,6 +480,9 @@ module Hcode
             end
             name, args = pending_calls.delete(event.tool_call_id) || {"Tool", ""}
             render_tool_block(name, args, event.text, event.is_error)
+            if line = CLI.ram_line(name, event.text.bytesize, event.is_error)
+              puts line.colorize.yellow
+            end
           when .info?
             puts "[#{event.text}]".colorize.yellow
           when .error?
@@ -471,9 +519,42 @@ module Hcode
         app.request_approval(tool_name, args, danger)
       end
 
+      # Wire the AskUserQuestion tool to the TUI's structured question dialog.
+      # When the agent calls AskUserQuestion, the QuestionService implementation
+      # pushes the questions into the App's dialog and blocks until the user
+      # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
+      Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
+
+      # Wire the TaskList tool to an in-memory task service so background
+      # tasks are tracked and the /tasks browser can list them.
+      task_service = Hcode::Tools::InMemoryTaskService.new
+      Hcode::Tools::Task.service = task_service
+
       app.on_clear = ->{ agent.context.clear }
       app.on_undo = ->{ agent.context.undo(1) }
       app.on_cancel = ->{ agent.cancel }
+      app.on_undo_count = ->(count : Int32) do
+        agent.context.undo(count)
+        nil
+      end
+      # Build the undo-selector candidate list from user messages in the
+      # agent's history. Each choice represents "remove N turns down to
+      # and including this user turn".
+      app.on_fetch_undo_choices = -> : Array({Int32, String, String})? do
+        history = agent.context.history
+        choices = [] of {Int32, String, String}
+        # Walk history; each user message marks a turn boundary. The count
+        # for entry i = messages to drop from the end back to and including
+        # that user message.
+        history.each_with_index do |cm, idx|
+          next unless cm.message.role == "user" && cm.origin.normal?
+          input = cm.message.content.to_s
+          preview = input.empty? ? "(empty)" : input[0...60].gsub('\n', " ")
+          count = history.size - idx
+          choices << {count, input, "##{idx + 1}: #{preview}"}
+        end
+        choices.empty? ? nil : choices
+      end
       app.on_compact = -> : Nil do
         spawn do
           agent.trigger_compaction_tui(system_prompt) do |event|
@@ -597,6 +678,24 @@ module Hcode
         dir = store.session_dir
         dir.empty? ? nil : dir
       end
+
+      # `/tasks` browser: pull the current task list from the service,
+      # stop a task, open its full output.
+      app.on_fetch_tasks = -> : Array(Hcode::Tools::AgentTaskInfo) do
+        task_service.list(active_only: false, limit: 100)
+      end
+      app.on_stop_task = ->(task_id : String) do
+        task_service.stop_by_user(task_id)
+        nil
+      end
+      app.on_open_task_output = ->(task_id : String) do
+        snapshot = task_service.get_output_snapshot(task_id, 8192)
+        preview = snapshot.preview
+        # Surface the output inline as a system message so the user can read
+        # it without leaving the transcript.
+        app.add_message("system", "Output of #{task_id}:\n#{preview}")
+        nil
+      end
       # `/logout` clears the configured API keys and re-saves config.toml.
       app.on_logout = -> : Nil do
         config.api_key = ""
@@ -645,6 +744,11 @@ module Hcode
       app.run(initial_prompt: initial_prompt) do |prompt_text|
         store.append_simple("turn.prompt", "prompt", prompt_text)
 
+        # tool_call_id → tool_name, populated by tool_call_start and consumed
+        # by tool_result so the --ram log can show which tool ran. Lives one
+        # turn at a time; cleared at turn end.
+        pending_tool_names = {} of String => String
+
         begin
           result = agent.run_turn(prompt_text, system_prompt) do |event|
             case event.type
@@ -661,14 +765,22 @@ module Hcode
                 "tool_name"    => JSON::Any.new(event.tool_name),
                 "arguments"    => JSON::Any.new(event.tool_args),
               })
+              pending_tool_names[event.tool_call_id] = event.tool_name
               app.on_event(event)
             when .tool_result?
               store.append("tool.result", {
                 "tool_call_id" => JSON::Any.new(event.tool_call_id),
                 "content"      => JSON::Any.new(event.text),
               })
+              # Resolve tool name from the event itself (Event.tool_result
+              # does not carry it; the prior tool_call_start had it).
+              tname = pending_tool_names.delete(event.tool_call_id) || "Tool"
+              # Attach the RAM line so the TUI renders it inside the tool
+              # block rather than as a separate info message.
+              event.ram_line = CLI.ram_line(tname, event.text.bytesize, event.is_error)
               app.on_event(event)
-            when .step_begin?, .step_end?, .info?, .error?, .turn_end?
+            when .step_begin?, .step_end?, .info?, .error?, .turn_end?,
+                 .compaction_started?, .compaction_completed?, .compaction_cancelled?
               app.on_event(event)
               app.context_percent = agent.context.token_usage_percent
               app.context_tokens = agent.context.token_count
@@ -814,6 +926,7 @@ module Hcode
           --yolo                  Auto-approve all tool calls
           --auto                  Auto-approve safe operations
           --hi                    Smoke test: send "hi" to the API and report
+          --ram                   Print RSS after every tool call (debug memory growth)
           -v, --version           Show version
           -h, --help              Show this help
 
@@ -832,6 +945,31 @@ module Hcode
         USAGE
     end
   end
+
+  # Bridge AskUserQuestion tool → TUI QuestionDialog. When the tool calls
+  # `QuestionService#request`, this spawns a fiber that pushes the questions
+  # into the App's dialog, waits for the user's answer on a channel, and
+  # returns it. Mirrors TS `reverse-rpc/question-adapter.ts`.
+  class AppQuestionService < Tools::QuestionService
+    def initialize(@app : TUI::App)
+    end
+
+    def request(req : Tools::QuestionRequest, signal : ::Hcode::Loop::AbortController?) : Tools::QuestionResult?
+      # Capacity 1: the dialog's callback runs synchronously inside
+      # handle_input, so a rendezvous channel would deadlock (send waits
+      # for receive, receive can't start until handle_input returns).
+      result_chan = Channel(Tools::QuestionResult).new(1)
+
+      spawn do
+        answers = @app.request_questions(req.questions)
+        result_chan.send(answers)
+      end
+
+      # Block this turn fiber until the user answers. The agent loop's abort
+      # signal is handled separately by the tool layer; here we just wait.
+      result_chan.receive
+    end
+  end
 end
 
-Hcode::CLI.run(ARGV)
+Hcode::CLI.run(ARGV) unless ARGV.includes?("--no-cli-run")

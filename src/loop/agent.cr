@@ -246,6 +246,7 @@ module Hcode
 
       private def trigger_compaction(system_prompt : String, on_event : Event ->) : String
         old_messages = @context.history
+        tokens_before = @context.token_count
 
         kept_count = Math.min(6, old_messages.size)
         kept = old_messages[-kept_count..] || [] of Context::ContextMessage
@@ -255,6 +256,9 @@ module Hcode
           LLM::Message.user(summary_prompt + old_messages.map(&.message.content.to_s).join("\n")),
         ]
 
+        on_event.call(Event.compaction_started)
+        summary = ""
+        cancelled = false
         begin
           # Compaction summarises a near-full context, so the live window is
           # almost exhausted. Reset the budget clamp so the summary request is
@@ -263,13 +267,24 @@ module Hcode
           summary_result = @provider.chat(summary_messages, nil, nil) do |part|
           end
           summary = summary_result.text
+        rescue ex : UserCancellationError
+          cancelled = true
+          summary = "[Compaction cancelled — keeping full history]"
+          kept = old_messages
         rescue
           summary = "[Compaction failed — keeping full history]"
           kept = old_messages
         end
 
         @context.apply_compaction(summary, kept)
-        on_event.call(Event.info("Context compacted (#{old_messages.size} → #{kept.size} messages)"))
+        tokens_after = @context.token_count
+
+        if cancelled
+          on_event.call(Event.compaction_cancelled)
+        else
+          on_event.call(Event.compaction_completed(tokens_before, tokens_after, summary))
+          on_event.call(Event.info("Context compacted (#{old_messages.size} → #{kept.size} messages)"))
+        end
 
         system_prompt
       end

@@ -1,26 +1,35 @@
+require "digest/sha256"
+
 module Hcode
   module Loop
     class DedupTracker
-      MAX_STREAK = 12
+      MAX_STREAK  = 12
+      MAX_HISTORY = 24
 
-      @call_history : Hash(String, Array({String, String})) = {} of String => Array({String, String})
+      # Per-tool ring of recent canonical-arg digests. The full canonical
+      # args string (which for Edit/Write contains the entire old/new or
+      # content payload) is reduced to a SHA256 hex digest before storage,
+      # so the tracker never retains file contents. Capped at MAX_HISTORY
+      # entries per tool via FIFO shift.
+      @call_history : Hash(String, Array(String)) = {} of String => Array(String)
 
       def check_and_track(tool_name : String, canonical_args : String) : DedupAction
-        key = tool_name
-        current = {tool_name, canonical_args}
+        key    = tool_name
+        digest = Digest::SHA256.hexdigest(canonical_args)
 
-        history = @call_history[key]? || [] of {String, String}
+        history = @call_history[key]? || [] of String
 
         streak = 0
-        history.reverse_each do |entry|
-          break if entry[1] != canonical_args
+        history.reverse_each do |stored|
+          break if stored != digest
           streak += 1
         end
 
-        new_streak = streak + 1
-        history << current
+        history << digest
+        history.shift if history.size > MAX_HISTORY
         @call_history[key] = history
 
+        new_streak = streak + 1
         if new_streak >= MAX_STREAK
           DedupAction::ForceStop
         elsif new_streak >= 8

@@ -430,4 +430,101 @@ describe Hcode::TUI::HelpPanel do
     body.should contain("showing")
     body.should contain("of")
   end
+
+  # Fix 4 regression: cross-turn trim. Older turns (>keep_recent_turns)
+  # collapse their thinking/tool blocks into a single step_summary so the
+  # @messages array does not grow linearly across long sessions — see
+  # plans/TOOLS-LEAKS.md §B1.
+  describe "cross-turn trim (Fix 4)" do
+    it "collapses thinking/tool blocks in turns older than keep_recent_turns" do
+      app = Hcode::TUI::App.new
+      app.keep_recent_steps = 100   # disable within-turn trim
+      app.keep_recent_turns = 2
+
+      # 5 turns, each with a tool block. Bash (not Read) so consecutive
+      # calls don't get batched into a single read_group entry.
+      5.times do |i|
+        app.add_message("user", "u#{i}")
+        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo #{i}"})))
+        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "content #{i}", false))
+        app.add_message("assistant", "a#{i}")
+      end
+
+      msgs = app.@messages
+
+      # The three oldest turns (u0, u1, u2) must now each have a single
+      # step_summary right after the user message and no surviving tool
+      # blocks. The last 2 turns (u3, u4) keep their tool messages intact.
+      index_of_user = ->(s : String) { msgs.index { |m| m.role == "user" && m.content == s } }
+
+      ["u0", "u1", "u2"].each do |u|
+        i = index_of_user.call(u)
+        i.should_not be_nil
+        msgs[i.not_nil! + 1].role.should eq("step_summary")
+        u_num = u[1].to_i
+        msgs.any? { |m| m.role == "tool" && m.tool_result == "content #{u_num}" }.should be_false
+      end
+
+      ["u3", "u4"].each do |u|
+        u_num = u[1].to_i
+        msgs.any? { |m| m.role == "tool" && m.tool_result == "content #{u_num}" }.should be_true
+      end
+    end
+
+    it "folds counts from pre-existing step_summary when re-collapsing" do
+      app = Hcode::TUI::App.new
+      app.keep_recent_steps = 1   # aggressive within-turn trim
+      app.keep_recent_turns = 1
+
+      # Build two old turns with multiple Bash calls each — within-turn
+      # trim will already produce a step_summary; cross-turn trim then
+      # should still see and preserve those counts (no double counting,
+      # no lost counts).
+      2.times do |i|
+        app.add_message("user", "u#{i}")
+        3.times do |j|
+          app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}#{j}", "Bash", %({"command":"echo"})))
+          app.on_event(Hcode::Loop::Event.tool_result("c#{i}#{j}", "r", false))
+        end
+      end
+      app.add_message("user", "current")  # current turn
+
+      msgs = app.@messages
+      u0 = msgs.index { |m| m.role == "user" && m.content == "u0" }
+      u0.should_not be_nil
+      summary = msgs[u0.not_nil! + 1]
+      summary.role.should eq("step_summary")
+      summary.tool_count.should eq(3)
+    end
+
+    it "does nothing when total turns <= keep_recent_turns" do
+      app = Hcode::TUI::App.new
+      app.keep_recent_steps = 100
+      app.keep_recent_turns = 50
+
+      3.times do |i|
+        app.add_message("user", "u#{i}")
+        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo"})))
+        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "r", false))
+      end
+
+      app.@messages.count(&.role.==("tool")).should eq(3)
+      app.@messages.count(&.role.==("step_summary")).should eq(0)
+    end
+
+    it "can be disabled via keep_recent_turns = 0" do
+      app = Hcode::TUI::App.new
+      app.keep_recent_steps = 100
+      app.keep_recent_turns = 0
+
+      10.times do |i|
+        app.add_message("user", "u#{i}")
+        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo"})))
+        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "r", false))
+      end
+
+      app.@messages.count(&.role.==("step_summary")).should eq(0)
+      app.@messages.count(&.role.==("tool")).should eq(10)
+    end
+  end
 end
