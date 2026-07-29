@@ -234,6 +234,59 @@ describe Hcode::LLM::ZaiProvider do
   end
 end
 
+describe Hcode::LLM::OllamaProvider do
+  it "is a Provider sharing the OpenAI Chat Completions transport" do
+    provider = Hcode::LLM::OllamaProvider.new
+    provider.is_a?(Hcode::LLM::Provider).should be_true
+    provider.is_a?(Hcode::LLM::OpenAIChatProvider).should be_true
+  end
+
+  it "identifies itself as the ollama backend" do
+    provider = Hcode::LLM::OllamaProvider.new
+    provider.name.should eq("ollama")
+  end
+
+  it "defaults to llama3.2 on localhost:11434" do
+    provider = Hcode::LLM::OllamaProvider.new
+    provider.model_name.should eq("llama3.2")
+    provider.endpoint.should eq("http://localhost:11434/v1")
+  end
+
+  it "uses an empty token so auth is omitted on the wire" do
+    provider = Hcode::LLM::OllamaProvider.new
+    provider.token.should eq("")
+  end
+
+  it "honours an explicit model and endpoint override" do
+    provider = Hcode::LLM::OllamaProvider.new(model: "qwen2.5", endpoint: "http://gpu-box:11434/v1")
+    provider.model_name.should eq("qwen2.5")
+    provider.endpoint.should eq("http://gpu-box:11434/v1")
+  end
+end
+
+describe Hcode::LLM::LmStudioProvider do
+  it "is a Provider sharing the OpenAI Chat Completions transport" do
+    provider = Hcode::LLM::LmStudioProvider.new
+    provider.is_a?(Hcode::LLM::Provider).should be_true
+    provider.is_a?(Hcode::LLM::OpenAIChatProvider).should be_true
+  end
+
+  it "identifies itself as the lmstudio backend" do
+    provider = Hcode::LLM::LmStudioProvider.new
+    provider.name.should eq("lmstudio")
+  end
+
+  it "defaults to localhost:1234" do
+    provider = Hcode::LLM::LmStudioProvider.new
+    provider.endpoint.should eq("http://localhost:1234/v1")
+  end
+
+  it "uses an empty token so auth is omitted on the wire" do
+    provider = Hcode::LLM::LmStudioProvider.new
+    provider.token.should eq("")
+  end
+end
+
 describe Hcode::LLM::MockProvider do
   it "is a Provider that needs no key or network" do
     provider = Hcode::LLM::MockProvider.new
@@ -287,19 +340,23 @@ end
 
 describe "LLM provider registry" do
   it "defaults to the moonshot provider" do
-    Hcode::LLM::DEFAULT_PROVIDER_NAME.should eq("moonshot")
+    Hcode::LLM::DEFAULT_PROVIDER_NAME.should be_nil
   end
 
-  it "lists moonshot, zai and mock among the known providers" do
+  it "lists moonshot, zai, ollama, lmstudio and mock among the known providers" do
     names = Hcode::LLM::KNOWN_PROVIDERS.map(&.name)
     names.should contain("moonshot")
     names.should contain("zai")
+    names.should contain("ollama")
+    names.should contain("lmstudio")
     names.should contain("mock")
   end
 
   it "recognises known providers and rejects unknown ones" do
     Hcode::LLM.known_provider?("moonshot").should be_true
     Hcode::LLM.known_provider?("zai").should be_true
+    Hcode::LLM.known_provider?("ollama").should be_true
+    Hcode::LLM.known_provider?("lmstudio").should be_true
     Hcode::LLM.known_provider?("mock").should be_true
     Hcode::LLM.known_provider?("nope").should be_false
   end
@@ -409,6 +466,31 @@ describe "OpenAIChatProvider request shaping" do
 
     json.as_h.has_key?("reasoning_effort").should be_false
     json.as_h.has_key?("thinking").should be_false
+  end
+
+  it "OllamaProvider sends no thinking/reasoning_effort and uses legacy max_tokens" do
+    provider = Hcode::LLM::OllamaProvider.new
+    provider.prompt_cache_key = "sess-local"
+    provider.thinking_effort = "medium"
+    provider.max_context_tokens = 8192
+
+    json = JSON.parse(provider.build_request([Hcode::LLM::Message.user("hi")], nil).to_json)
+
+    json["prompt_cache_key"].should eq("sess-local")
+    json.as_h.has_key?("thinking").should be_false
+    json.as_h.has_key?("reasoning_effort").should be_false
+    json.as_h.has_key?("max_tokens").should be_true
+    json.as_h.has_key?("max_completion_tokens").should be_false
+  end
+
+  it "LmStudioProvider sends no thinking/reasoning_effort" do
+    provider = Hcode::LLM::LmStudioProvider.new
+    provider.thinking_effort = "high"
+
+    json = JSON.parse(provider.build_request([Hcode::LLM::Message.user("hi")], nil).to_json)
+
+    json.as_h.has_key?("thinking").should be_false
+    json.as_h.has_key?("reasoning_effort").should be_false
   end
 
   it "leaves the completion budget unset when no context window is configured" do

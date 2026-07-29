@@ -30,7 +30,29 @@
 
 - [ ] `src/auth/` — OAuth/device-code flow (сейчас только чтение готовых токенов)
 - [ ] `src/hooks/` — PreToolUse/PostToolUse/UserPromptSubmit/Stop hooks
-- [ ] `src/notify/` — status tracker + sound + webhook + OSC-9 (net-new фича)
+- [x] **`src/notify/`** — РАБОТАЕТ: status tracker + sound + webhook + OSC-9
+  - `Notify::AgentStatus` enum (Idle/Working/Done/InputRequired)
+  - `Notify::StatusTracker` — отслеживает переходы, эмитит `Transition` только
+    при реальной смене статуса (staying-in-Working тихо)
+  - `Notify::TerminalChannel` — порт TS `terminal-notification.ts`: OSC 9 на
+    поддерживаемых терминалах (iTerm2/WezTerm/Kitty/Ghostty/Warp), BEL fallback,
+    tmux DCS passthrough, sanitize control chars, `MAX_MESSAGE_LENGTH` cap,
+    de-dupe по ключу, `condition` (unfocused|always) + focus gate
+  - `Notify::Player` — sound playback: probe OS-native player при init
+    (afplay/pw-play/paplay/aplay/powershell/ffplay), detached fiber,
+    fire-and-forget, play_for(event) выбирает done/alert/working путь
+  - `Notify::Webhook` — async POST в detached fiber, timeout, secret header,
+    опциональные headers, swallow errors (flaky endpoint не ломает turn)
+  - `Notify::Dispatcher` — fan-out + per-channel gating + global switch;
+    `from_config` строит только включённые каналы
+  - `Notify::Config` — `[notifications]` TOML-схема (sound/terminal/webhook),
+    интегрирован в `Config::Config` (parse + save)
+  - Wire-up: `App` принимает `Dispatcher?`, строит `StatusTracker`; переходы
+    в `start_turn` (→Working), `turn_end` (→Done→Idle), `request_approval`
+    (→InputRequired→Working). Headless `hcode.cr -p` тоже строит dispatcher
+  - Тесты (39): status transitions, terminal format/build_sequences/OSC9/tmux/
+    de-dupe/focus, player candidates per OS, webhook payload + resilience,
+    dispatcher fan-out + gating + from_config
 
 ## 3. TUI панели/диалоги (есть в TS, нет в Crystal)
 

@@ -67,12 +67,13 @@ module Hcode
     # Auth is either an API key or a refreshable OAuth token created by the
     # managed `kimi-code` login.
     class MoonshotProvider < OpenAIChatProvider
+      DEFAULT_ENDPOINT = "https://api.kimi.com/coding/v1"
       property oauth_host : String = "https://auth.kimi.com"
       property oauth_client_id : String = "17e5f671-d194-4dfb-9706-5516cb48c098"
       property oauth : OAuthCredentials?
 
       def initialize(model : String,
-                     endpoint : String = "https://api.kimi.com/coding/v1",
+                     endpoint : String = DEFAULT_ENDPOINT,
                      @oauth : OAuthCredentials? = nil,
                      api_key : String = "",
                      temperature : Float64? = nil,

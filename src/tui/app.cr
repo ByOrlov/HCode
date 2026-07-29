@@ -189,9 +189,23 @@ module Hcode
       @on_rename : (String -> Nil)?
       @on_debug : (-> Nil)?
 
+      # Setup wizard state (first-run provider configuration). When
+      # `@setup_mode` is true the editor input is intercepted: the provider
+      # selector drives the first step, subsequent submits feed the wizard,
+      # and completion invokes `on_setup_complete`.
+      @setup_mode : Bool = false
+      @wizard : Setup::Wizard? = nil
+      property? setup_mode : Bool = false
+      property wizard : Setup::Wizard? = nil
+      property on_setup_complete : (Setup::Wizard -> Nil)? = nil
+
       # Approval state
       @approval_pending : ApprovalRequest?
       @approval_channel = Channel(Permission::ApprovalChoice).new
+      # Notification subsystem: owns the current agent status and fans every
+      # real transition out to the dispatcher. nil when notifications are
+      # disabled (no dispatcher wired up) → transitions become no-ops.
+      @status_tracker : Notify::StatusTracker?
       @markdown : Markdown
       @provider_list : SelectList
       @model_list : SelectList
@@ -292,6 +306,7 @@ module Hcode
       def initialize(
         @terminal : Terminal = Terminal.current,
         @theme : Theme = Theme.dark,
+        dispatcher : Notify::Dispatcher? = nil,
       )
         @input = Input.new
         @editor = Editor.new("")
@@ -313,6 +328,113 @@ module Hcode
         @git_branch = detect_git_branch
         @keep_recent_steps = read_keep_recent_steps
         @keep_recent_turns = read_keep_recent_turns
+        # Wire the notification dispatcher into a StatusTracker. The tracker
+        # lives on the App so UI transitions (start_turn, turn_end, approval)
+        # can drive it directly.
+        if disp = dispatcher
+          @status_tracker = Notify::StatusTracker.new { |t| disp.on_transition(t) }
+        end
+      end
+
+      # Enter setup mode: show the wizard transcript and open the provider
+      # selector. Called once at first-run before the normal TUI loop starts.
+      def start_setup : Nil
+        @setup_mode = true
+        @wizard = Setup::Wizard.new
+        @show_welcome = false
+        @messages << Message.new("system",
+          "Welcome to HCode. Choose your provider to get started.")
+        @status = "Setup: select provider"
+        open_setup_provider_selector
+        @dirty = true
+      end
+
+      private def open_setup_provider_selector : Nil
+        items = Setup::Wizard.choices.map(&.label)
+        @provider_list.show("Select provider", items)
+        @provider_list.selected = 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_setup_provider_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @provider_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          idx = @provider_list.selected
+          choices = Setup::Wizard.choices
+          choice = choices[idx]? || choices.first
+          @provider_list.hide
+          @dirty = true
+
+          wizard = @wizard
+          return unless wizard
+
+          wizard.select_provider(choice.name)
+          @provider_name = choice.name
+          @messages << Message.new("user", choice.label)
+
+          if wizard.step == Setup::Wizard::Step::Endpoint
+            # Keyless provider: jump straight to endpoint, but still show a
+            # transcript entry so the user knows why no key was asked.
+            @messages << Message.new("system",
+              "No API key needed for #{choice.name}.")
+          end
+          advance_setup_step
+        when .escape?
+          @provider_list.hide
+          @dirty = true
+        end
+      end
+
+      private def advance_setup_step : Nil
+        wizard = @wizard
+        return unless wizard
+
+        if wizard.done?
+          finish_setup
+          return
+        end
+
+        @status = "Setup: #{wizard.step.to_s.downcase}"
+        @editor.clear
+        @dirty = true
+      end
+
+      private def finish_setup : Nil
+        wizard = @wizard
+        return unless wizard
+
+        config_msg = "Provider: #{wizard.provider_name}"
+        config_msg += " | Model: #{wizard.model}" if wizard.model
+        @messages << Message.new("system", "Configuration saved. #{config_msg}")
+        @messages << Message.new("system", "Starting HCode...")
+        @status = ""
+        @setup_mode = false
+        @dirty = true
+
+        if cb = @on_setup_complete
+          cb.call(wizard)
+        end
+      end
+
+      private def submit_setup_text(text : String) : Nil
+        wizard = @wizard
+        return unless wizard
+
+        # Echo what the user entered (mask API keys).
+        if wizard.step == Setup::Wizard::Step::Credentials
+          masked = text.empty? ? "(skipped)" : "#{"•" * {text.size, 8}.min}"
+          @messages << Message.new("user", masked)
+        else
+          display = text.empty? ? "(default)" : text
+          @messages << Message.new("user", display)
+        end
+
+        wizard.submit_text(text)
+        advance_setup_step
       end
 
       def run(initial_prompt : String? = nil, &run_turn : String, Bool -> Nil) : Nil
@@ -664,6 +786,8 @@ module Hcode
           @defer_user_messages = false
           @spinner.stop
           @status = ""
+          @status_tracker.try(&.transition!(Notify::AgentStatus::Done, "Turn complete"))
+          @status_tracker.try(&.transition!(Notify::AgentStatus::Idle))
 
           # A cancelled turn ends the dispatch chain: drop queued messages
           # so they don't leak into the next prompt the user types fresh.
@@ -687,10 +811,13 @@ module Hcode
       def request_approval(tool_name : String, args : String, danger : String?) : Permission::ApprovalChoice
         @approval_pending = ApprovalRequest.new(tool_name, args, danger)
         @dirty = true
+        @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
+                                          "Approval required", tool_name))
         select
         when choice = @approval_channel.receive
           @approval_pending = nil
           @dirty = true
+          @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
           choice
         end
       end
@@ -732,6 +859,28 @@ module Hcode
 
         if @approval_pending
           handle_approval_key(key)
+          return
+        end
+
+        # Setup wizard: intercept all keys while the wizard is active. The
+        # provider selector handles its own input; other steps read the editor.
+        if @setup_mode
+          if @provider_list.visible?
+            handle_setup_provider_key(key)
+            return
+          end
+          case key.key
+          when .enter?
+            unless @editor.empty?
+              text = @editor.submit!
+              submit_setup_text(text)
+            end
+          when .escape?
+            @editor.clear
+          else
+            @editor.handle_input(key)
+          end
+          @dirty = true
           return
         end
 
@@ -993,6 +1142,7 @@ module Hcode
         @scroll_offset = 0
         @spinner.start
         @dirty = true
+        @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
 
         spawn { @run_turn_cb.not_nil!.call(text, persisted) }
       end
@@ -2106,13 +2256,13 @@ module Hcode
           new_lines.concat(render_select_panel(@theme_list, cols))
         end
 
-        editor_start = new_lines.size
         if todos = current_todos
           new_lines.concat(render_todo_panel(todos, cols))
         end
         unless @queue.empty?
           new_lines.concat(render_queue_pane(cols))
         end
+        editor_start = new_lines.size
         if @help_panel.visible?
           # Modal `/help` replaces the editor — mirrors JS `mountEditorReplacement`.
           # Skip command hints too: the editor (and its autocomplete) is hidden.

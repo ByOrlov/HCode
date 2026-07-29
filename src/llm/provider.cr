@@ -66,7 +66,7 @@ module Hcode
       end
     end
 
-    DEFAULT_PROVIDER_NAME = "moonshot"
+    DEFAULT_PROVIDER_NAME = nil
 
     # Known backends. Moonshot is the default; append entries here as new
     # Provider subclasses are implemented so the /provider selector can
@@ -75,6 +75,8 @@ module Hcode
       ProviderInfo.new("moonshot", "Moonshot — Chat Completions (default)"),
       ProviderInfo.new("zai", "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)"),
       ProviderInfo.new("zai-coding-plan", "Z.AI / Zhipu — Coding Plan subscription"),
+      ProviderInfo.new("ollama", "Ollama — local models, no API key"),
+      ProviderInfo.new("lmstudio", "LM Studio — local models, no API key"),
       ProviderInfo.new("mock", "Mock — scripted self-test provider (testing)"),
     ] of ProviderInfo
 

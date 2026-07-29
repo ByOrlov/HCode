@@ -18,6 +18,8 @@ require "./llm/provider"
 require "./llm/openai_chat_provider"
 require "./llm/moonshot_provider"
 require "./llm/zai_provider"
+require "./llm/ollama_provider"
+require "./llm/lmstudio_provider"
 require "./llm/mock_provider"
 require "./tools/tool"
 require "./tools/registry"
@@ -54,6 +56,12 @@ require "./loop/abort"
 require "./loop/dedup"
 require "./loop/agent"
 require "./permission/manager"
+require "./notify/config"
+require "./notify/status"
+require "./notify/terminal"
+require "./notify/player"
+require "./notify/webhook"
+require "./notify/dispatcher"
 require "./config/config"
 require "./prompt/template"
 require "./prompt/agents_md"
@@ -61,6 +69,7 @@ require "./prompt/system_prompt"
 require "./session/store"
 require "./session/index"
 require "./session/lifecycle"
+require "./setup/wizard"
 require "./tui/terminal"
 require "./tui/char_width"
 require "./tui/theme"
@@ -284,7 +293,7 @@ module Hcode
       system_prompt = Prompt::SystemPrompt.build(work_dir)
 
       if prompt
-        run_headless(prompt, agent, system_prompt, store)
+        run_headless(prompt, agent, system_prompt, store, config)
       else
         run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt)
       end
@@ -303,20 +312,24 @@ module Hcode
     # ProviderConfigError on missing credentials or an unknown name, so callers
     # that must not exit (e.g. the /provider selector at runtime) can rescue
     # and surface the message instead.
-    def self.build_named_provider(name : String, config, oauth) : LLM::Provider
+    def self.build_named_provider(name : String?, config, oauth) : LLM::Provider
+      if name.nil? || name.empty?
+        available = LLM::KNOWN_PROVIDERS.map(&.name).join(", ")
+        raise ProviderConfigError.new("No provider configured. Available: #{available}")
+      end
       case name
       when "moonshot"
-        if oauth.nil? && config.api_key.empty?
+        if oauth.nil? && config.api_key.to_s.empty?
           raise ProviderConfigError.new(
             "No Moonshot credentials found. Either:\n" \
             "  1. Login with Moonshot's kimi-code CLI (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
             "  2. Set MOONSHOT_API_KEY environment variable")
         end
         LLM::MoonshotProvider.new(
-          model: config.model,
-          endpoint: config.endpoint,
+          model: config.model || "kimi-for-coding",
+          endpoint: config.endpoint || LLM::MoonshotProvider::DEFAULT_ENDPOINT,
           oauth: oauth,
-          api_key: config.api_key,
+          api_key: config.api_key.to_s,
           temperature: config.temperature,
         )
       when "zai"
@@ -341,6 +354,18 @@ module Hcode
           endpoint: config.zai_coding_plan_endpoint,
           api_key: config.zai_api_key,
           provider_label: "zai-coding-plan",
+        )
+      when "ollama"
+        endpoint = config.ollama_endpoint || LLM::OllamaProvider::DEFAULT_ENDPOINT
+        LLM::OllamaProvider.new(
+          model: config.ollama_model || LLM::OllamaProvider::DEFAULT_MODEL,
+          endpoint: endpoint,
+        )
+      when "lmstudio"
+        endpoint = config.lmstudio_endpoint || LLM::LmStudioProvider::DEFAULT_ENDPOINT
+        LLM::LmStudioProvider.new(
+          model: config.lmstudio_model || LLM::LmStudioProvider::DEFAULT_MODEL,
+          endpoint: endpoint,
         )
       when "mock"
         LLM::MockProvider.new(LLM::MockProvider.script_from_env || LLM::MockProvider::DEFAULT_SCRIPT.dup)
@@ -401,13 +426,19 @@ module Hcode
       end
     end
 
-    private def self.run_headless(prompt, agent, system_prompt, store)
+    private def self.run_headless(prompt, agent, system_prompt, store, config)
       store.append_simple("turn.prompt", "prompt", prompt)
 
       Signal::INT.trap do
         STDERR.puts "\nInterrupted."
         agent.cancel
       end
+
+      # Headless dispatcher: useful for CI/automation webhooks. StatusTracker
+      # drives Working→Done around the single turn.
+      dispatcher = Notify::Dispatcher.from_config(config.notifications)
+      status_tracker = Notify::StatusTracker.new { |t| dispatcher.on_transition(t) }
+      status_tracker.transition!(Notify::AgentStatus::Working)
 
       assistant_buf = IO::Memory.new
       assistant_open = false
@@ -479,9 +510,13 @@ module Hcode
         puts "● Done (#{result.steps} steps, " \
              "#{result.usage.total_tokens} tokens)".colorize.fore(C_SUCCESS)
         puts
+        status_tracker.transition!(Notify::AgentStatus::Done, "Turn complete")
+        status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex : Loop::UserCancellationError
         agent.context.add_user("Interrupted by user")
         puts "\nInterrupted by user.".colorize.yellow
+        status_tracker.transition!(Notify::AgentStatus::Done, "Cancelled")
+        status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex
         STDERR.puts "Fatal: #{ex.message}".colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
@@ -490,9 +525,10 @@ module Hcode
     end
 
     private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil)
-      app = TUI::App.new
+      dispatcher = Notify::Dispatcher.from_config(config.notifications)
+      app = TUI::App.new(dispatcher: dispatcher)
       app.model = agent.provider.model_name
-      app.provider_name = config.provider_name
+      app.provider_name = config.provider_name.to_s
       app.permission_mode = config.permission_mode
       app.max_context_tokens = agent.context.max_context_tokens
       app.home = home
@@ -624,6 +660,10 @@ module Hcode
             config.zai_model = model
           when "zai-coding-plan"
             config.zai_coding_plan_model = model
+          when "ollama"
+            config.ollama_model = model
+          when "lmstudio"
+            config.lmstudio_model = model
           end
           provider = build_named_provider(config.provider_name, config, oauth)
           configure_provider(provider, config, store.meta_id?)

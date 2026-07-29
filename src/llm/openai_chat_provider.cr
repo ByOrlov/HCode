@@ -179,6 +179,14 @@ module Hcode
       # add OAuth refresh, alternative auth schemes, etc.
       abstract def token : String
 
+      # Set the Authorization header unless the token is empty (local
+      # OpenAI-compatible servers like Ollama / LM Studio need no auth and
+      # some reject a stray Bearer header).
+      private def apply_auth(headers : HTTP::Headers) : Nil
+        t = token
+        headers["Authorization"] = "Bearer #{t}" unless t.empty?
+      end
+
       def model_name : String
         @model
       end
@@ -187,7 +195,7 @@ module Hcode
         uri = URI.parse("#{@endpoint}/models")
 
         headers = HTTP::Headers.new
-        headers["Authorization"] = "Bearer #{token}"
+        apply_auth(headers)
         headers["Accept"] = "application/json"
 
         client = make_client(uri)
@@ -412,7 +420,7 @@ module Hcode
         begin
           uri = URI.parse("#{@endpoint}/models")
           headers = HTTP::Headers.new
-          headers["Authorization"] = "Bearer #{token}"
+          apply_auth(headers)
           headers["Accept"] = "application/json"
           client = make_client(uri)
           response = client.get(uri.request_target, headers: headers)
@@ -441,7 +449,7 @@ module Hcode
         uri = URI.parse("#{@endpoint}/chat/completions")
 
         headers = HTTP::Headers.new
-        headers["Authorization"] = "Bearer #{token}"
+        apply_auth(headers)
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "text/event-stream"
 
