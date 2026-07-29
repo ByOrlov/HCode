@@ -527,4 +527,112 @@ describe Hcode::TUI::HelpPanel do
       app.@messages.count(&.role.==("tool")).should eq(10)
     end
   end
+
+  # Regression tests for the TUI_BUGS.md fixes (see TUI_FIXES.md).
+  describe "TUI_BUGS fixes" do
+    # BUG #2: wrap_text used .size (codepoints), so CJK text (1 codepoint =
+    # 2 columns) overflowed. Now wraps by visible_width and hard-breaks
+    # overwide tokens.
+    it "wrap_text wraps CJK content by visible width" do
+      app = Hcode::TUI::App.new
+      # 20 Japanese chars = 40 columns; at cols=24 the bullet takes ~2 cols,
+      # so the body must wrap into multiple lines each <= cols.
+      cjk = "あ" * 20
+      lines = app.render_message(Hcode::TUI::Message.new("user", cjk), 24)
+      lines.each do |l|
+        Hcode::TUI::CharWidth.visible_width(l).should be <= 24
+      end
+      lines.size.should be > 1
+    end
+
+    it "wrap_text hard-breaks a single overwide token" do
+      app = Hcode::TUI::App.new
+      # A single 40-char ASCII word (no spaces) wider than the column.
+      word = "a" * 40
+      lines = app.render_message(Hcode::TUI::Message.new("user", word), 10)
+      lines.each do |l|
+        Hcode::TUI::CharWidth.visible_width(l).should be <= 10
+      end
+      lines.size.should be > 1
+    end
+
+    # BUG #1 + #7: build_rendered_lines now truncates every line to `cols`
+    # and appends a trailing SGR reset. Reach it via render_message output
+    # piped through the same post-processing.
+    it "build_rendered_lines truncates overwide lines to cols" do
+      app = Hcode::TUI::App.new
+      # Inject a long CJK line that a renderer would emit wider than cols.
+      app.add_message("user", "あ" * 60)
+      cols = 20
+      new_lines, _ = app.build_rendered_lines(cols)
+      new_lines.each do |l|
+        Hcode::TUI::CharWidth.visible_width(l).should be <= cols
+      end
+    end
+
+    it "build_rendered_lines ends every line with an SGR reset" do
+      app = Hcode::TUI::App.new
+      app.add_message("user", "hello")
+      new_lines, _ = app.build_rendered_lines(80)
+      new_lines.each do |l|
+        l.should end_with(Hcode::TUI::ANSI.reset)
+      end
+    end
+
+    # BUG #3: plan-box title with an ANSI Rejected badge miscomputed width
+    # via .size, shrinking the top border. Now uses visible_len.
+    it "render_plan_box keeps top and bottom borders aligned with ANSI title" do
+      app = Hcode::TUI::App.new
+      msg = Hcode::TUI::Message.new("plan_box", "do something")
+      msg.plan_kind = "rejected"
+      lines = app.render_plan_box(msg, 40)
+      # Find the top (┌) and bottom (└) border lines; both end with ┐/┘.
+      top = lines.find { |l| l.includes?('┌') }
+      bottom = lines.find { |l| l.includes?('└') }
+      top.should_not be_nil
+      bottom.should_not be_nil
+      Hcode::TUI::CharWidth.visible_width(top.not_nil!).should eq(
+        Hcode::TUI::CharWidth.visible_width(bottom.not_nil!)
+      )
+    end
+
+    # BUG: a long line inside the plan body (e.g. a code line) overflowed
+    # content_width and pushed the right border onto the next terminal row,
+    # reading as a stray blank line. Now clamped via slice_by_column.
+    it "render_plan_box clamps body lines so the right border stays on-row" do
+      app = Hcode::TUI::App.new
+      long_line = "body = output[(idx + auto_marker.size)..].strip"
+      msg = Hcode::TUI::Message.new("plan_box", "```crystal\n#{long_line}\n```")
+      lines = app.render_plan_box(msg, 40)
+      # Every body row (between top ┌ and bottom └) must contain both the
+      # left and right border on the SAME line — no overflow wrap.
+      body = lines.reject { |l| l.includes?('┌') || l.includes?('└') || l.empty? }
+      body.each do |row|
+        row.should contain('│')
+        # Right border present exactly once on the row
+        Hcode::TUI::CharWidth.visible_width(row).should be <= 40
+      end
+    end
+
+    # BUG #4: single CJK grapheme at max_w=1 should not be split into an
+    # empty chunk — it stays as one indivisible chunk.
+    it "wrap_editor_line keeps an overwide single grapheme intact" do
+      app = Hcode::TUI::App.new
+      chunks = app.wrap_editor_line("あ", 1)
+      chunks.size.should eq(1)
+      Hcode::TUI::CharWidth.visible_width(chunks[0][0]).should eq(2)
+    end
+
+    # BUG #10: welcome box logo is 14 cols wide; clamp box_w so the border
+    # doesn't collapse on very narrow terminals.
+    it "render_welcome_box clamps box width to logo width" do
+      app = Hcode::TUI::App.new
+      lines = app.render_welcome_box(8)
+      # The top border line should be at least 14 visible columns wide so
+      # the logo fits inside without pushing the right border off-screen.
+      top = lines.find { |l| l.includes?('╭') }
+      top.should_not be_nil
+      Hcode::TUI::CharWidth.visible_width(top.not_nil!).should be >= 14
+    end
+  end
 end

@@ -11,6 +11,7 @@ require "random/secure"
 require "system"
 require "colorize"
 
+require "./version"
 require "./llm/types"
 require "./llm/token_counter"
 require "./llm/provider"
@@ -78,16 +79,6 @@ require "./tui/tasks_browser"
 require "./tui/app"
 
 module Hcode
-  VERSION = "0.1.0"
-  # Build timestamp. Crystal has no compile-time -D flag like C, so we read
-  # it from the SOURCE_DATE_EPOCH env var at build time when present (repro
-  # builds set this); otherwise fall back to "dev".
-  BUILD_DATE = (::ENV["SOURCE_DATE_EPOCH"]?).try { |s| Time.unix(s.to_i).to_s("%Y-%m-%d") } || "dev"
-
-  def self.build_date : String?
-    BUILD_DATE == "dev" ? nil : BUILD_DATE
-  end
-
   # Headless print-mode palette, ported from the original Moonshot kimi-code
   # TUI dark theme (apps/kimi-code/src/tui/theme/colors.ts).
   C_SUCCESS = Colorize::ColorRGB.new(0x4E, 0xC8, 0x7E)

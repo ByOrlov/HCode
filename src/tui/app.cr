@@ -2031,7 +2031,7 @@ module Hcode
         @cursor_line = new_lines.size
       end
 
-      private def build_rendered_lines(cols : Int32) : {Array(String), Int32}
+      def build_rendered_lines(cols : Int32) : {Array(String), Int32}
         new_lines = [] of String
 
         # Full-screen modal takeovers (tasks browser) replace the entire
@@ -2138,7 +2138,34 @@ module Hcode
           new_lines << "#{ANSI.color(@theme.colors.warning, nil)} Press #{@exit_key} to exit#{ANSI.reset}"
         end
 
+        # Defensive barrier mirroring pi-tui `doRender`: truncate every line to
+        # `cols` so no component with an off-by-one in width math can push the
+        # right border past the terminal edge, then guarantee a trailing SGR
+        # reset so an unclosed style can't leak into the next line.
+        truncate_render_lines(new_lines, cols)
+        apply_line_resets(new_lines)
+
         {new_lines, editor_start + 1}
+      end
+
+      # Truncate each rendered line to `cols` visible columns. Uses the ASCII
+      # fast path and only falls back to the grapheme walk for non-ASCII lines,
+      # matching pi-tui's per-row truncate in `doRender`.
+      private def truncate_render_lines(lines : Array(String), cols : Int32) : Nil
+        return if cols <= 0
+        lines.map_with_index! do |line, _|
+          w = CharWidth.ascii_visible_width(line, cols) || CharWidth.visible_width(line)
+          w > cols ? CharWidth.slice_by_column(line, 0, cols, strict: true) : line
+        end
+      end
+
+      # Ensure each line ends with an SGR reset so color can't leak into the
+      # next rendered element. Counterpart of pi-tui's `applyLineResets`.
+      private def apply_line_resets(lines : Array(String)) : Nil
+        reset = ANSI.reset
+        lines.map_with_index! do |line, _|
+          line.ends_with?(reset) ? line : line + reset
+        end
       end
 
       private def full_render(output : IO::Memory, new_lines : Array(String), rows : Int32) : Nil
@@ -2157,6 +2184,15 @@ module Hcode
       private def diff_render(output : IO::Memory, new_lines : Array(String), rows : Int32) : Nil
         prev_size = @previous_lines.size
         new_size = new_lines.size
+
+        # Defensive shrink guard: if the new content is shorter than what we
+        # last committed to the screen, the diff path's tail-clearing only
+        # runs for the trailing changed region and can leave phantom rows.
+        # Bail to a full repaint so @max_lines_rendered is reset cleanly.
+        if new_size < @max_lines_rendered
+          full_render(output, new_lines, rows)
+          return
+        end
 
         first_changed = -1
         last_changed = -1
@@ -2509,7 +2545,7 @@ module Hcode
         lines
       end
 
-      private def render_plan_box(msg : Message, cols : Int32) : Array(String)
+      def render_plan_box(msg : Message, cols : Int32) : Array(String)
         lines = [] of String
         border = ANSI.color(@theme.colors.success, nil)
         border = ANSI.color(@theme.colors.error, nil) if msg.plan_kind == "rejected"
@@ -2525,11 +2561,11 @@ module Hcode
         status_suffix = msg.plan_kind == "rejected" ? " · #{ANSI.color(@theme.colors.error, nil)}Rejected#{ANSI.reset}" : ""
         title = " plan#{path_part}#{status_suffix} "
         title_display = title_visible(title)
-        if title_display.size > horz_len - 1
+        if visible_len(title_display) > horz_len - 1
           title = " plan "
           title_display = title_visible(title)
         end
-        trailing = (horz_len - title_display.size).clamp(0..)
+        trailing = (horz_len - visible_len(title_display)).clamp(0..)
         top = "#{" " * left_margin}#{border}┌#{title}#{border}#{"─" * trailing}┐#{ANSI.reset}"
 
         lines << ""
@@ -2537,6 +2573,11 @@ module Hcode
 
         body_lines = render_plan_body_lines(msg.content, content_width)
         body_lines.each do |raw|
+          # Clamp to content_width so a long line (e.g. code inside the plan)
+          # can't overflow the box and push the right border onto the next
+          # terminal row — which reads as a stray blank line.
+          vw = visible_len(raw)
+          raw = CharWidth.slice_by_column(raw, 0, content_width, strict: true) if vw > content_width
           pad = (content_width - visible_len(raw)).clamp(0..)
           lines << "#{" " * left_margin}#{border}│#{ANSI.reset} #{raw}#{" " * pad} #{border}│#{ANSI.reset}"
         end
@@ -2588,7 +2629,8 @@ module Hcode
         max_width = 1 if max_width < 1
 
         text.split('\n').flat_map do |line|
-          if line.size <= max_width
+          line_w = CharWidth.visible_width(line)
+          if line_w <= max_width
             [line]
           else
             words = line.split(' ')
@@ -2597,7 +2639,19 @@ module Hcode
             current_w = 0
 
             words.each do |word|
-              w = word.size
+              w = CharWidth.visible_width(word)
+              if w > max_width
+                if current_w > 0
+                  result << current.to_s
+                  current = String::Builder.new
+                  current_w = 0
+                end
+                CharWidth.slice_into_width_chunks(word, max_width).each do |chunk|
+                  result << chunk
+                end
+                next
+              end
+
               sep = current_w > 0 ? 1 : 0
               if current_w + sep + w > max_width && current_w > 0
                 result << current.to_s
@@ -2606,9 +2660,10 @@ module Hcode
               end
               current << ' ' if current_w > 0
               current << word
-              current_w += sep + w
+              current_w += (current_w > 0 ? 1 : 0) + w
             end
-            result << current.to_s
+            result << current.to_s if current_w > 0
+            result
           end
         end.to_a
       end
@@ -2695,8 +2750,10 @@ module Hcode
         text.split('\n')
       end
 
-      private def render_welcome_box(cols : Int32) : Array(String)
-        box_w = cols
+      def render_welcome_box(cols : Int32) : Array(String)
+        # Clamp to the logo width so the ASCII art (14 cols wide) can't push
+        # the right border off-screen on very narrow terminals.
+        box_w = {cols, 14}.max
         inner_w = box_w - 4
 
         logo_lines = [
@@ -2746,7 +2803,7 @@ module Hcode
           {"Directory", @work_dir},
           {"Session", @session_id.empty? ? "new" : @session_id},
           {"Model", @model},
-          {"Version", VERSION},
+          {"Version", Hcode::VERSION},
         ]
 
         info.each do |label, value|
@@ -2880,7 +2937,7 @@ module Hcode
       # fallback for tokens longer than `max_w`, and CJK-aware break points.
       # Keeping grapheme clusters (base + combining marks, ZWJ emoji) intact
       # relies on `CharWidth.zero_width?` / `cjk_break?`.
-      private def wrap_editor_line(line : String, max_w : Int32) : Array({String, Int32, Int32})
+      def wrap_editor_line(line : String, max_w : Int32) : Array({String, Int32, Int32})
         return [{"", 0_i32, 0_i32}] if line.empty? || max_w <= 0
         cps = line.codepoints.map(&.to_u32)
         n = cps.size
@@ -2917,7 +2974,13 @@ module Hcode
 
         clusters.each_with_index do |(idx, w, is_space, base_cp), ci|
           if current_w + w > max_w
-            if wrap_idx >= 0 && current_w - wrap_w + w <= max_w
+            # Single-grapheme guard (mirrors pi-tui editor.ts:172-181): if the
+            # overflow is caused by an indivisible cluster wider than `max_w`
+            # sitting at the start of the chunk, don't force-break — there's
+            # nothing to split, so let the cluster occupy the line as-is.
+            if chunk_start == idx && w > max_w
+              # Skip break logic; the cluster is added below.
+            elsif wrap_idx >= 0 && current_w - wrap_w + w <= max_w
               # Backtrack to the last word boundary — the remaining tail plus
               # this cluster still fits within max_w.
               chunks << {cps_to_string(cps, chunk_start, wrap_idx), chunk_start, wrap_idx}
@@ -3507,9 +3570,11 @@ module Hcode
 
       private def wrap_text(text : String, max_width : Int32) : Array(String)
         return [""] if text.empty?
+        max_width = 1 if max_width < 1
 
         text.split('\n').flat_map do |line|
-          if line.size <= max_width
+          line_w = CharWidth.visible_width(line)
+          if line_w <= max_width
             [line]
           else
             words = line.split(' ')
@@ -3518,7 +3583,21 @@ module Hcode
             current_w = 0
 
             words.each do |word|
-              w = word.size
+              w = CharWidth.visible_width(word)
+              # Hard-break a single token wider than max_width so it can't
+              # overflow the column (CJK / long paths / no-space strings).
+              if w > max_width
+                if current_w > 0
+                  result << current.to_s
+                  current = String::Builder.new
+                  current_w = 0
+                end
+                CharWidth.slice_into_width_chunks(word, max_width).each do |chunk|
+                  result << chunk
+                end
+                next
+              end
+
               sep = current_w > 0 ? 1 : 0
               if current_w + sep + w > max_width && current_w > 0
                 result << current.to_s
@@ -3527,9 +3606,10 @@ module Hcode
               end
               current << ' ' if current_w > 0
               current << word
-              current_w += sep + w
+              current_w += (current_w > 0 ? 1 : 0) + w
             end
-            result << current.to_s
+            result << current.to_s if current_w > 0
+            result
           end
         end.to_a
       end

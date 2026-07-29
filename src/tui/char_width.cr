@@ -32,10 +32,12 @@ module Hcode
       end
 
       private def self.cache_put(str : String, width : Int32) : Nil
-        if @@width_cache.size >= WIDTH_CACHE_SIZE
-          first_key = @@width_cache.first_key?
-          @@width_cache.delete(first_key) if first_key
-        end
+        # Soft eviction: when full, drop the entire cache in one shot rather
+        # than evicting key-by-key. Amortizes the O(n) Hash rehash across a
+        # full generation of entries (n inserts at O(1), then one O(n) clear),
+        # instead of paying O(n) on every insert past the limit. Mirrors the
+        # amortization rationale noted in pi-tui's AGENTS.md cache notes.
+        @@width_cache.clear if @@width_cache.size >= WIDTH_CACHE_SIZE
         @@width_cache[str] = width
       end
 
@@ -677,6 +679,23 @@ module Hcode
       def self.slice_by_column(line : String, start_col : Int32, length : Int32,
                                strict : Bool = false) : String
         slice_with_width(line, start_col, length, strict).text
+      end
+
+      # Split `text` into consecutive column-width chunks, each at most
+      # `max_width` wide. Preserves ANSI escapes inside each chunk. Used by the
+      # word-wrap fallback to hard-break a single token wider than the column.
+      def self.slice_into_width_chunks(text : String, max_width : Int32) : Array(String)
+        return [text] if max_width <= 0
+        chunks = [] of String
+        col = 0
+        total = visible_width(text)
+        while col < total
+          # strict: true so a wide grapheme straddling the boundary doesn't
+          # make the chunk exceed max_width.
+          chunks << slice_with_width(text, col, max_width, strict: true).text
+          col += max_width
+        end
+        chunks.empty? ? [text] : chunks
       end
     end
   end

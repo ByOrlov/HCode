@@ -2,6 +2,7 @@ require "spec"
 require "json"
 require "http/client"
 
+require "../src/version"
 require "../src/llm/types"
 require "../src/llm/token_counter"
 require "../src/llm/provider"

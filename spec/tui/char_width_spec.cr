@@ -194,4 +194,37 @@ describe Hcode::TUI::CharWidth do
       Hcode::TUI::CharWidth.cjk_break?(0x0041_u32).should be_false
     end
   end
+
+  describe ".slice_into_width_chunks" do
+    it "returns the whole string as a single chunk when it fits" do
+      chunks = Hcode::TUI::CharWidth.slice_into_width_chunks("hello", 10)
+      chunks.should eq(["hello"])
+    end
+
+    it "hard-breaks a wide CJK string into column-width chunks" do
+      # 6 CJK chars = width 12; max_width 4 -> 3 chunks of width 4 (2 chars each)
+      chunks = Hcode::TUI::CharWidth.slice_into_width_chunks("\u4f60\u4eec\u597d\u5417\u5927\u5bb6", 4)
+      chunks.size.should eq(3)
+      chunks.each { |c| Hcode::TUI::CharWidth.visible_width(c).should be <= 4 }
+    end
+
+    it "handles ASCII longer than max_width" do
+      chunks = Hcode::TUI::CharWidth.slice_into_width_chunks("abcdefghij", 4)
+      chunks.size.should eq(3)
+      chunks[0].should eq("abcd")
+      chunks[1].should eq("efgh")
+      chunks[2].should eq("ij")
+    end
+  end
+
+  describe ".visible_width cache eviction" do
+    it "does not grow beyond WIDTH_CACHE_SIZE" do
+      Hcode::TUI::CharWidth.clear_cache
+      # Insert well over the limit; the soft-clear eviction must keep the
+      # cache bounded instead of growing unboundedly.
+      (0..5000).each { |i| Hcode::TUI::CharWidth.visible_width("k#{i}") }
+      Hcode::TUI::CharWidth.cache_count.should be <= Hcode::TUI::CharWidth::WIDTH_CACHE_SIZE
+      Hcode::TUI::CharWidth.clear_cache
+    end
+  end
 end
