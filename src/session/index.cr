@@ -44,10 +44,14 @@ module Hcode
       end
 
       # A human-friendly label: the title if set, else the preview, else the id.
+      # Control characters and ANSI escapes are stripped so they cannot corrupt
+      # the line-oriented TUI rendering of the session selector.
       def label : String
-        return @title unless @title.empty?
-        return @preview unless @preview.empty?
-        @id[0...8]
+        raw = @title.empty? ? (@preview.empty? ? @id[0...8] : @preview) : @title
+        raw.gsub(/\e\[[0-9;?]*[A-Za-z]/, "")
+           .gsub(/\e[\(\)][A-B0-9]/, "")
+           .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+           .strip
       end
     end
 
@@ -214,7 +218,7 @@ module Hcode
             return "" unless parsed["type"]? == "turn.prompt"
             data = parsed["data"]?
             prompt = data.try(&.["prompt"]?).try(&.to_s) || ""
-            return prompt[0...80]
+            return sanitize_preview(prompt)[0...80]
           rescue JSON::ParseException
             next
           end
@@ -222,6 +226,16 @@ module Hcode
         ""
       rescue File::Error
         ""
+      end
+
+      # Strip ANSI escape sequences and other control characters so a prompt
+      # containing raw terminal escapes (e.g. cursor movement) cannot corrupt
+      # the session selector's line-oriented rendering.
+      private def sanitize_preview(text : String) : String
+        text.gsub(/\e\[[0-9;?]*[A-Za-z]/, "")
+            .gsub(/\e[\(\)][A-B0-9]/, "")
+            .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+            .strip
       end
     end
   end

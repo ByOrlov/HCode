@@ -410,7 +410,7 @@ module Hcode
         4
       end
 
-      private def self.strip_ansi(str : String) : String
+      def self.strip_ansi(str : String) : String
         return str unless str.includes?('\e')
         bytes = str.to_slice
         out_str = IO::Memory.new

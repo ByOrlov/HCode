@@ -1792,9 +1792,16 @@ module Hcode
 
       private def session_picker_label(entry : Session::SessionEntry) : String
         label = entry.label
-        preview = entry.preview.empty? ? "" : " — #{entry.preview}"
+        preview_raw = entry.preview
+        preview = preview_raw.empty? ? "" : " — #{sanitize_picker_text(preview_raw)}"
         time = entry.updated_at.to_s("%Y-%m-%d %H:%M")
         "#{label}#{preview}  (#{time})"
+      end
+
+      private def sanitize_picker_text(text : String) : String
+        CharWidth.strip_ansi(text)
+                 .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+                 .strip
       end
 
       private def handle_session_key(key : KeyEvent) : Nil
@@ -1840,7 +1847,7 @@ module Hcode
         end
         count.times do |rel|
           i = start + rel
-          item = @session_list.items[i]
+          item = CharWidth.truncate_to_width(@session_list.items[i], cols - 4)
           if i == @session_list.selected
             lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{ANSI.reset}"
           else
@@ -3195,10 +3202,12 @@ module Hcode
           info = LLM::KNOWN_PROVIDERS.find { |p| p.name == item }
           desc = info.try(&.description) || ""
           marker = item == @provider_name ? " (active)" : ""
+          line_text = "#{item.ljust(8)} #{desc}#{marker}"
+          line_text = CharWidth.truncate_to_width(line_text, cols - 6)
           if i == @provider_list.selected
-            lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item.ljust(8)} #{desc}#{marker}#{ANSI.reset}"
+            lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{line_text}#{ANSI.reset}"
           else
-            lines << "#{ANSI.color(@theme.colors.muted, nil)}    #{item.ljust(8)} #{desc}#{marker}#{ANSI.reset}"
+            lines << "#{ANSI.color(@theme.colors.muted, nil)}    #{line_text}#{ANSI.reset}"
           end
         end
         if @provider_list.scrolled_down?
@@ -3221,7 +3230,7 @@ module Hcode
         end
         count.times do |rel|
           i = start + rel
-          item = @model_list.items[i]
+          item = CharWidth.truncate_to_width(@model_list.items[i], cols - 4)
           marker = item == @model ? " (active)" : ""
           if i == @model_list.selected
             lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{marker}#{ANSI.reset}"
@@ -3256,7 +3265,7 @@ module Hcode
         end
         count.times do |rel|
           i = start + rel
-          item = list.items[i]
+          item = CharWidth.truncate_to_width(list.items[i], cols - 4)
           marker = item == active ? " (active)" : ""
           if i == list.selected
             lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{marker}#{ANSI.reset}"
@@ -3297,7 +3306,18 @@ module Hcode
         case name
         when "Bash"
           cmd = parsed["command"]?.try(&.to_s) || ""
-          ["$ #{cmd}"]
+          # Mirror ShellExecutionComponent in the JS TUI: split the command
+          # by `\n` so each source line is its own entry in the returned
+          # array (1 entry == 1 terminal row, the renderer invariant). The
+          # caller wraps each entry in dim + a 2-space indent; the first
+          # line carries the `$ ` prompt, continuations carry a 2-space
+          # prefix so they line up under the command body. Cap at
+          # TOOL_PREVIEW_LINES so a giant script doesn't flood the transcript.
+          cmd_lines = cmd.split('\n')
+          shown = cmd_lines.size > TOOL_PREVIEW_LINES ? cmd_lines[0...TOOL_PREVIEW_LINES] : cmd_lines
+          Array(String).new(shown.size) do |i|
+            i == 0 ? "$ #{shown[i]}" : "  #{shown[i]}"
+          end
         when "Read", "Write", "Edit"
           path = (parsed["path"]? || parsed["filePath"]?).try(&.to_s) || ""
           ["file: #{path}"]
