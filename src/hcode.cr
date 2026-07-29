@@ -212,6 +212,23 @@ module Hcode
       oauth_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
       oauth = LLM::OAuthCredentials.load(oauth_path)
 
+      # First-run gate: if no provider is configured yet, either run the
+      # interactive setup wizard (TTY) or fail with a clear message (non-TTY).
+      unless config.provider_name && config.provider_configured?
+        if STDIN.tty? && !hi_mode && prompt.nil?
+          run_setup_wizard(config)
+        else
+          STDERR.puts "Error: No provider configured."
+          STDERR.puts ""
+          STDERR.puts "Run `hcode` once in a terminal to set up interactively, or set:"
+          STDERR.puts "  export HCODE_PROVIDER=ollama    # or: moonshot, zai, lmstudio"
+          STDERR.puts "  export MOONSHOT_API_KEY=YOUR_KEY  # needed for moonshot/zai"
+          STDERR.puts ""
+          STDERR.puts "See `hcode --help` for details."
+          exit(2)
+        end
+      end
+
       provider = build_provider(config, oauth)
 
       if hi_mode
@@ -522,6 +539,34 @@ module Hcode
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
         exit(1)
       end
+    end
+
+    # Run the interactive setup wizard inside a minimal TUI. The wizard collects
+    # the provider choice and credentials, writes them to config.toml, then
+    # returns so the caller can build the real provider and proceed.
+    private def self.run_setup_wizard(config) : Nil
+      app = TUI::App.new
+      app.start_setup
+      app.on_setup_complete = ->(wizard : Setup::Wizard) do
+        wizard.apply_to(config)
+        config.save
+        app.provider_name = wizard.provider_name.to_s
+        app.model = wizard.model.to_s
+        nil
+      end
+
+      # The wizard runs in a closed TUI loop without an agent. On completion
+      # the on_setup_complete callback fires; we exit the loop by toggling
+      # the running flag indirectly via the app's setup_mode.
+      spawn do
+        # Wait for setup to finish, then stop the loop.
+        while app.setup_mode?
+          Fiber.yield
+        end
+        app.stop
+      end
+
+      app.run { |_text, _persisted| }
     end
 
     private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil)

@@ -336,6 +336,10 @@ module Hcode
         end
       end
 
+      def stop : Nil
+        @running = false
+      end
+
       # Enter setup mode: show the wizard transcript and open the provider
       # selector. Called once at first-run before the normal TUI loop starts.
       def start_setup : Nil
@@ -2999,7 +3003,12 @@ module Hcode
         if @editor.empty?
           # No content: park the cursor on the single placeholder row.
           prompt = "#{pc}#{ANSI.bold}>#{r} "
-          body = "#{dc}Send a message...#{r}"
+          placeholder_text = if @setup_mode && (w = @wizard) && !w.done?
+                               w.placeholder
+                             else
+                               "Send a message..."
+                             end
+          body = "#{dc}#{placeholder_text}#{r}"
           lines << build_editor_row(box_w, bc, r, prompt, body)
           @editor_cursor_visual_row = 0
           @editor_cursor_visual_col = 0
