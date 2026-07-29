@@ -47,6 +47,7 @@ require "./context/memory"
 require "./context/budget"
 require "./context/undo"
 require "./context/overflow"
+require "./profiled_memory"
 require "./loop/events"
 require "./loop/abort"
 require "./loop/dedup"
@@ -109,17 +110,10 @@ module Hcode
     # without a debugger (Crystal + Boehm GC is hard to attach to).
     class_property? ram_tracing : Bool = false
 
-    # Read current process RSS in MB from /proc/self/status. Returns 0.0
-    # outside Linux.
+    # Read current process RSS in MB. Delegates to ProfiledMemory so the
+    # profiler stays self-contained (no dependency back into the CLI module).
     def self.rss_mb : Float64
-      File.read("/proc/self/status").each_line do |line|
-        if line.starts_with?("VmRSS:")
-          return line.split[1].to_i / 1024.0
-        end
-      end
-      0.0
-    rescue
-      0.0
+      ProfiledMemory.rss_mb
     end
 
     # Build an RSS log line for a finished tool call. Returns nil when --ram
@@ -530,6 +524,8 @@ module Hcode
       task_service = Hcode::Tools::InMemoryTaskService.new
       Hcode::Tools::Task.service = task_service
 
+      register_profilers(agent, app, permission, task_service, system_prompt)
+
       app.on_clear = ->{ agent.context.clear }
       app.on_undo = ->{ agent.context.undo(1) }
       app.on_cancel = ->{ agent.cancel }
@@ -661,15 +657,15 @@ module Hcode
       # registered (no TodoList in this agent) or the list is empty.
       app.on_fetch_todos = -> : Array({String, String})? do
         todo_tool = agent.tools.get("TodoList")
-        return nil unless todo_tool.is_a?(Hcode::Tools::TodoList)
-        todos = todo_tool.todos
+        return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
+        todos = t.todos
         return nil if todos.empty?
-        todos.map { |t| {t.title, t.status.to_s.downcase} }
+        todos.map { |todo| {todo.title, todo.status.to_s.downcase} }
       end
       app.on_clear_todos = -> : Nil do
         todo_tool = agent.tools.get("TodoList")
-        return nil unless todo_tool.is_a?(Hcode::Tools::TodoList)
-        todo_tool.todos.clear
+        return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
+        t.todos.clear
         nil
       end
 
@@ -741,8 +737,8 @@ module Hcode
 
       app.session_id = store.meta_id? || ""
 
-      app.run(initial_prompt: initial_prompt) do |prompt_text|
-        store.append_simple("turn.prompt", "prompt", prompt_text)
+      app.run(initial_prompt: initial_prompt) do |prompt_text, persisted|
+        store.append_simple("turn.prompt", "prompt", prompt_text) unless persisted
 
         # tool_call_id → tool_name, populated by tool_call_start and consumed
         # by tool_result so the --ram log can show which tool ran. Lives one
@@ -796,6 +792,69 @@ module Hcode
           app.on_event(Loop::Event.error(ex.message.to_s))
         end
       end
+    end
+
+    # Register the long-lived growing collections with the memory profiler.
+    # Each closure captures an owner that is already alive for the whole
+    # process, so no extra GC pressure is introduced. `/memory` walks these
+    # on demand to report current consumption.
+    private def self.register_profilers(agent : Loop::Agent, app : TUI::App,
+                                        permission : Permission::Manager,
+                                        task_service : Tools::InMemoryTaskService,
+                                        system_prompt : String) : Nil
+      ctx_mem = agent.context
+      perm_mgr = permission
+      dedup = agent.dedup
+      tools = agent.tools
+      ProfiledMemory.register("context:history", "context history",
+        calc: ->{ ctx_mem.profiled_bytes }, count: ->{ ctx_mem.profiled_count })
+      ProfiledMemory.register("tui:messages", "TUI transcript",
+        calc: ->{ app.profiled_bytes }, count: ->{ app.profiled_count })
+      ProfiledMemory.register("tui:render_buf", "render buffer",
+        calc: ->{ app.render_buffer_bytes }, count: ->{ app.render_buffer_count })
+      ProfiledMemory.register("tui:queue", "queued messages",
+        calc: ->{ app.queue_bytes }, count: ->{ app.queue_count })
+      ProfiledMemory.register("perm:approvals", "session approvals",
+        calc: ->{ perm_mgr.profiled_bytes }, count: ->{ perm_mgr.profiled_count })
+      ProfiledMemory.register("tasks", "background tasks",
+        calc: ->{ task_service.profiled_bytes }, count: ->{ task_service.profiled_count })
+      ProfiledMemory.register("dedup:history", "dedup tracker",
+        calc: ->{ dedup.profiled_bytes }, count: ->{ dedup.profiled_count })
+      ProfiledMemory.register("tools:registry", "tool registry",
+        calc: ->{ tools.profiled_bytes }, count: ->{ tools.profiled_count })
+      ProfiledMemory.register("tui:width_cache", "width cache",
+        calc: ->{ TUI::CharWidth.cache_bytes }, count: ->{ TUI::CharWidth.cache_count })
+      unless system_prompt.empty?
+        sp = system_prompt
+        ProfiledMemory.register("system_prompt", "system prompt",
+          calc: ->{ sp.profiled_bytes })
+      end
+      todo_tool = tools.get("TodoList")
+      register_todo_profiler(todo_tool) if todo_tool.is_a?(Tools::TodoList)
+      register_cron_profiler
+      register_skill_profiler
+    end
+
+    private def self.register_todo_profiler(todo : Tools::TodoList) : Nil
+      ProfiledMemory.register("todos", "todo list",
+        calc: ->{ todo.profiled_bytes },
+        count: ->{ todo.profiled_count })
+    end
+
+    private def self.register_cron_profiler : Nil
+      service = Tools::Cron.service
+      return unless service.is_a?(Tools::InMemoryCronService)
+      ProfiledMemory.register("cron:tasks", "cron tasks",
+        calc: ->{ service.profiled_bytes },
+        count: ->{ service.profiled_count })
+    end
+
+    private def self.register_skill_profiler : Nil
+      catalog = Tools::Skill.catalog
+      return unless catalog.is_a?(Tools::InMemorySkillCatalog)
+      ProfiledMemory.register("skills:catalog", "skill catalog",
+        calc: ->{ catalog.profiled_bytes },
+        count: ->{ catalog.profiled_count })
     end
 
     private def self.export_session(memory, path : String) : Nil

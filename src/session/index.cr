@@ -44,14 +44,10 @@ module Hcode
       end
 
       # A human-friendly label: the title if set, else the preview, else the id.
-      # Control characters and ANSI escapes are stripped so they cannot corrupt
-      # the line-oriented TUI rendering of the session selector.
       def label : String
-        raw = @title.empty? ? (@preview.empty? ? @id[0...8] : @preview) : @title
-        raw.gsub(/\e\[[0-9;?]*[A-Za-z]/, "")
-           .gsub(/\e[\(\)][A-B0-9]/, "")
-           .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
-           .strip
+        return @title unless @title.empty?
+        return @preview unless @preview.empty?
+        @id[0...8]
       end
     end
 

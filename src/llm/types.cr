@@ -54,6 +54,10 @@ module Hcode
       def arguments : String
         @function.arguments
       end
+
+      def profiled_bytes : Int64
+        @id.profiled_bytes + @type.profiled_bytes + @function.profiled_bytes
+      end
     end
 
     struct ToolCallFunction
@@ -63,6 +67,10 @@ module Hcode
       property arguments : String
 
       def initialize(@name : String, @arguments : String = "")
+      end
+
+      def profiled_bytes : Int64
+        @name.profiled_bytes + @arguments.profiled_bytes
       end
     end
 
@@ -121,6 +129,14 @@ module Hcode
 
       def self.tool(content : String, tool_call_id : String) : Message
         new("tool", content, nil, tool_call_id)
+      end
+
+      def profiled_bytes : Int64
+        total = @role.profiled_bytes
+        total += @content.try(&.profiled_bytes) || 0_i64
+        total += @tool_calls.try(&.sum(&.profiled_bytes)) || 0_i64
+        total += @tool_call_id.try(&.profiled_bytes) || 0_i64
+        total
       end
     end
 

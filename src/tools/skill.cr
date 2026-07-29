@@ -400,6 +400,11 @@ module Hcode
                      @path : String? = nil,
                      @source : String = "project")
       end
+
+      def profiled_bytes : Int64
+        @name.profiled_bytes + @content.profiled_bytes + @source.profiled_bytes +
+          (@path.try(&.profiled_bytes) || 0_i64)
+      end
     end
 
     abstract class SkillCatalog
@@ -429,6 +434,14 @@ module Hcode
 
       def ready? : Bool
         true
+      end
+
+      def profiled_bytes : Int64
+        @skills.values.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @skills.size
       end
 
       def render_skill_prompt(skill : SkillDefinition,

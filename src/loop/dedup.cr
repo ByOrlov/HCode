@@ -13,6 +13,16 @@ module Hcode
       # entries per tool via FIFO shift.
       @call_history : Hash(String, Array(String)) = {} of String => Array(String)
 
+      # Deep byte size of the dedup tracker — per-tool rings of SHA-256 hex
+      # digests (64 bytes each), capped at MAX_HISTORY per tool.
+      def profiled_bytes : Int64
+        @call_history.values.flatten.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @call_history.values.sum(&.size)
+      end
+
       def check_and_track(tool_name : String, canonical_args : String) : DedupAction
         key    = tool_name
         digest = Digest::SHA256.hexdigest(canonical_args)

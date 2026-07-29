@@ -18,6 +18,14 @@ module Hcode
 
       getter todos : Array(TodoItem) = [] of TodoItem
 
+      def profiled_bytes : Int64
+        @todos.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @todos.size
+      end
+
       def name : String
         "TodoList"
       end
@@ -126,6 +134,10 @@ module Hcode
       property status : TodoStatus
 
       def initialize(@title : String, @status : TodoStatus)
+      end
+
+      def profiled_bytes : Int64
+        @title.profiled_bytes
       end
     end
   end

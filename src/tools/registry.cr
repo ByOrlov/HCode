@@ -23,6 +23,14 @@ module Hcode
         @tools.size
       end
 
+      def profiled_bytes : Int64
+        @tools.keys.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @tools.size
+      end
+
       def each(&block : Tool ->)
         @tools.each_value(&block)
       end

@@ -84,6 +84,10 @@ module Hcode
                      @last_fired_at : Int64? = nil,
                      @coalesced_count : Int32 = 0)
       end
+
+      def profiled_bytes : Int64
+        @id.profiled_bytes + @cron.profiled_bytes + @prompt.profiled_bytes
+      end
     end
 
     struct CronTaskInit
@@ -119,6 +123,14 @@ module Hcode
       @next_fires = {} of String => Int64
 
       def initialize(@enabled : Bool = true)
+      end
+
+      def profiled_bytes : Int64
+        @tasks.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @tasks.size
       end
 
       def enabled? : Bool

@@ -47,6 +47,17 @@ module Hcode
       def initialize(@mode : Mode = Mode::Manual)
       end
 
+      # Deep byte size of the session-approval cache (SHA-256 hex keys, 64
+      # bytes each). Used by the `/memory` profiler. There is no eviction, so
+      # this set grows unbounded across a long session.
+      def profiled_bytes : Int64
+        @session_approvals.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @session_approvals.size
+      end
+
       def check(tool_name : String, args : String, on_event : Loop::Event ->) : Bool
         # User-configured rules take precedence over the mode default.
         # A deny rule always blocks, even in yolo. An allow rule bypasses

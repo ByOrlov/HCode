@@ -44,6 +44,14 @@ module Hcode
         @@width_cache.clear
       end
 
+      def self.cache_bytes : Int64
+        @@width_cache.keys.sum(&.profiled_bytes)
+      end
+
+      def self.cache_count : Int32
+        @@width_cache.size
+      end
+
       # ------------------------------------------------------------------------
       # Classification tables
       # ------------------------------------------------------------------------

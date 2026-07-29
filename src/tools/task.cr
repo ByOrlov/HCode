@@ -83,6 +83,13 @@ module Hcode
                      @pid : Int64? = nil,
                      @exit_code : Int32? = nil)
       end
+
+      def profiled_bytes : Int64
+        total = @task_id.profiled_bytes + @description.profiled_bytes
+        total += @stop_reason.try(&.profiled_bytes) || 0_i64
+        total += @command.try(&.profiled_bytes) || 0_i64
+        total
+      end
     end
 
     struct AgentTaskOutputSnapshot
@@ -99,6 +106,10 @@ module Hcode
                      @truncated : Bool = false,
                      @full_output_available : Bool = false,
                      @preview : String = "")
+      end
+
+      def profiled_bytes : Int64
+        (@output_path.try(&.profiled_bytes) || 0_i64) + @preview.profiled_bytes
       end
     end
 
@@ -126,6 +137,16 @@ module Hcode
       @outputs = {} of String => AgentTaskOutputSnapshot
 
       def initialize
+      end
+
+      def profiled_bytes : Int64
+        tasks_bytes = @tasks.values.sum(&.profiled_bytes)
+        outputs_bytes = @outputs.values.sum(&.profiled_bytes)
+        tasks_bytes + outputs_bytes
+      end
+
+      def profiled_count : Int32
+        @tasks.size
       end
 
       def register(info : AgentTaskInfo) : AgentTaskInfo

@@ -56,6 +56,7 @@ module Hcode
         CommandInfo.new("/login", "Show how to configure credentials"),
         CommandInfo.new("/logout", "Clear credentials from config"),
         CommandInfo.new("/tasks", "Browse background tasks"),
+        CommandInfo.new("/memory", "Show memory profile of live collections"),
       ]
 
       def self.names : Array(String)

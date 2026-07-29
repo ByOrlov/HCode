@@ -10,9 +10,9 @@ module Hcode
       getter context : Context::Memory
       getter tools : Tools::Registry
       getter permission : Permission::Manager
+      getter dedup : DedupTracker = DedupTracker.new
       property abort_controller : AbortController = AbortController.new
 
-      @dedup : DedupTracker = DedupTracker.new
       @overflow_recovery : Context::Overflow::Recovery = Context::Overflow::Recovery.new
       @max_steps : Int32 = 100
 

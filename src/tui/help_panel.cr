@@ -22,15 +22,15 @@ module Hcode
       end
 
       DEFAULT_SHORTCUTS = [
-        Shortcut.new("Enter", "Submit"),
+        Shortcut.new("Enter", "Submit (queues while agent runs)"),
         Shortcut.new("Shift+Enter", "Insert newline"),
         Shortcut.new("Ctrl+C", "Interrupt stream / clear input"),
         Shortcut.new("Ctrl+D", "Exit (on empty input)"),
-        Shortcut.new("Ctrl+S", "Steer — queue a follow-up during streaming"),
+        Shortcut.new("Ctrl+S", "Steer — inject into running turn"),
         Shortcut.new("Ctrl+G", "Edit in external editor ($VISUAL / $EDITOR)"),
         Shortcut.new("Ctrl+E", "Expand pasted block"),
         Shortcut.new("Esc", "Close dialogs / interrupt streaming"),
-        Shortcut.new("Up/Down", "Browse input history"),
+        Shortcut.new("Up/Down", "Browse input history / scroll"),
       ]
 
       property? visible : Bool = false

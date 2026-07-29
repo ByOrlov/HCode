@@ -8,6 +8,12 @@ module Hcode
 
       def initialize(@tool_call_id : String, @tool_args : String)
       end
+
+      def profiled_bytes : Int64
+        total = @tool_call_id.profiled_bytes + @tool_args.profiled_bytes
+        total += @tool_result.try(&.profiled_bytes) || 0_i64
+        total
+      end
     end
 
     struct Message
@@ -45,6 +51,27 @@ module Hcode
       property ram_line : String? = nil
 
       def initialize(@role : String, @content : String = "")
+      end
+
+      # Deep byte size of this transcript entry — the strings it carries.
+      # `tool_display` (diff before/after) is included when present.
+      def profiled_bytes : Int64
+        total = @role.profiled_bytes + @content.profiled_bytes
+        total += @tool_call_id.profiled_bytes unless @tool_call_id.empty?
+        total += @tool_name.try(&.profiled_bytes) || 0_i64
+        total += @tool_args.try(&.profiled_bytes) || 0_i64
+        total += @tool_result.try(&.profiled_bytes) || 0_i64
+        total += @summary.profiled_bytes unless @summary.empty?
+        total += @tip.profiled_bytes unless @tip.empty?
+        total += @ram_line.try(&.profiled_bytes) || 0_i64
+        if d = @tool_display
+          total += d.before.try(&.profiled_bytes) || 0_i64
+          total += d.after.try(&.profiled_bytes) || 0_i64
+        end
+        if group = @read_group
+          total += group.sum(&.profiled_bytes)
+        end
+        total
       end
     end
 
@@ -125,7 +152,7 @@ module Hcode
       # the array" and "actually started its turn" so a queued-message
       # dispatcher doesn't see an empty queue + idle phase and race itself.
       @dispatch_pending : Bool = false
-      @run_turn_cb : (String -> Nil)?
+      @run_turn_cb : (String, Bool -> Nil)?
       # Plan mode mirrors TS: while on, tools that mutate state are blocked
       # and the agent only researches. Toggled via `/plan` or `EnterPlanMode`.
       @plan_mode : Bool = false
@@ -288,7 +315,7 @@ module Hcode
         @keep_recent_turns = read_keep_recent_turns
       end
 
-      def run(initial_prompt : String? = nil, &run_turn : String -> Nil) : Nil
+      def run(initial_prompt : String? = nil, &run_turn : String, Bool -> Nil) : Nil
         @terminal.raw!
         @terminal.refresh_size
         @run_turn_cb = run_turn
@@ -365,6 +392,32 @@ module Hcode
 
       def add_message(role : String, content : String) : Nil
         @messages << Message.new(role, content)
+      end
+
+      # Deep byte size of the on-screen transcript — the TUI-side duplicate of
+      # the conversation history. Used by the `/memory` profiler.
+      def profiled_bytes : Int64
+        @messages.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @messages.size
+      end
+
+      def render_buffer_bytes : Int64
+        @previous_lines.sum(&.profiled_bytes)
+      end
+
+      def render_buffer_count : Int32
+        @previous_lines.size
+      end
+
+      def queue_bytes : Int64
+        @queue.sum(&.text.profiled_bytes)
+      end
+
+      def queue_count : Int32
+        @queue.size
       end
 
       # Rebuild the visible TUI transcript from a replayed context memory.
@@ -752,28 +805,18 @@ module Hcode
           @exit_key = "CTRL+D"
           @dirty = true
         when .enter?
-          if !@agent_busy
-            if pasted = @pasted_block
-              editor_text = @editor.text
-              if editor_text.includes?(paste_marker)
-                final_text = editor_text.sub(paste_marker, pasted)
-                @pasted_block = nil
-                @pasted_lines = 0
-                @editor.clear
+          if pasted = @pasted_block
+            editor_text = @editor.text
+            if editor_text.includes?(paste_marker)
+              final_text = editor_text.sub(paste_marker, pasted)
+              @pasted_block = nil
+              @pasted_lines = 0
+              @editor.clear
 
-                if final_text.starts_with?('/')
-                  handle_slash_command(final_text)
-                else
-                  submit_message(final_text)
-                end
-              elsif !@editor.empty?
-                text = @editor.submit!
-
-                if text.starts_with?('/')
-                  handle_slash_command(text)
-                else
-                  submit_message(text)
-                end
+              if final_text.starts_with?('/')
+                handle_slash_command(final_text)
+              else
+                submit_message(final_text)
               end
             elsif !@editor.empty?
               text = @editor.submit!
@@ -783,6 +826,14 @@ module Hcode
               else
                 submit_message(text)
               end
+            end
+          elsif !@editor.empty?
+            text = @editor.submit!
+
+            if text.starts_with?('/')
+              handle_slash_command(text)
+            else
+              submit_message(text)
             end
           end
         when .ctrl_s?
@@ -796,8 +847,8 @@ module Hcode
           if @show_command_hints && @command_hints.size > 0
             @command_hint_selected = (@command_hint_selected - 1 + @command_hints.size) % @command_hints.size
             @dirty = true
-          elsif @editor.empty? || @agent_busy
-            @scroll_offset += 1 if @agent_busy
+          elsif @editor.empty?
+            @scroll_offset += 1
             @dirty = true
           else
             @editor.handle_input(key)
@@ -806,7 +857,7 @@ module Hcode
           if @show_command_hints && @command_hints.size > 0
             @command_hint_selected = (@command_hint_selected + 1) % @command_hints.size
             @dirty = true
-          elsif @editor.empty? || @agent_busy
+          elsif @editor.empty?
             @scroll_offset -= 1 if @scroll_offset > 0
             @dirty = true
           else
@@ -830,18 +881,16 @@ module Hcode
             @editor.clear
           end
         when .paste?
-          if !@agent_busy
-            if text = key.text
-              paste_lines = text.count('\n') + 1
-              if paste_lines > 10 || text.size > 1000
-                @pasted_block = text
-                @pasted_lines = paste_lines
-                @editor.insert_text(paste_marker)
-              else
-                @editor.insert_text(text)
-              end
-              update_command_hints
+          if text = key.text
+            paste_lines = text.count('\n') + 1
+            if paste_lines > 10 || text.size > 1000
+              @pasted_block = text
+              @pasted_lines = paste_lines
+              @editor.insert_text(paste_marker)
+            else
+              @editor.insert_text(text)
             end
+            update_command_hints
           end
         when .ctrl_e?
           if pasted = @pasted_block
@@ -865,10 +914,8 @@ module Hcode
             @editor.handle_input(key)
           end
         else
-          if !@agent_busy
-            @editor.handle_input(key)
-            update_command_hints
-          end
+          @editor.handle_input(key)
+          update_command_hints
         end
 
         @dirty = true
@@ -931,7 +978,13 @@ module Hcode
       # Begin a turn for `text`: add to transcript, flip busy, spawn the
       # run_turn fiber. Called for the first message and for each drained
       # queued message.
-      private def start_turn(text : String) : Nil
+      # Begin a turn for `text`: add to transcript, flip busy, spawn the
+      # run_turn fiber. Called for the first message and for each drained
+      # queued message.
+      # `persisted` is false when the message was already written to the wire
+      # log (e.g. it sat in the queue and `enqueue_message` persisted it); the
+      # drain path sets it to avoid a duplicate `turn.prompt` record.
+      private def start_turn(text : String, persisted : Bool = false) : Nil
         @messages << Message.new("user", text)
         @current_step = 0
         @step_tool_count = 0
@@ -941,7 +994,7 @@ module Hcode
         @spinner.start
         @dirty = true
 
-        spawn { @run_turn_cb.not_nil!.call(text) }
+        spawn { @run_turn_cb.not_nil!.call(text, persisted) }
       end
 
       # Shift one queued message (FIFO) and start a fresh turn for it.
@@ -959,7 +1012,8 @@ module Hcode
         # would see agent_busy=true and re-queue the message).
         spawn(same_thread: true) do
           @dispatch_pending = false
-          start_turn(next_msg.text)
+          # Already persisted when enqueued — skip the duplicate write.
+          start_turn(next_msg.text, persisted: true)
         end
       end
 
@@ -1031,7 +1085,7 @@ module Hcode
         if @is_compacting
           "will send after compaction"
         elsif @agent_busy
-          "Ctrl+S to steer immediately · sends after current turn"
+          "Ctrl+S steers now · Enter queues for next turn"
         else
           "will send next"
         end
@@ -1198,22 +1252,38 @@ module Hcode
           @dirty = true
           return
         when "/new"
-          @on_new_session.try(&.call)
-          @messages.clear
-          @messages << Message.new("system", "New session started.")
+          if @agent_busy
+            @messages << Message.new("error", "Cannot start a new session while a turn is running. Wait or interrupt first.")
+          else
+            @on_new_session.try(&.call)
+            @messages.clear
+            @messages << Message.new("system", "New session started.")
+          end
         when "/sessions", "/resume"
-          open_session_selector(:resume)
+          if @agent_busy
+            @messages << Message.new("error", "Cannot switch sessions while a turn is running.")
+          else
+            open_session_selector(:resume)
+          end
         when "/restore"
-          open_session_selector(:restore)
+          if @agent_busy
+            @messages << Message.new("error", "Cannot restore a session while a turn is running.")
+          else
+            open_session_selector(:restore)
+          end
         when "/fork"
-          if cb = @on_fork
+          if @agent_busy
+            @messages << Message.new("error", "Cannot fork while a turn is running. Wait or interrupt first.")
+          elsif cb = @on_fork
             cb.call
             @messages << Message.new("system", "Session forked.")
           else
             @messages << Message.new("error", "Session fork is not wired up.")
           end
         when "/archive"
-          if cb = @on_archive
+          if @agent_busy
+            @messages << Message.new("error", "Cannot archive while a turn is running.")
+          elsif cb = @on_archive
             cb.call
             @messages << Message.new("system", "Session archived. Use /restore to bring it back.")
           else
@@ -1229,9 +1299,13 @@ module Hcode
             @messages << Message.new("error", "Session rename is not wired up.")
           end
         when "/clear"
-          @on_clear.try(&.call)
-          @messages.clear
-          @messages << Message.new("system", "Conversation cleared.")
+          if @agent_busy
+            @messages << Message.new("error", "Cannot clear while a turn is running. Wait or interrupt first.")
+          else
+            @on_clear.try(&.call)
+            @messages.clear
+            @messages << Message.new("system", "Conversation cleared.")
+          end
         when "/compact"
           if @agent_busy
             @messages << Message.new("error", "Cannot compact while a turn is running. Wait or interrupt first.")
@@ -1257,7 +1331,9 @@ module Hcode
           end
           @messages << Message.new("system", stats.strip)
         when "/undo"
-          if args.strip.empty?
+          if @agent_busy
+            @messages << Message.new("error", "Cannot undo while a turn is running. Wait or interrupt first.")
+          elsif args.strip.empty?
             open_undo_selector
           else
             count = args.strip.to_i? || 1
@@ -1516,6 +1592,8 @@ module Hcode
           end
         when "/tasks", "/task"
           open_tasks_browser
+        when "/memory"
+          @messages << Message.new("system", ProfiledMemory.format_report)
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
@@ -1791,17 +1869,24 @@ module Hcode
       end
 
       private def session_picker_label(entry : Session::SessionEntry) : String
-        label = entry.label
+        label = sanitize_picker_text(entry.label)
         preview_raw = entry.preview
         preview = preview_raw.empty? ? "" : " — #{sanitize_picker_text(preview_raw)}"
         time = entry.updated_at.to_s("%Y-%m-%d %H:%M")
         "#{label}#{preview}  (#{time})"
       end
 
+      # Strip ANSI escapes, literal caret-escaped sequences (^[[A etc.), and
+      # other control characters that corrupt line-oriented TUI rendering.
       private def sanitize_picker_text(text : String) : String
-        CharWidth.strip_ansi(text)
-                 .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
-                 .strip
+        cleaned = CharWidth.strip_ansi(text)
+        # Remove literal caret-escaped ANSI sequences (e.g. "^[[A" from pasted
+        # terminal output) that appear as visible garbage in the selector.
+        cleaned = cleaned.gsub(/\^\[\[[0-9;?]*[A-Za-z]/, "")
+        cleaned = cleaned.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+        # Collapse whitespace runs (including embedded newlines/tabs) to spaces.
+        cleaned = cleaned.gsub(/\s+/, " ").strip
+        cleaned
       end
 
       private def handle_session_key(key : KeyEvent) : Nil
@@ -2974,6 +3059,7 @@ module Hcode
       TIPS = [
         "Ctrl+S steer · Ctrl+G editor",
         "↑↓ scroll · /debug for full output",
+        "Enter queues while agent runs",
         "/help for all commands",
         "/usage for tokens · /queue clear",
         "Ctrl+C twice to exit",

@@ -38,6 +38,14 @@ module Hcode
         @lines.size == 1 && @lines[0].empty?
       end
 
+      def profiled_bytes : Int64
+        @history.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @history.size
+      end
+
       def insert_text(text : String) : Nil
         return if text.empty?
 

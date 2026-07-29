@@ -6,6 +6,10 @@ module Hcode
 
       def initialize(@message : LLM::Message, @origin : MessageOrigin = MessageOrigin::Normal)
       end
+
+      def profiled_bytes : Int64
+        @message.profiled_bytes
+      end
     end
 
     enum MessageOrigin
@@ -105,6 +109,18 @@ module Hcode
       private def update_token_count : Nil
         msgs = @history.map(&.message)
         @token_count = LLM::TokenCounter.estimate(msgs)
+      end
+
+      # Deep byte size of the conversation history — the main memory consumer.
+      # Used by the `/memory` profiler (`ProfiledMemory`). Sums the profiled
+      # bytes of every retained message; array overhead itself is negligible
+      # relative to the string payloads.
+      def profiled_bytes : Int64
+        @history.sum(&.profiled_bytes)
+      end
+
+      def profiled_count : Int32
+        @history.size
       end
     end
   end
