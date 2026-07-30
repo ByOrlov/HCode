@@ -44,6 +44,27 @@ describe Hcode::TUI::CharWidth do
       Hcode::TUI::CharWidth.visible_width("e\u0301").should eq(1)
     end
 
+    it "measures Devanagari matras (Hindi) as zero-width" do
+      # हिनदी = ह(U+0939,1) + ि(U+093F,0) + न(U+0928,1) + द(U+0926,1) + ी(U+0940,0) = 3
+      # Regression for the markdown table misalignment: U+093F / U+0940 were
+      # previously missing from the zero-width table and counted as width 1.
+      Hcode::TUI::CharWidth.visible_width("हिनदी").should eq(3)
+      Hcode::TUI::CharWidth.codepoint_width(0x093F_u32).should eq(0)
+      Hcode::TUI::CharWidth.codepoint_width(0x0940_u32).should eq(0)
+    end
+
+    it "measures Korean Hangul syllables as width 2 each" do
+      # 한국어 = 3 syllables, each width 2 = 6
+      Hcode::TUI::CharWidth.visible_width("한국어").should eq(6)
+    end
+
+    it "measures other Indic combining marks as zero-width" do
+      # Thai vowel signs (U+0E34..U+0E3A are Marks)
+      Hcode::TUI::CharWidth.visible_width("ครับ").should eq(3)
+      # Tamil combining marks
+      Hcode::TUI::CharWidth.codepoint_width(0x0BC2_u32).should eq(0)
+    end
+
     it "treats a ZWJ emoji sequence as a single width-2 cluster" do
       # family: U+1F468 ZWJ U+1F469  -> one cluster, width 2
       Hcode::TUI::CharWidth.visible_width("\u{1F468}\u200D\u{1F469}").should eq(2)

@@ -337,6 +337,28 @@ describe Hcode::TUI::Markdown do
       right_col.uniq.size.should eq(1)
     end
 
+    it "keeps columns aligned when a cell contains Devanagari (Hindi)" do
+      # Regression: U+093F / U+0940 matras were mis-measured as width 1,
+      # shifting the right border of the Hindi row left of the others.
+      text = md_render_text(md, "| Lang | Word |\n|---|---|\n| EN | hi |\n| HI | \u0939\u093F\u0928\u0926\u0940 |", 40)
+      lines = text.split('\n')
+      right_col = lines.map do |l|
+        idx = l.rindex('│')
+        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+      end.compact
+      right_col.uniq.size.should eq(1)
+    end
+
+    it "keeps columns aligned when a cell contains Korean Hangul" do
+      text = md_render_text(md, "| Lang | Word |\n|---|---|\n| EN | hi |\n| KO | \uD55C\uAD6D\uC5B4 |", 40)
+      lines = text.split('\n')
+      right_col = lines.map do |l|
+        idx = l.rindex('│')
+        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+      end.compact
+      right_col.uniq.size.should eq(1)
+    end
+
     it "indents every table line with a 2-space margin" do
       text = md_render_text(md, "| A | B |\n|---|---|\n| 1 | 2 |")
       text.split('\n').reject(&.empty?).each do |l|

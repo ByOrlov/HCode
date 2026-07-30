@@ -137,51 +137,367 @@ module Hcode
         {0x2B55_u32, 0x2B55_u32}, # ⭕
       }
 
-      # Combining / formatting codepoints that contribute no advance width
-      # (counterpart of `zeroWidthRegex`). Note: ZWJ (U+200D) is handled
-      # specially by the grapheme walker, so it is excluded here.
-      ZERO_WIDTH_RANGES = {
-        {0x0300_u32, 0x036F_u32}, # Combining Diacritical Marks
-        {0x0483_u32, 0x0489_u32},
-        {0x0591_u32, 0x05BD_u32},
-        {0x05BF_u32, 0x05BF_u32},
-        {0x05C1_u32, 0x05C2_u32},
-        {0x05C4_u32, 0x05C5_u32},
-        {0x05C7_u32, 0x05C7_u32},
-        {0x0600_u32, 0x0605_u32},
-        {0x0610_u32, 0x061A_u32},
-        {0x064B_u32, 0x065F_u32},
-        {0x0670_u32, 0x0670_u32},
-        {0x06D6_u32, 0x06DC_u32},
-        {0x06DF_u32, 0x06E4_u32},
-        {0x06E7_u32, 0x06E8_u32},
-        {0x06EA_u32, 0x06ED_u32},
-        {0x070F_u32, 0x070F_u32},
-        {0x0711_u32, 0x0711_u32},
-        {0x0730_u32, 0x074A_u32},
-        {0x07A6_u32, 0x07B0_u32},
-        {0x07EB_u32, 0x07F3_u32},
-        {0x0816_u32, 0x0819_u32},
-        {0x081B_u32, 0x0823_u32},
-        {0x0825_u32, 0x0827_u32},
-        {0x0829_u32, 0x082D_u32},
-        {0x0859_u32, 0x085B_u32},
-        {0x08D3_u32, 0x08E1_u32},
-        {0x08E3_u32, 0x0902_u32},
-        {0x093A_u32, 0x093A_u32},
-        {0x093C_u32, 0x093C_u32},
-        {0x0941_u32, 0x0948_u32},
-        {0x1AB0_u32, 0x1AFF_u32}, # Combining Diacritical Marks Extended
-        {0x1DC0_u32, 0x1DFF_u32}, # Combining Diacritical Marks Supplement
-        {0x200B_u32, 0x200C_u32}, # Zero-width space, ZWNJ (ZWJ handled in walker)
-        {0x200E_u32, 0x200F_u32}, # LRM/RLM
+      # All Unicode General_Category=Mark codepoints (Mn|Mc|Me), generated from
+      # the engine's `\p{M}` support and coalesced into consecutive ranges.
+      # This is the complete `\p{Mark}` counterpart that the TS reference applies
+      # via `zeroWidthRegex = /(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Mark}|\p{Surrogate})+/v`.
+      # The previous explicit table only covered a fraction of Devanagari and
+      # other Indic matras, so e.g. U+093F / U+0940 were mis-measured as width 1
+      # and misaligned markdown tables containing Hindi. Sorted ascending;
+      # queried via `mark?` (binary search). ZWJ (U+200D) is NOT a Mark and is
+      # consumed explicitly by the grapheme walker.
+      MARK_RANGES = [
+        {0x300_u32, 0x36F_u32},
+        {0x483_u32, 0x489_u32},
+        {0x591_u32, 0x5BD_u32},
+        {0x5BF_u32, 0x5BF_u32},
+        {0x5C1_u32, 0x5C2_u32},
+        {0x5C4_u32, 0x5C5_u32},
+        {0x5C7_u32, 0x5C7_u32},
+        {0x610_u32, 0x61A_u32},
+        {0x64B_u32, 0x65F_u32},
+        {0x670_u32, 0x670_u32},
+        {0x6D6_u32, 0x6DC_u32},
+        {0x6DF_u32, 0x6E4_u32},
+        {0x6E7_u32, 0x6E8_u32},
+        {0x6EA_u32, 0x6ED_u32},
+        {0x711_u32, 0x711_u32},
+        {0x730_u32, 0x74A_u32},
+        {0x7A6_u32, 0x7B0_u32},
+        {0x7EB_u32, 0x7F3_u32},
+        {0x7FD_u32, 0x7FD_u32},
+        {0x816_u32, 0x819_u32},
+        {0x81B_u32, 0x823_u32},
+        {0x825_u32, 0x827_u32},
+        {0x829_u32, 0x82D_u32},
+        {0x859_u32, 0x85B_u32},
+        {0x897_u32, 0x89F_u32},
+        {0x8CA_u32, 0x8E1_u32},
+        {0x8E3_u32, 0x903_u32},
+        {0x93A_u32, 0x93C_u32},
+        {0x93E_u32, 0x94F_u32},
+        {0x951_u32, 0x957_u32},
+        {0x962_u32, 0x963_u32},
+        {0x981_u32, 0x983_u32},
+        {0x9BC_u32, 0x9BC_u32},
+        {0x9BE_u32, 0x9C4_u32},
+        {0x9C7_u32, 0x9C8_u32},
+        {0x9CB_u32, 0x9CD_u32},
+        {0x9D7_u32, 0x9D7_u32},
+        {0x9E2_u32, 0x9E3_u32},
+        {0x9FE_u32, 0x9FE_u32},
+        {0xA01_u32, 0xA03_u32},
+        {0xA3C_u32, 0xA3C_u32},
+        {0xA3E_u32, 0xA42_u32},
+        {0xA47_u32, 0xA48_u32},
+        {0xA4B_u32, 0xA4D_u32},
+        {0xA51_u32, 0xA51_u32},
+        {0xA70_u32, 0xA71_u32},
+        {0xA75_u32, 0xA75_u32},
+        {0xA81_u32, 0xA83_u32},
+        {0xABC_u32, 0xABC_u32},
+        {0xABE_u32, 0xAC5_u32},
+        {0xAC7_u32, 0xAC9_u32},
+        {0xACB_u32, 0xACD_u32},
+        {0xAE2_u32, 0xAE3_u32},
+        {0xAFA_u32, 0xAFF_u32},
+        {0xB01_u32, 0xB03_u32},
+        {0xB3C_u32, 0xB3C_u32},
+        {0xB3E_u32, 0xB44_u32},
+        {0xB47_u32, 0xB48_u32},
+        {0xB4B_u32, 0xB4D_u32},
+        {0xB55_u32, 0xB57_u32},
+        {0xB62_u32, 0xB63_u32},
+        {0xB82_u32, 0xB82_u32},
+        {0xBBE_u32, 0xBC2_u32},
+        {0xBC6_u32, 0xBC8_u32},
+        {0xBCA_u32, 0xBCD_u32},
+        {0xBD7_u32, 0xBD7_u32},
+        {0xC00_u32, 0xC04_u32},
+        {0xC3C_u32, 0xC3C_u32},
+        {0xC3E_u32, 0xC44_u32},
+        {0xC46_u32, 0xC48_u32},
+        {0xC4A_u32, 0xC4D_u32},
+        {0xC55_u32, 0xC56_u32},
+        {0xC62_u32, 0xC63_u32},
+        {0xC81_u32, 0xC83_u32},
+        {0xCBC_u32, 0xCBC_u32},
+        {0xCBE_u32, 0xCC4_u32},
+        {0xCC6_u32, 0xCC8_u32},
+        {0xCCA_u32, 0xCCD_u32},
+        {0xCD5_u32, 0xCD6_u32},
+        {0xCE2_u32, 0xCE3_u32},
+        {0xCF3_u32, 0xCF3_u32},
+        {0xD00_u32, 0xD03_u32},
+        {0xD3B_u32, 0xD3C_u32},
+        {0xD3E_u32, 0xD44_u32},
+        {0xD46_u32, 0xD48_u32},
+        {0xD4A_u32, 0xD4D_u32},
+        {0xD57_u32, 0xD57_u32},
+        {0xD62_u32, 0xD63_u32},
+        {0xD81_u32, 0xD83_u32},
+        {0xDCA_u32, 0xDCA_u32},
+        {0xDCF_u32, 0xDD4_u32},
+        {0xDD6_u32, 0xDD6_u32},
+        {0xDD8_u32, 0xDDF_u32},
+        {0xDF2_u32, 0xDF3_u32},
+        {0xE31_u32, 0xE31_u32},
+        {0xE34_u32, 0xE3A_u32},
+        {0xE47_u32, 0xE4E_u32},
+        {0xEB1_u32, 0xEB1_u32},
+        {0xEB4_u32, 0xEBC_u32},
+        {0xEC8_u32, 0xECE_u32},
+        {0xF18_u32, 0xF19_u32},
+        {0xF35_u32, 0xF35_u32},
+        {0xF37_u32, 0xF37_u32},
+        {0xF39_u32, 0xF39_u32},
+        {0xF3E_u32, 0xF3F_u32},
+        {0xF71_u32, 0xF84_u32},
+        {0xF86_u32, 0xF87_u32},
+        {0xF8D_u32, 0xF97_u32},
+        {0xF99_u32, 0xFBC_u32},
+        {0xFC6_u32, 0xFC6_u32},
+        {0x102B_u32, 0x103E_u32},
+        {0x1056_u32, 0x1059_u32},
+        {0x105E_u32, 0x1060_u32},
+        {0x1062_u32, 0x1064_u32},
+        {0x1067_u32, 0x106D_u32},
+        {0x1071_u32, 0x1074_u32},
+        {0x1082_u32, 0x108D_u32},
+        {0x108F_u32, 0x108F_u32},
+        {0x109A_u32, 0x109D_u32},
+        {0x135D_u32, 0x135F_u32},
+        {0x1712_u32, 0x1715_u32},
+        {0x1732_u32, 0x1734_u32},
+        {0x1752_u32, 0x1753_u32},
+        {0x1772_u32, 0x1773_u32},
+        {0x17B4_u32, 0x17D3_u32},
+        {0x17DD_u32, 0x17DD_u32},
+        {0x180B_u32, 0x180D_u32},
+        {0x180F_u32, 0x180F_u32},
+        {0x1885_u32, 0x1886_u32},
+        {0x18A9_u32, 0x18A9_u32},
+        {0x1920_u32, 0x192B_u32},
+        {0x1930_u32, 0x193B_u32},
+        {0x1A17_u32, 0x1A1B_u32},
+        {0x1A55_u32, 0x1A5E_u32},
+        {0x1A60_u32, 0x1A7C_u32},
+        {0x1A7F_u32, 0x1A7F_u32},
+        {0x1AB0_u32, 0x1ACE_u32},
+        {0x1B00_u32, 0x1B04_u32},
+        {0x1B34_u32, 0x1B44_u32},
+        {0x1B6B_u32, 0x1B73_u32},
+        {0x1B80_u32, 0x1B82_u32},
+        {0x1BA1_u32, 0x1BAD_u32},
+        {0x1BE6_u32, 0x1BF3_u32},
+        {0x1C24_u32, 0x1C37_u32},
+        {0x1CD0_u32, 0x1CD2_u32},
+        {0x1CD4_u32, 0x1CE8_u32},
+        {0x1CED_u32, 0x1CED_u32},
+        {0x1CF4_u32, 0x1CF4_u32},
+        {0x1CF7_u32, 0x1CF9_u32},
+        {0x1DC0_u32, 0x1DFF_u32},
+        {0x20D0_u32, 0x20F0_u32},
+        {0x2CEF_u32, 0x2CF1_u32},
+        {0x2D7F_u32, 0x2D7F_u32},
+        {0x2DE0_u32, 0x2DFF_u32},
+        {0x302A_u32, 0x302F_u32},
+        {0x3099_u32, 0x309A_u32},
+        {0xA66F_u32, 0xA672_u32},
+        {0xA674_u32, 0xA67D_u32},
+        {0xA69E_u32, 0xA69F_u32},
+        {0xA6F0_u32, 0xA6F1_u32},
+        {0xA802_u32, 0xA802_u32},
+        {0xA806_u32, 0xA806_u32},
+        {0xA80B_u32, 0xA80B_u32},
+        {0xA823_u32, 0xA827_u32},
+        {0xA82C_u32, 0xA82C_u32},
+        {0xA880_u32, 0xA881_u32},
+        {0xA8B4_u32, 0xA8C5_u32},
+        {0xA8E0_u32, 0xA8F1_u32},
+        {0xA8FF_u32, 0xA8FF_u32},
+        {0xA926_u32, 0xA92D_u32},
+        {0xA947_u32, 0xA953_u32},
+        {0xA980_u32, 0xA983_u32},
+        {0xA9B3_u32, 0xA9C0_u32},
+        {0xA9E5_u32, 0xA9E5_u32},
+        {0xAA29_u32, 0xAA36_u32},
+        {0xAA43_u32, 0xAA43_u32},
+        {0xAA4C_u32, 0xAA4D_u32},
+        {0xAA7B_u32, 0xAA7D_u32},
+        {0xAAB0_u32, 0xAAB0_u32},
+        {0xAAB2_u32, 0xAAB4_u32},
+        {0xAAB7_u32, 0xAAB8_u32},
+        {0xAABE_u32, 0xAABF_u32},
+        {0xAAC1_u32, 0xAAC1_u32},
+        {0xAAEB_u32, 0xAAEF_u32},
+        {0xAAF5_u32, 0xAAF6_u32},
+        {0xABE3_u32, 0xABEA_u32},
+        {0xABEC_u32, 0xABED_u32},
+        {0xFB1E_u32, 0xFB1E_u32},
+        {0xFE00_u32, 0xFE0F_u32},
+        {0xFE20_u32, 0xFE2F_u32},
+        {0x101FD_u32, 0x101FD_u32},
+        {0x102E0_u32, 0x102E0_u32},
+        {0x10376_u32, 0x1037A_u32},
+        {0x10A01_u32, 0x10A03_u32},
+        {0x10A05_u32, 0x10A06_u32},
+        {0x10A0C_u32, 0x10A0F_u32},
+        {0x10A38_u32, 0x10A3A_u32},
+        {0x10A3F_u32, 0x10A3F_u32},
+        {0x10AE5_u32, 0x10AE6_u32},
+        {0x10D24_u32, 0x10D27_u32},
+        {0x10D69_u32, 0x10D6D_u32},
+        {0x10EAB_u32, 0x10EAC_u32},
+        {0x10EFC_u32, 0x10EFF_u32},
+        {0x10F46_u32, 0x10F50_u32},
+        {0x10F82_u32, 0x10F85_u32},
+        {0x11000_u32, 0x11002_u32},
+        {0x11038_u32, 0x11046_u32},
+        {0x11070_u32, 0x11070_u32},
+        {0x11073_u32, 0x11074_u32},
+        {0x1107F_u32, 0x11082_u32},
+        {0x110B0_u32, 0x110BA_u32},
+        {0x110C2_u32, 0x110C2_u32},
+        {0x11100_u32, 0x11102_u32},
+        {0x11127_u32, 0x11134_u32},
+        {0x11145_u32, 0x11146_u32},
+        {0x11173_u32, 0x11173_u32},
+        {0x11180_u32, 0x11182_u32},
+        {0x111B3_u32, 0x111C0_u32},
+        {0x111C9_u32, 0x111CC_u32},
+        {0x111CE_u32, 0x111CF_u32},
+        {0x1122C_u32, 0x11237_u32},
+        {0x1123E_u32, 0x1123E_u32},
+        {0x11241_u32, 0x11241_u32},
+        {0x112DF_u32, 0x112EA_u32},
+        {0x11300_u32, 0x11303_u32},
+        {0x1133B_u32, 0x1133C_u32},
+        {0x1133E_u32, 0x11344_u32},
+        {0x11347_u32, 0x11348_u32},
+        {0x1134B_u32, 0x1134D_u32},
+        {0x11357_u32, 0x11357_u32},
+        {0x11362_u32, 0x11363_u32},
+        {0x11366_u32, 0x1136C_u32},
+        {0x11370_u32, 0x11374_u32},
+        {0x113B8_u32, 0x113C0_u32},
+        {0x113C2_u32, 0x113C2_u32},
+        {0x113C5_u32, 0x113C5_u32},
+        {0x113C7_u32, 0x113CA_u32},
+        {0x113CC_u32, 0x113D0_u32},
+        {0x113D2_u32, 0x113D2_u32},
+        {0x113E1_u32, 0x113E2_u32},
+        {0x11435_u32, 0x11446_u32},
+        {0x1145E_u32, 0x1145E_u32},
+        {0x114B0_u32, 0x114C3_u32},
+        {0x115AF_u32, 0x115B5_u32},
+        {0x115B8_u32, 0x115C0_u32},
+        {0x115DC_u32, 0x115DD_u32},
+        {0x11630_u32, 0x11640_u32},
+        {0x116AB_u32, 0x116B7_u32},
+        {0x1171D_u32, 0x1172B_u32},
+        {0x1182C_u32, 0x1183A_u32},
+        {0x11930_u32, 0x11935_u32},
+        {0x11937_u32, 0x11938_u32},
+        {0x1193B_u32, 0x1193E_u32},
+        {0x11940_u32, 0x11940_u32},
+        {0x11942_u32, 0x11943_u32},
+        {0x119D1_u32, 0x119D7_u32},
+        {0x119DA_u32, 0x119E0_u32},
+        {0x119E4_u32, 0x119E4_u32},
+        {0x11A01_u32, 0x11A0A_u32},
+        {0x11A33_u32, 0x11A39_u32},
+        {0x11A3B_u32, 0x11A3E_u32},
+        {0x11A47_u32, 0x11A47_u32},
+        {0x11A51_u32, 0x11A5B_u32},
+        {0x11A8A_u32, 0x11A99_u32},
+        {0x11C2F_u32, 0x11C36_u32},
+        {0x11C38_u32, 0x11C3F_u32},
+        {0x11C92_u32, 0x11CA7_u32},
+        {0x11CA9_u32, 0x11CB6_u32},
+        {0x11D31_u32, 0x11D36_u32},
+        {0x11D3A_u32, 0x11D3A_u32},
+        {0x11D3C_u32, 0x11D3D_u32},
+        {0x11D3F_u32, 0x11D45_u32},
+        {0x11D47_u32, 0x11D47_u32},
+        {0x11D8A_u32, 0x11D8E_u32},
+        {0x11D90_u32, 0x11D91_u32},
+        {0x11D93_u32, 0x11D97_u32},
+        {0x11EF3_u32, 0x11EF6_u32},
+        {0x11F00_u32, 0x11F01_u32},
+        {0x11F03_u32, 0x11F03_u32},
+        {0x11F34_u32, 0x11F3A_u32},
+        {0x11F3E_u32, 0x11F42_u32},
+        {0x11F5A_u32, 0x11F5A_u32},
+        {0x13440_u32, 0x13440_u32},
+        {0x13447_u32, 0x13455_u32},
+        {0x1611E_u32, 0x1612F_u32},
+        {0x16AF0_u32, 0x16AF4_u32},
+        {0x16B30_u32, 0x16B36_u32},
+        {0x16F4F_u32, 0x16F4F_u32},
+        {0x16F51_u32, 0x16F87_u32},
+        {0x16F8F_u32, 0x16F92_u32},
+        {0x16FE4_u32, 0x16FE4_u32},
+        {0x16FF0_u32, 0x16FF1_u32},
+        {0x1BC9D_u32, 0x1BC9E_u32},
+        {0x1CF00_u32, 0x1CF2D_u32},
+        {0x1CF30_u32, 0x1CF46_u32},
+        {0x1D165_u32, 0x1D169_u32},
+        {0x1D16D_u32, 0x1D172_u32},
+        {0x1D17B_u32, 0x1D182_u32},
+        {0x1D185_u32, 0x1D18B_u32},
+        {0x1D1AA_u32, 0x1D1AD_u32},
+        {0x1D242_u32, 0x1D244_u32},
+        {0x1DA00_u32, 0x1DA36_u32},
+        {0x1DA3B_u32, 0x1DA6C_u32},
+        {0x1DA75_u32, 0x1DA75_u32},
+        {0x1DA84_u32, 0x1DA84_u32},
+        {0x1DA9B_u32, 0x1DA9F_u32},
+        {0x1DAA1_u32, 0x1DAAF_u32},
+        {0x1E000_u32, 0x1E006_u32},
+        {0x1E008_u32, 0x1E018_u32},
+        {0x1E01B_u32, 0x1E021_u32},
+        {0x1E023_u32, 0x1E024_u32},
+        {0x1E026_u32, 0x1E02A_u32},
+        {0x1E08F_u32, 0x1E08F_u32},
+        {0x1E130_u32, 0x1E136_u32},
+        {0x1E2AE_u32, 0x1E2AE_u32},
+        {0x1E2EC_u32, 0x1E2EF_u32},
+        {0x1E4EC_u32, 0x1E4EF_u32},
+        {0x1E5EE_u32, 0x1E5EF_u32},
+        {0x1E8D0_u32, 0x1E8D6_u32},
+        {0x1E944_u32, 0x1E94A_u32},
+      
+      ] of {UInt32, UInt32}
+
+
+      # Non-Mark codepoints that contribute no advance width: the
+      # `\p{Default_Ignorable_Code_Point}` / `\p{Control}` / `\p{Format}`
+      # remainder of the TS `zeroWidthRegex` that is NOT covered by
+      # `\p{Mark}` above. ZWJ (U+200D) is handled by the grapheme walker and
+      # intentionally excluded here.
+      NON_MARK_ZERO_WIDTH_RANGES = {
+        {0x0000_u32, 0x001F_u32}, # C0 controls
+        {0x007F_u32, 0x009F_u32}, # DEL + C1 controls
+        {0x0600_u32, 0x0605_u32}, # Arabic number marks
+        {0x061C_u32, 0x061C_u32}, # Arabic letter mark
+        {0x06DD_u32, 0x06DD_u32}, # Arabic end of ayah
+        {0x070F_u32, 0x070F_u32}, # Syriac abbreviation mark
+        {0x0890_u32, 0x0891_u32}, # Arabic signs
+        {0x08E2_u32, 0x08E2_u32}, # Arabic disputed end of ayah
+        {0x180E_u32, 0x180E_u32}, # Mongolian vowel separator
+        {0x200B_u32, 0x200F_u32}, # ZWSP, ZWNJ, ZWJ, LRM, RLM (ZWJ re-checked in walker)
         {0x202A_u32, 0x202E_u32}, # Bidi controls
-        {0x2060_u32, 0x2064_u32},
-        {0x2066_u32, 0x206F_u32},
-        {0x20D0_u32, 0x20FF_u32}, # Combining Diacritical Marks for Symbols
-        {0xFE00_u32, 0xFE0F_u32}, # Variation Selectors (VS1-VS16)
-        {0xFE20_u32, 0xFE2F_u32}, # Combining Half Marks
-        {0xFEFF_u32, 0xFEFF_u32}, # Zero-width no-break space (BOM)
+        {0x2060_u32, 0x2064_u32}, # Word joiner etc.
+        {0x2066_u32, 0x206F_u32}, # Bidi isolate controls
+        {0xFEFF_u32, 0xFEFF_u32}, # BOM
+        {0xFFF9_u32, 0xFFFB_u32}, # Interlinear annotation
+        {0x110BD_u32, 0x110BD_u32}, # Kaithi number sign
+        {0x110CD_u32, 0x110CD_u32},
+        {0x13430_u32, 0x13438_u32}, # Egyptian hieroglyph format controls
+        {0x1BCA0_u32, 0x1BCA3_u32}, # Shorthand format controls
+        {0x1D173_u32, 0x1D17A_u32}, # Musical format controls
+        {0xE0000_u32, 0xE0FFF_u32}, # Tags (language tags)
       }
 
       # CJK script ranges for word-breaking (counterpart of `cjkBreakRegex`).
@@ -208,6 +524,26 @@ module Hcode
         false
       end
 
+      # Binary search over the sorted `MARK_RANGES` tuple — the complete
+      # `\p{Mark}` set (320 disjoint ranges). O(log n) per codepoint instead
+      # of the O(n) linear `in_range?` scan, keeping the hot width path fast.
+      private def self.mark?(cp : UInt32) : Bool
+        lo = 0
+        hi = MARK_RANGES.size - 1
+        while lo <= hi
+          mid = (lo + hi) // 2
+          range = MARK_RANGES[mid]
+          if cp < range[0]
+            hi = mid - 1
+          elsif cp > range[1]
+            lo = mid + 1
+          else
+            return true
+          end
+        end
+        false
+      end
+
       # ------------------------------------------------------------------------
       # Classification predicates (mirror couldBeEmoji / zeroWidthRegex test)
       # ------------------------------------------------------------------------
@@ -228,16 +564,18 @@ module Hcode
         in_range?(cp, EMOJI_PRESENTATION_RANGES)
       end
 
-      # Counterpart of `zeroWidthRegex.test`. Excludes ZWJ (U+200D), which is
-      # consumed explicitly by the grapheme walker.
+      # Counterpart of `zeroWidthRegex.test`: a codepoint is zero-width when it
+      # is a Mark (`\p{Mark}`, the complete set via `mark?`) OR belongs to the
+      # non-Mark Default_Ignorable/Control/Format remainder. ZWJ (U+200D) is
+      # excluded here because the grapheme walker consumes it explicitly.
       def self.zero_width?(cp : UInt32) : Bool
         return true if cp == 0x200D
-        in_range?(cp, ZERO_WIDTH_RANGES)
+        mark?(cp) || in_range?(cp, NON_MARK_ZERO_WIDTH_RANGES)
       end
 
       private def self.combining_mark?(cp : UInt32) : Bool
         return false if cp == 0x200D
-        in_range?(cp, ZERO_WIDTH_RANGES)
+        mark?(cp) || in_range?(cp, NON_MARK_ZERO_WIDTH_RANGES)
       end
 
       private def self.regional_indicator?(cp : UInt32) : Bool
@@ -264,7 +602,7 @@ module Hcode
       def self.codepoint_width(cp : UInt32) : Int32
         return 3 if cp == 0x09 # \t
         return 0 if cp < 0x20 || cp == 0x7F
-        return 0 if in_range?(cp, ZERO_WIDTH_RANGES)
+        return 0 if mark?(cp) || in_range?(cp, NON_MARK_ZERO_WIDTH_RANGES)
         return 2 if regional_indicator?(cp)
         # Width 2 only when the codepoint defaults to emoji presentation. BMP
         # chars in emoji blocks that default to TEXT (e.g. ⚠ U+26A0) fall
