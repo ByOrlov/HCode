@@ -36,6 +36,9 @@ module Hcode
       # can render it inside the tool block instead of as a separate info
       # message. nil when --ram is off.
       property ram_line : String? = nil
+      # Optional reasoning text carried alongside assistant_text so it can be
+      # persisted to wire.jsonl alongside the visible text.
+      property thinking : String? = nil
       # Compaction event payload (CompactionStarted/Completed/Cancelled).
       property tokens_before : Int32? = nil
       property tokens_after : Int32? = nil
@@ -60,9 +63,10 @@ module Hcode
         e
       end
 
-      def self.assistant_text(text : String) : Event
+      def self.assistant_text(text : String, thinking : String? = nil) : Event
         e = new(EventType::AssistantText)
         e.text = text
+        e.thinking = thinking
         e
       end
 

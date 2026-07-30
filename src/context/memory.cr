@@ -34,6 +34,12 @@ module Hcode
         update_token_count
       end
 
+      def add_assistant_parts(parts : Array(LLM::ContentPart), tool_calls : Array(LLM::ToolCall)? = nil) : Nil
+        msg = LLM::Message.assistant_parts(parts, tool_calls)
+        @history << ContextMessage.new(msg)
+        update_token_count
+      end
+
       def add_tool_result(tool_call_id : String, content : String) : Nil
         msg = LLM::Message.tool(content, tool_call_id)
         @history << ContextMessage.new(msg)

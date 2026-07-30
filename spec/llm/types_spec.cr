@@ -5,9 +5,16 @@ describe Hcode::LLM::Message do
     it "creates a user message" do
       msg = Hcode::LLM::Message.user("hello")
       msg.role.should eq("user")
-      msg.content.should eq("hello")
+      msg.text.should eq("hello")
       msg.tool_calls.should be_nil
       msg.tool_call_id.should be_nil
+    end
+
+    it "wraps the string in a single TextContent part" do
+      msg = Hcode::LLM::Message.user("hello")
+      msg.content.size.should eq(1)
+      msg.content[0].is_a?(Hcode::LLM::TextContent).should be_true
+      msg.content[0].as(Hcode::LLM::TextContent).text.should eq("hello")
     end
   end
 
@@ -15,7 +22,7 @@ describe Hcode::LLM::Message do
     it "creates an assistant message with text only" do
       msg = Hcode::LLM::Message.assistant("hi there")
       msg.role.should eq("assistant")
-      msg.content.should eq("hi there")
+      msg.text.should eq("hi there")
       msg.tool_calls.should be_nil
     end
 
@@ -27,23 +34,36 @@ describe Hcode::LLM::Message do
       msg.tool_calls.not_nil!.size.should eq(1)
       msg.tool_calls.not_nil![0].name.should eq("Bash")
     end
+
+    it "builds from content parts via assistant_parts" do
+      parts = [
+        Hcode::LLM::ThinkContent.new("reasoning here"),
+        Hcode::LLM::TextContent.new("final answer"),
+      ] of Hcode::LLM::ContentPart
+      msg = Hcode::LLM::Message.assistant_parts(parts)
+      msg.role.should eq("assistant")
+      msg.text.should eq("final answer")
+      msg.thinking.should eq("reasoning here")
+    end
   end
 
   describe ".tool" do
     it "creates a tool result message" do
       msg = Hcode::LLM::Message.tool("result text", "call_1")
       msg.role.should eq("tool")
-      msg.content.should eq("result text")
+      msg.text.should eq("result text")
       msg.tool_call_id.should eq("call_1")
     end
   end
 
   describe "JSON serialization" do
-    it "omits nil fields" do
+    it "serializes content as an array of typed parts" do
       msg = Hcode::LLM::Message.user("test")
       json = JSON.parse(msg.to_json)
       json["role"].should eq("user")
-      json["content"].should eq("test")
+      json["content"].as_a.size.should eq(1)
+      json["content"][0]["type"].should eq("text")
+      json["content"][0]["text"].should eq("test")
       json.as_h.has_key?("tool_calls").should be_false
       json.as_h.has_key?("tool_call_id").should be_false
     end
@@ -53,6 +73,24 @@ describe Hcode::LLM::Message do
       msg = Hcode::LLM::Message.assistant(nil, [tc])
       json = JSON.parse(msg.to_json)
       json["tool_calls"].as_a.size.should eq(1)
+    end
+
+    it "round-trips TextContent and ThinkContent through JSON" do
+      parts = [
+        Hcode::LLM::ThinkContent.new("reasoning"),
+        Hcode::LLM::TextContent.new("answer"),
+      ] of Hcode::LLM::ContentPart
+      msg = Hcode::LLM::Message.assistant_parts(parts)
+      json = JSON.parse(msg.to_json)
+      json["content"].as_a.size.should eq(2)
+      json["content"][0]["type"].should eq("think")
+      json["content"][0]["think"].should eq("reasoning")
+      json["content"][1]["type"].should eq("text")
+      json["content"][1]["text"].should eq("answer")
+
+      restored = Hcode::LLM::Message.from_json(msg.to_json)
+      restored.text.should eq("answer")
+      restored.thinking.should eq("reasoning")
     end
   end
 end

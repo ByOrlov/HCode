@@ -134,9 +134,12 @@ module Hcode
             total_usage = total_usage + step_result.usage
             on_event.call(Event.step_end(steps, step_result.usage))
 
-            unless step_result.text.empty? && step_result.tool_calls.empty?
-              @context.add_assistant(step_result.text, step_result.tool_calls)
-              on_event.call(Event.assistant_text(step_result.text)) unless step_result.text.empty?
+            unless step_result.text.empty? && step_result.thinking.empty? && step_result.tool_calls.empty?
+              parts = [] of LLM::ContentPart
+              parts << LLM::ThinkContent.new(step_result.thinking) unless step_result.thinking.empty?
+              parts << LLM::TextContent.new(step_result.text) unless step_result.text.empty?
+              @context.add_assistant_parts(parts, step_result.tool_calls)
+              on_event.call(Event.assistant_text(step_result.text, step_result.thinking.empty? ? nil : step_result.thinking)) unless step_result.text.empty?
             end
 
             if step_result.tool_use?
@@ -285,7 +288,7 @@ module Hcode
           if ENV["HCODE_DEBUG"]?
             STDERR.puts "[debug] Last 3 messages:"
             messages.last(3).each_with_index(1) do |msg, i|
-              STDERR.puts "[debug]   msg #{i}: role=#{msg.role} content=#{msg.content.to_s[0...80].inspect} " \
+              STDERR.puts "[debug]   msg #{i}: role=#{msg.role} content=#{msg.text[0...80].inspect} " \
                           "tool_calls=#{msg.tool_calls.try(&.map(&.id).inspect)} " \
                           "tool_call_id=#{msg.tool_call_id.inspect}"
             end

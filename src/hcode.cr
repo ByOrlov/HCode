@@ -552,7 +552,11 @@ module Hcode
             print event.text.colorize.fore(:light_gray).dim
             STDOUT.flush
           when .assistant_text?
-            store.append("assistant.text", {"content" => JSON::Any.new(assistant_buf.to_s)})
+            data = {"content" => JSON::Any.new(assistant_buf.to_s)} of String => JSON::Any
+            if (t = event.thinking) && !t.empty?
+              data["thinking"] = JSON::Any.new(t)
+            end
+            store.append("assistant.text", data)
             if assistant_open
               puts
               puts
@@ -764,7 +768,7 @@ module Hcode
         # that user message.
         history.each_with_index do |cm, idx|
           next unless cm.message.role == "user" && cm.origin.normal?
-          input = cm.message.content.to_s
+          input = cm.message.text
           preview = input.empty? ? "(empty)" : input[0...60].gsub('\n', " ")
           count = history.size - idx
           choices << {count, input, "##{idx + 1}: #{preview}"}
@@ -1070,7 +1074,11 @@ module Hcode
             when .thinking_delta?
               app.on_event(event)
             when .assistant_text?
-              store.append("assistant.text", {"content" => JSON::Any.new(event.text)})
+              data = {"content" => JSON::Any.new(event.text)} of String => JSON::Any
+              if (t = event.thinking) && !t.empty?
+                data["thinking"] = JSON::Any.new(t)
+              end
+              store.append("assistant.text", data)
               app.on_event(event)
             when .tool_call_start?
               store.append("tool.call", {
@@ -1182,12 +1190,12 @@ module Hcode
         memory.messages.each do |msg|
           case msg.role
           when "user"
-            s << "## User\n\n#{msg.content}\n\n"
+            s << "## User\n\n#{msg.text}\n\n"
           when "assistant"
-            s << "## Assistant\n\n#{msg.content}\n\n"
+            s << "## Assistant\n\n#{msg.text}\n\n"
           when "tool"
             s << "### Tool: #{msg.tool_calls.try(&.first).try(&.name) || "??"}\n\n"
-            s << "```\n#{msg.content}\n```\n\n"
+            s << "```\n#{msg.text}\n```\n\n"
           end
         end
       end

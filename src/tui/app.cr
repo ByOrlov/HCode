@@ -752,13 +752,13 @@ module Hcode
           when .injection?
             next
           when .compaction_summary?
-            @messages << Message.new("system", "[compacted] #{msg.content.to_s}")
+            @messages << Message.new("system", "[compacted] #{msg.text}")
             next
           end
 
           case msg.role
           when "user"
-            @messages << Message.new("user", msg.content.to_s)
+            @messages << Message.new("user", msg.text)
           when "assistant"
             if tcs = msg.tool_calls
               tcs.each do |tc|
@@ -770,13 +770,13 @@ module Hcode
                 @messages << m
               end
             end
-            unless (text = msg.content).to_s.empty?
-              @messages << Message.new("assistant", text.to_s)
+            unless (text = msg.text).empty?
+              @messages << Message.new("assistant", text)
             end
           when "tool"
-            attach_tool_result(msg.tool_call_id.to_s, msg.content.to_s)
+            attach_tool_result(msg.tool_call_id.to_s, msg.text)
           when "system"
-            @messages << Message.new("system", msg.content.to_s) unless msg.content.to_s.empty?
+            @messages << Message.new("system", msg.text) unless msg.text.empty?
           end
         end
 

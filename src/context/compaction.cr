@@ -35,7 +35,7 @@ module Hcode
 
         summary_prompt = "Summarize the following conversation so far, preserving key context: "
         summary_messages = [
-          LLM::Message.user(summary_prompt + old_messages.map(&.message.content.to_s).join("\n")),
+          LLM::Message.user(summary_prompt + old_messages.map(&.message.text).join("\n")),
         ]
 
         # Compaction summarises a near-full context, so the live window is

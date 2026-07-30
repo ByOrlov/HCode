@@ -11,8 +11,13 @@ module Hcode
       def self.estimate(messages : Array(Message)) : Int32
         total = 0
         messages.each do |msg|
-          if content = msg.content
-            total += estimate(content)
+          msg.content.each do |part|
+            if part.is_a?(TextContent)
+              total += estimate(part.text)
+            elsif part.is_a?(ThinkContent)
+              total += estimate(part.think)
+            end
+            # media parts: token cost depends on resolution, not text length
           end
           if tcs = msg.tool_calls
             tcs.each do |tc|

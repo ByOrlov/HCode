@@ -99,20 +99,172 @@ module Hcode
       end
     end
 
+    # Abstract base for a single content block within a Message. Mirrors the
+    # kosong `ContentPart` union — text, reasoning, image, audio, video. Each
+    # subclass carries its `type` discriminator so the JSON round-trip
+    # (`use_json_discriminator`) restores the right class.
+    abstract class ContentPart
+      include JSON::Serializable
+      use_json_discriminator "type", {
+        text:      TextContent,
+        think:     ThinkContent,
+        image_url: ImageContent,
+        audio_url: AudioContent,
+        video_url: VideoContent,
+      }
+
+      property type : String
+
+      # Concatenate all TextContent parts' text from a content array. Used by
+      # `Message.text` and the token counter.
+      def self.extract_text(parts : Array(ContentPart)) : String
+        String.build do |io|
+          parts.each do |p|
+            io << p.text if p.is_a?(TextContent)
+          end
+        end
+      end
+
+      # Concatenate all ThinkContent parts' think text. Used by the TUI thinking
+      # renderer and the token counter.
+      def self.extract_thinking(parts : Array(ContentPart)) : String
+        String.build do |io|
+          parts.each do |p|
+            io << p.think if p.is_a?(ThinkContent)
+          end
+        end
+      end
+    end
+
+    class TextContent < ContentPart
+      property text : String
+
+      def initialize(@text : String)
+        @type = "text"
+      end
+
+      def profiled_bytes : Int64
+        @text.profiled_bytes + @type.profiled_bytes
+      end
+    end
+
+    class ThinkContent < ContentPart
+      property think : String
+      @[JSON::Field(emit_null: false)]
+      property encrypted : String?
+
+      def initialize(@think : String, @encrypted : String? = nil)
+        @type = "think"
+      end
+
+      def profiled_bytes : Int64
+        @think.profiled_bytes + @type.profiled_bytes + (@encrypted.try(&.profiled_bytes) || 0_i64)
+      end
+    end
+
+    # URL-style media references (data: URLs or remote URLs), matching the
+    # OpenAI / kosong `image_url` shape: `{"url": "...", "id": "..."}`.
+
+    struct ImageRef
+      include JSON::Serializable
+      property url : String
+      @[JSON::Field(emit_null: false)]
+      property id : String?
+
+      def initialize(@url : String, @id : String? = nil)
+      end
+
+      def profiled_bytes : Int64
+        @url.profiled_bytes + (@id.try(&.profiled_bytes) || 0_i64)
+      end
+    end
+
+    struct AudioRef
+      include JSON::Serializable
+      property url : String
+      @[JSON::Field(emit_null: false)]
+      property id : String?
+
+      def initialize(@url : String, @id : String? = nil)
+      end
+
+      def profiled_bytes : Int64
+        @url.profiled_bytes + (@id.try(&.profiled_bytes) || 0_i64)
+      end
+    end
+
+    struct VideoRef
+      include JSON::Serializable
+      property url : String
+      @[JSON::Field(emit_null: false)]
+      property id : String?
+
+      def initialize(@url : String, @id : String? = nil)
+      end
+
+      def profiled_bytes : Int64
+        @url.profiled_bytes + (@id.try(&.profiled_bytes) || 0_i64)
+      end
+    end
+
+    class ImageContent < ContentPart
+      property image_url : ImageRef
+
+      def initialize(@image_url : ImageRef)
+        @type = "image_url"
+      end
+
+      def profiled_bytes : Int64
+        @image_url.profiled_bytes + @type.profiled_bytes
+      end
+    end
+
+    class AudioContent < ContentPart
+      property audio_url : AudioRef
+
+      def initialize(@audio_url : AudioRef)
+        @type = "audio_url"
+      end
+
+      def profiled_bytes : Int64
+        @audio_url.profiled_bytes + @type.profiled_bytes
+      end
+    end
+
+    class VideoContent < ContentPart
+      property video_url : VideoRef
+
+      def initialize(@video_url : VideoRef)
+        @type = "video_url"
+      end
+
+      def profiled_bytes : Int64
+        @video_url.profiled_bytes + @type.profiled_bytes
+      end
+    end
+
     struct Message
       include JSON::Serializable
 
       property role : String
-      @[JSON::Field(emit_null: false)]
-      property content : String?
+      property content : Array(ContentPart)
       @[JSON::Field(emit_null: false)]
       property tool_calls : Array(ToolCall)?
       @[JSON::Field(emit_null: false)]
       property tool_call_id : String?
 
-      def initialize(@role : String, @content : String? = nil,
+      def initialize(@role : String, @content : Array(ContentPart),
                      @tool_calls : Array(ToolCall)? = nil,
                      @tool_call_id : String? = nil)
+      end
+
+      # Convenience: create a Message with a plain text content block. The
+      # string is wrapped in a single-element `[TextContent]` array.
+      def self.new(role : String, content : String,
+                   tool_calls : Array(ToolCall)? = nil,
+                   tool_call_id : String? = nil)
+        parts = content.empty? ? [] of ContentPart : [TextContent.new(content)] of ContentPart
+        new(role, parts, tool_calls, tool_call_id)
       end
 
       def self.system(content : String) : Message
@@ -124,16 +276,35 @@ module Hcode
       end
 
       def self.assistant(content : String? = nil, tool_calls : Array(ToolCall)? = nil) : Message
-        new("assistant", content, tool_calls)
+        new("assistant", content || "", tool_calls)
+      end
+
+      # Build an assistant message from content parts directly (text + thinking,
+      # or media blocks). Used by the agent loop when persisting reasoning.
+      def self.assistant_parts(parts : Array(ContentPart), tool_calls : Array(ToolCall)? = nil) : Message
+        new("assistant", parts, tool_calls)
       end
 
       def self.tool(content : String, tool_call_id : String) : Message
         new("tool", content, nil, tool_call_id)
       end
 
+      # Concatenated text of all TextContent parts. Equivalent to the kosong
+      # `extractText(message)` — the plain-string view of the message for code
+      # that doesn't care about thinking or media.
+      def text : String
+        ContentPart.extract_text(@content)
+      end
+
+      # Concatenated reasoning text of all ThinkContent parts. Empty when the
+      # message has no thinking blocks.
+      def thinking : String
+        ContentPart.extract_thinking(@content)
+      end
+
       def profiled_bytes : Int64
         total = @role.profiled_bytes
-        total += @content.try(&.profiled_bytes) || 0_i64
+        total += @content.sum(&.profiled_bytes)
         total += @tool_calls.try(&.sum(&.profiled_bytes)) || 0_i64
         total += @tool_call_id.try(&.profiled_bytes) || 0_i64
         total
@@ -397,11 +568,13 @@ module Hcode
     struct StepResult
       property stop_reason : String
       property text : String
+      property thinking : String
       property tool_calls : Array(ToolCall)
       property usage : Usage
 
       def initialize(@stop_reason : String = "end_turn",
                      @text : String = "",
+                     @thinking : String = "",
                      @tool_calls : Array(ToolCall) = [] of ToolCall,
                      @usage : Usage = Usage.new)
       end

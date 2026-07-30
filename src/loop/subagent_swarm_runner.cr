@@ -132,7 +132,7 @@ module Hcode
       private def latest_assistant_text(context : Context::Memory) : String
         context.history.reverse_each do |cm|
           next unless cm.message.role == "assistant"
-          text = cm.message.content.to_s
+          text = cm.message.text
           return text unless text.empty?
         end
         ""

@@ -150,7 +150,7 @@ describe Hcode::Context::Memory do
     mem.prune_injections
 
     msgs = mem.messages
-    msgs.any?(&.content.==("summary text")).should be_true
-    msgs.any?(&.content.==("reminder")).should be_false
+    msgs.any?(&.text.==("summary text")).should be_true
+    msgs.any?(&.text.==("reminder")).should be_false
   end
 end

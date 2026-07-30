@@ -140,9 +140,12 @@ module Hcode
               memory.add_user(prompt.to_s)
             end
           when "assistant.text"
-            if content = event[:data]["content"]?
-              memory.add_assistant(content.to_s)
-            end
+            content = event[:data]["content"]?.try(&.to_s) || ""
+            thinking = event[:data]["thinking"]?.try(&.to_s)
+            parts = [] of LLM::ContentPart
+            parts << LLM::ThinkContent.new(thinking) if thinking && !thinking.empty?
+            parts << LLM::TextContent.new(content) unless content.empty?
+            memory.add_assistant_parts(parts) unless parts.empty?
           when "tool.call"
             tool_name = event[:data]["tool_name"]?.try(&.to_s) || ""
             args = event[:data]["arguments"]?.try(&.to_s) || "{}"

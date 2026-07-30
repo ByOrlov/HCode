@@ -88,7 +88,7 @@ describe Hcode::Loop::Agent do
     result.stop_reason.should eq("end_turn")
     result.steps.should eq(1)
     memory.messages.last.role.should eq("assistant")
-    memory.messages.last.content.should eq("all done here")
+    memory.messages.last.text.should eq("all done here")
   end
 
   it "hot-swaps the provider at runtime via swap_provider!" do
@@ -114,13 +114,13 @@ describe Hcode::Loop::Agent do
 
     agent.provider.should be(first)
     agent.run_turn("turn one", nil) { }
-    memory.messages.last.content.should eq("first")
+    memory.messages.last.text.should eq("first")
 
     agent.swap_provider!(second)
     agent.provider.should be(second)
 
     agent.run_turn("turn two", nil) { }
-    memory.messages.last.content.should eq("second")
+    memory.messages.last.text.should eq("second")
   end
 
   it "emits ThinkingDelta events when the provider streams ThinkParts" do
@@ -230,7 +230,7 @@ describe Hcode::Loop::Agent do
     agent.steer("a side note")
     agent.context.history.size.should eq(1)
     agent.context.history.last.message.role.should eq("user")
-    agent.context.history.last.message.content.should eq("a side note")
+    agent.context.history.last.message.text.should eq("a side note")
   end
 
   it "raises NetworkFailureError after exhausting retries on a network error" do
@@ -343,7 +343,7 @@ describe Hcode::Loop::Agent do
 
       # Plan-mode reminder was injected into the messages sent to the LLM on at
       # least one step while plan mode was active.
-      reminders = captured_messages.flatten.select(&.content.to_s.includes?("Plan mode is active"))
+      reminders = captured_messages.flatten.select(&.text.includes?("Plan mode is active"))
       reminders.should_not be_empty
 
       # Plan mode is off after exit.

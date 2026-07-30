@@ -89,8 +89,8 @@ describe Hcode::Loop::ToolBatch do
     results.size.should eq(2)
     results[0].tool_call_id.should eq("call_1")
     results[1].tool_call_id.should eq("call_2")
-    results[0].content.not_nil!.should contain("slow-first")
-    results[1].content.not_nil!.should contain("fast-second")
+    results[0].text.should contain("slow-first")
+    results[1].text.should contain("fast-second")
   end
 
   it "emits tool_result events as results arrive" do
@@ -124,8 +124,8 @@ describe Hcode::Loop::ToolBatch do
     results = batch.run(calls) { |e| events << e }
 
     results.size.should eq(2)
-    results[0].content.not_nil!.should contain("Unknown tool")
-    results[1].content.not_nil!.should contain("ok")
+    results[0].text.should contain("Unknown tool")
+    results[1].text.should contain("ok")
   end
 
   it "deduplicates identical calls within the same step" do
@@ -139,8 +139,8 @@ describe Hcode::Loop::ToolBatch do
     results = batch.run(calls) { |e| }
 
     results.size.should eq(2)
-    results[0].content.not_nil!.should contain("only-once")
-    results[1].content.not_nil!.should contain("Duplicate")
+    results[0].text.should contain("only-once")
+    results[1].text.should contain("Duplicate")
   end
 
   it "aborts running tool fibers" do
@@ -161,8 +161,8 @@ describe Hcode::Loop::ToolBatch do
 
     # The quick tool should finish; the long one should be cancelled or time out.
     results.size.should eq(2)
-    results[0].content.not_nil!.should match(/Cancelled|timed out|Execution failed/)
-    results[1].content.not_nil!.should contain("quick")
+    results[0].text.should match(/Cancelled|timed out|Execution failed/)
+    results[1].text.should contain("quick")
   end
 
   it "appends tool results to context in input order" do
@@ -180,7 +180,7 @@ describe Hcode::Loop::ToolBatch do
     tool_messages.size.should eq(2)
     tool_messages[0].tool_call_id.should eq("call_1")
     tool_messages[1].tool_call_id.should eq("call_2")
-    tool_messages[0].content.not_nil!.should contain("slow")
-    tool_messages[1].content.not_nil!.should contain("fast")
+    tool_messages[0].text.should contain("slow")
+    tool_messages[1].text.should contain("fast")
   end
 end

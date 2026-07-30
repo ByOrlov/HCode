@@ -84,16 +84,19 @@ end
 
 describe Hcode::LLM::Message do
   describe "#profiled_bytes" do
-    it "sums role and content" do
+    it "sums role and content parts" do
       msg = Hcode::LLM::Message.user("hello")
-      msg.profiled_bytes.should eq("user".profiled_bytes + "hello".profiled_bytes)
+      part = msg.content[0].as(Hcode::LLM::TextContent)
+      expected = "user".profiled_bytes + part.profiled_bytes
+      msg.profiled_bytes.should eq(expected)
     end
 
     it "includes tool_calls arguments" do
       tc = Hcode::LLM::ToolCall.new("id", Hcode::LLM::ToolCallFunction.new("Bash", "command"))
-      msg = Hcode::LLM::Message.assistant("", [tc])
+      msg = Hcode::LLM::Message.assistant("ran a command", [tc])
+      part = msg.content.first
       expected = "assistant".profiled_bytes +
-                 "".profiled_bytes +
+                 part.profiled_bytes +
                  "id".profiled_bytes + "function".profiled_bytes +
                  "Bash".profiled_bytes + "command".profiled_bytes
       msg.profiled_bytes.should eq(expected)

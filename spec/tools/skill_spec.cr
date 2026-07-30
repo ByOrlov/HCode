@@ -91,7 +91,7 @@ describe Hcode::Tools::Skill do
     memory.history.size.should be > 0
     injected = memory.history.find(&.origin.injection?)
     injected.should_not be_nil
-    text = injected.not_nil!.message.content.to_s
+    text = injected.not_nil!.message.text
     text.should contain("<hcode-skill-loaded")
     text.should contain(%(name="commit"))
     text.should contain(%(trigger="model-tool"))
@@ -138,7 +138,7 @@ describe Hcode::Tools::Skill do
     tool = Hcode::Tools::Skill.new
     tool.execute(JSON.parse(%q({ "skill": "x", "args": "a<b>&c\"d" })))
 
-    text = memory.history.find(&.origin.injection?).not_nil!.message.content.to_s
+    text = memory.history.find(&.origin.injection?).not_nil!.message.text
     text.should contain(%(args="a&lt;b&gt;&amp;c&quot;d"))
   end
 
@@ -169,7 +169,7 @@ describe Hcode::Tools::Skill do
 
     tool = Hcode::Tools::Skill.new
     tool.execute(JSON.parse(%({ "skill": "x" })))
-    text = memory.history.find(&.origin.injection?).not_nil!.message.content.to_s
+    text = memory.history.find(&.origin.injection?).not_nil!.message.text
     text.should contain(%(trigger="nested-skill"))
   end
 end

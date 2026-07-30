@@ -230,6 +230,7 @@ module Hcode
         request = build_request(all_messages, tools)
 
         accumulated_text = IO::Memory.new
+        accumulated_thinking = IO::Memory.new
         tool_calls = Hash(Int32, {String, String, String}).new
         finish_reason = "end_turn"
         usage = Usage.new
@@ -251,6 +252,7 @@ module Hcode
 
               if reasoning = delta.reasoning_content
                 unless reasoning.empty?
+                  accumulated_thinking << reasoning
                   block.call(ThinkPart.new(reasoning))
                 end
               end
@@ -306,6 +308,7 @@ module Hcode
         StepResult.new(
           stop_reason: stop_reason,
           text: accumulated_text.to_s,
+          thinking: accumulated_thinking.to_s,
           tool_calls: final_tool_calls,
           usage: usage,
         )

@@ -139,7 +139,7 @@ describe Hcode::Session::Lifecycle do
       # Replaying the fork reconstructs the original prompt.
       mem = Hcode::Context::Memory.new
       forked.replay(mem)
-      mem.messages.first?.try(&.content).should eq("hello")
+      mem.messages.first?.try(&.text).should eq("hello")
     ensure
       FileUtils.rm_rf(home)
     end
@@ -202,6 +202,57 @@ describe Hcode::Session::Store do
       store = Hcode::Session::Store.new(dir)
       meta = store.read_state.not_nil!
       meta.id.should eq("legacy01")
+    ensure
+      FileUtils.rm_rf(home)
+    end
+  end
+
+  it "replay restores assistant text and thinking from a new-format wire" do
+    home = temp_home
+    begin
+      dir = File.join(home, ".hcode", "sessions", "ws01")
+      Dir.mkdir_p(dir)
+      File.write(File.join(dir, "wire.jsonl"), [
+        %({"type":"turn.prompt","data":{"prompt":"hello"}}),
+        %({"type":"assistant.text","data":{"content":"world","thinking":"let me think"}}),
+      ].join('\n'))
+      store = Hcode::Session::Store.new(dir)
+
+      mem = Hcode::Context::Memory.new
+      store.replay(mem)
+
+      msgs = mem.messages
+      msgs.size.should eq(2)
+      msgs[0].role.should eq("user")
+      msgs[0].text.should eq("hello")
+      msgs[1].role.should eq("assistant")
+      msgs[1].text.should eq("world")
+      msgs[1].thinking.should eq("let me think")
+    ensure
+      FileUtils.rm_rf(home)
+    end
+  end
+
+  it "replay reads legacy assistant.text without thinking (backwards compat)" do
+    home = temp_home
+    begin
+      dir = File.join(home, ".hcode", "sessions", "legacy02")
+      Dir.mkdir_p(dir)
+      # Old format: content is a string, no thinking field.
+      File.write(File.join(dir, "wire.jsonl"), [
+        %({"type":"turn.prompt","data":{"prompt":"hi"}}),
+        %({"type":"assistant.text","data":{"content":"old reply"}}),
+      ].join('\n'))
+      store = Hcode::Session::Store.new(dir)
+
+      mem = Hcode::Context::Memory.new
+      store.replay(mem)
+
+      msgs = mem.messages
+      msgs.size.should eq(2)
+      msgs[1].role.should eq("assistant")
+      msgs[1].text.should eq("old reply")
+      msgs[1].thinking.should be_empty
     ensure
       FileUtils.rm_rf(home)
     end
