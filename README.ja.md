@@ -1,6 +1,6 @@
 # HCode — ポテトでも Vibe-code
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · **日本語** · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md)
+[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · **日本語** · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **アイドル時エージェントあたり RAM ~3 MB。静的バイナリ 1 つ。ランタイムゼロ。GPL 永遠。**
 > Orlov による空気より軽い AI エージェント —— 水素のように軽い：最も軽い元素から **H**、あなたが届けるものから **Code**。

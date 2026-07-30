@@ -69,7 +69,7 @@ module Hcode
         CommandInfo.new("/tasks", "Browse background tasks", description_key: "tasks"),
         CommandInfo.new("/memory", "Show memory profile of live collections", description_key: "memory"),
         CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]", "goal"),
-        CommandInfo.new("/language", "Switch interface language", "[en|ru]", "language"),
+        CommandInfo.new("/language", "Switch interface language", "[en|ru|es|zh|ja|pt|hi|fa|uk|be]", "language"),
       ]
 
       def self.names : Array(String)

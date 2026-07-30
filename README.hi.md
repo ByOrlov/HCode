@@ -1,6 +1,6 @@
 # HCode — आलू पर भी Vibe-code
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · **हिन्दी**
+[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · **हिन्दी** · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **निष्क्रिय प्रति एजेंट लगभग 3 MB RAM। एक स्थैतिक बाइनरी। शून्य रनटाइम। हमेशा के लिए GPL।**
 > Orlov द्वारा निर्मित हवा से भी हल्का AI एजेंट — हाइड्रोजन-हल्का: सबसे हल्के तत्व के लिए **H**, और जो आप शिप करते हैं उसके लिए **Code**।

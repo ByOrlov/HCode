@@ -1,6 +1,6 @@
 # HCode — 即使是土豆也能 Vibe-code
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · **中文** · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md)
+[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · **中文** · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **每个空闲 Agent 仅 ~3 MB 内存。单一静态二进制文件。零运行时。GPL 永久开源。**
 > 由 Orlov 打造的轻如空气的 AI Agent —— 轻如氢气：**H** 取自最轻的元素，**Code** 取自你交付的代码。

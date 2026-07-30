@@ -1,6 +1,6 @@
 # HCode — Vibe-code даже на калькуляторе
 
-[English](./README.md) · **Русский** · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md)
+[English](./README.md) · **Русский** · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **~3 МБ ОЗУ на агента в простое. Один статический бинарник. Ноль рантайма. GPL навсегда.**
 > Невесомый AI-агент от Orlov — лёгкий как водород: **H** от легчайшего элемента, **Code** от того, что вы релизите.

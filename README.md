@@ -1,6 +1,6 @@
 # HCode — Vibe-code even on a potato
 
-**English** · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md)
+**English** · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **~3 MB of RAM per agent at idle. One static binary. Zero runtime. GPL forever.**
 > A lighter-than-air AI agent by Orlov — Hydrogen-light: **H** for the lightest element, **Code** for what you ship.

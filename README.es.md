@@ -1,6 +1,6 @@
 # HCode — Vibe-code hasta en una patata
 
-[English](./README.md) · [Русский](./README.ru.md) · **Español** · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md)
+[English](./README.md) · [Русский](./README.ru.md) · **Español** · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **~3 MB de RAM por agente en reposo. Un único binario estático. Cero runtime. GPL para siempre.**
 > Un agente de IA más ligero que el aire, por Orlov — ligero como el hidrógeno: **H** del elemento más ligero, **Code** de lo que entregas.

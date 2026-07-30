@@ -1,6 +1,6 @@
 # HCode — Vibe-code até num torrada
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · **Português**
+[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · **Português** · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **~3 MB de RAM por agente em repouso. Um único binário estático. Zero runtime. GPL para sempre.**
 > Um agente de IA mais leve que o ar, por Orlov — leve como o hidrogênio: **H** do elemento mais leve, **Code** do que você entrega.

@@ -1,6 +1,6 @@
 # HCode — حتی روی یک سیب‌زمینی هم Vibe-code
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · **فارسی**
+[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · **فارسی** · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **~۳ مگابایت RAM برای هر عامل در حالت بیکار. یک باینری استاتیک. بدون زمان اجرا. GPL برای همیشه.**
 > یک عامل هوش مصنوعی سبک‌تر از هوا، از طرف Orlov — سبک مانند هیدروژن: **H** برای سبک‌ترین عنصر، و **Code** برای چیزی که تحویل می‌دهید.

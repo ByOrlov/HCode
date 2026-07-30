@@ -17,7 +17,7 @@ module Hcode
   # active locale is selected from config / env / system at startup, and the
   # `#t` shortcut is exposed app-wide as `Hcode.t(...)`.
   module I18n
-    SUPPORTED_LOCALES = {"en", "ru"}
+    SUPPORTED_LOCALES = {"en", "ru", "es", "zh", "ja", "pt", "hi", "fa", "uk", "be"}
 
     @@initialized = false
 
