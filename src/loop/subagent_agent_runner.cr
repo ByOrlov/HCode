@@ -147,14 +147,21 @@ module Hcode
           )
         end
 
+        tool_call_id = @tool_call_id
+        emit(Event.subagent_started(tool_call_id, entry.agent_id))
+        ticks = 0
+
         begin
           result = agent.run_turn(prompt, @system_prompt) do |event|
-            # Discard streaming events from the child — the parent only sees
-            # the final summary, mirroring JS where the child's transcript is
-            # not surfaced unless the tool result carries it.
+            case event.type
+            when .tool_call_start?, .tool_call_delta?, .step_begin?
+              ticks += 1
+              emit(Event.subagent_progress(tool_call_id, entry.agent_id, ticks))
+            end
           end
 
           summary = latest_assistant_text(entry.context)
+          emit(Event.subagent_completed(tool_call_id, entry.agent_id))
           Tools::AgentRunOutcome.new(
             agent_id: entry.agent_id,
             profile_name: entry.profile_name,
@@ -163,6 +170,7 @@ module Hcode
             summary: summary,
           )
         rescue ex : Loop::UserCancellationError
+          emit(Event.subagent_failed(tool_call_id, entry.agent_id, "Aborted"))
           Tools::AgentRunOutcome.new(
             agent_id: entry.agent_id,
             profile_name: entry.profile_name,
@@ -171,6 +179,7 @@ module Hcode
             error: ex.reason,
           )
         rescue ex
+          emit(Event.subagent_failed(tool_call_id, entry.agent_id, "Failed"))
           Tools::AgentRunOutcome.new(
             agent_id: entry.agent_id,
             profile_name: entry.profile_name,

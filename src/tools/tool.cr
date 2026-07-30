@@ -6,6 +6,11 @@ module Hcode
       abstract def parameters : JSON::Any
       abstract def execute(input : JSON::Any) : ToolResult
 
+      # Set by ToolBatch before each execute call so tools that spawn
+      # subagents (AgentSwarm, Agent) can emit lifecycle events tied to
+      # the parent tool_call_id in the transcript.
+      property tool_call_id : String = ""
+
       def to_definition : LLM::ToolDefinition
         LLM::ToolDefinition.new(
           LLM::ToolFunction.new(name, description, parameters)

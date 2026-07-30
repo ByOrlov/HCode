@@ -158,6 +158,7 @@ module Hcode
           end
 
           input = parse_args(tc.arguments)
+          tool.tool_call_id = tc.id
           result = Loop.execute_tool(@abort_controller) do
             tool.execute(input)
           end

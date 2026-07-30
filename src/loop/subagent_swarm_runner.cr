@@ -86,10 +86,21 @@ module Hcode
       private def drive(entry : SubagentEntry,
                         spec : Tools::AgentSwarmSpec,
                         ctx : Tools::SwarmRunContext) : Tools::SwarmRunResult
+        tool_call_id = ctx.tool_call_id
+        emit(Event.subagent_started(tool_call_id, entry.agent_id, ctx.swarm_index, spec.item || ""))
+
         entry.running = true
+        ticks = 0
         begin
-          result = entry.agent.run_turn(spec.prompt, @system_prompt) { |_| }
+          result = entry.agent.run_turn(spec.prompt, @system_prompt) do |event|
+            case event.type
+            when .tool_call_start?, .tool_call_delta?, .step_begin?
+              ticks += 1
+              emit(Event.subagent_progress(tool_call_id, entry.agent_id, ticks))
+            end
+          end
           summary = latest_assistant_text(entry.context)
+          emit(Event.subagent_completed(tool_call_id, entry.agent_id))
           Tools::SwarmRunResult.new(
             spec: spec,
             agent_id: entry.agent_id,
@@ -98,6 +109,7 @@ module Hcode
             result: summary,
           )
         rescue ex : Loop::UserCancellationError
+          emit(Event.subagent_failed(tool_call_id, entry.agent_id, "Aborted"))
           Tools::SwarmRunResult.new(
             spec: spec,
             agent_id: entry.agent_id,
@@ -105,6 +117,7 @@ module Hcode
             error: ex.reason,
           )
         rescue ex
+          emit(Event.subagent_failed(tool_call_id, entry.agent_id, "Failed"))
           Tools::SwarmRunResult.new(
             spec: spec,
             agent_id: entry.agent_id,

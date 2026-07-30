@@ -16,6 +16,36 @@ module Hcode
       end
     end
 
+    # Live state of one subagent inside a swarm/agent tool call. Updated by
+    # SubagentStarted/Progress/Completed/Failed events and rendered as an
+    # animated grid cell by `render_swarm_progress`.
+    struct SwarmMember
+      property agent_id : String
+      property phase : String        # "Running" | "Completed" | "Failed" | "Aborted"
+      property ticks : Int32 = 0
+      property item_text : String = ""
+      property swarm_index : Int32 = 0
+
+      def initialize(@agent_id : String, @phase : String = "Running")
+      end
+
+      def completed? : Bool
+        @phase == "Completed"
+      end
+
+      def failed? : Bool
+        @phase == "Failed" || @phase == "Aborted"
+      end
+
+      def done? : Bool
+        completed? || failed?
+      end
+
+      def running? : Bool
+        !done?
+      end
+    end
+
     struct Message
       property role : String
       property content : String
@@ -49,6 +79,9 @@ module Hcode
       # block right under the result preview, dim+italic so it visually
       # separates from the actual tool output.
       property ram_line : String? = nil
+      # Swarm/Agent live progress: when non-empty, the tool block renders an
+      # animated grid of per-subagent cells instead of the static header.
+      property swarm_members : Array(SwarmMember) = [] of SwarmMember
 
       def initialize(@role : String, @content : String = "")
       end
@@ -157,6 +190,10 @@ module Hcode
       @spin_phase : Int32 = 0
       @dirty : Bool = true
       @last_render : Time::Span = Time.monotonic
+      # True while at least one swarm/agent subagent is running — drives the
+      # 80ms animation tick independently of @agent_busy so progress bars
+      # keep moving even when the parent turn is in a tool-call gap.
+      @swarm_active : Bool = false
       @scroll_offset : Int32 = 0
       @exit_confirm : Bool = false
       @exit_key : String = "CTRL+C"
@@ -635,7 +672,7 @@ module Hcode
           now = Time.monotonic
           elapsed = (now - @last_render).total_milliseconds
 
-          if @agent_busy && elapsed >= 80
+          if (@agent_busy || @swarm_active) && elapsed >= 80
             @spin_phase += 1
             @dirty = true
           end
@@ -921,6 +958,14 @@ module Hcode
             end
           end
           @compaction_msg = nil
+        when .subagent_started?
+          handle_subagent_started(event)
+        when .subagent_progress?
+          handle_subagent_progress(event)
+        when .subagent_completed?
+          handle_subagent_terminal(event, "Completed")
+        when .subagent_failed?
+          handle_subagent_terminal(event, event.phase.empty? ? "Failed" : event.phase)
         when .error?
           @messages << Message.new("error", event.text)
           @spinner.stop
@@ -955,6 +1000,74 @@ module Hcode
           end
         end
 
+        @dirty = true
+      end
+
+      # ------------------------------------------------------------------
+      # Subagent lifecycle event handlers — drive the live swarm grid.
+      # ------------------------------------------------------------------
+
+      # Find the tool-call Message that owns the parent AgentSwarm/Agent
+      # tool_call_id and return its index, or nil if it was already trimmed.
+      private def find_swarm_message(tool_call_id : String) : Int32?
+        i = @messages.size - 1
+        while i >= 0
+          m = @messages[i]
+          if m.role == "tool" && m.tool_call_id == tool_call_id
+            return i
+          end
+          i -= 1
+        end
+        nil
+      end
+
+      private def recompute_swarm_active : Nil
+        active = false
+        @messages.each do |m|
+          next if m.swarm_members.empty?
+          m.swarm_members.each { |sm| active = true if sm.running? }
+        end
+        @swarm_active = active
+      end
+
+      private def handle_subagent_started(event : Loop::Event) : Nil
+        idx = find_swarm_message(event.tool_call_id)
+        return unless idx
+        msg = @messages[idx]
+        member = SwarmMember.new(event.agent_id)
+        member.swarm_index = event.swarm_index
+        member.item_text = event.item_text
+        member.phase = event.phase.empty? ? "Running" : event.phase
+        msg.swarm_members << member
+        @messages[idx] = msg
+        @swarm_active = true
+        @dirty = true
+      end
+
+      private def handle_subagent_progress(event : Loop::Event) : Nil
+        idx = find_swarm_message(event.tool_call_id)
+        return unless idx
+        msg = @messages[idx]
+        changed = false
+        msg.swarm_members.each do |sm|
+          if sm.agent_id == event.agent_id
+            sm.ticks = event.subagent_ticks if event.subagent_ticks > sm.ticks
+            changed = true
+          end
+        end
+        @messages[idx] = msg if changed
+        @dirty = true if changed
+      end
+
+      private def handle_subagent_terminal(event : Loop::Event, phase : String) : Nil
+        idx = find_swarm_message(event.tool_call_id)
+        return unless idx
+        msg = @messages[idx]
+        msg.swarm_members.each do |sm|
+          sm.phase = phase if sm.agent_id == event.agent_id
+        end
+        @messages[idx] = msg
+        recompute_swarm_active
         @dirty = true
       end
 
@@ -1255,9 +1368,9 @@ module Hcode
       # Append a message to the queue and persist it so drain survives a
       # resume. The hint shown in the queue pane depends on the current
       # phase (see `queue_hint`).
-      private def enqueue_message(text : String, mode : String = "prompt") : Nil
+      private def enqueue_message(text : String, mode : String = "prompt", *, persist : Bool = true) : Nil
         @queue << QueuedMessage.new(text, mode)
-        @on_persist_queued.try(&.call("turn.prompt", text))
+        @on_persist_queued.try(&.call("turn.prompt", text)) if persist
         @messages << Message.new("system", "[Queued: #{truncate_preview(text)}]")
         @dirty = true
       end
@@ -1308,6 +1421,21 @@ module Hcode
       private def truncate_preview(text : String) : String
         return text if text.size <= 40
         "#{text[0...40]}..."
+      end
+
+      # Public entry point for external systems (cron scheduler, background-task
+      # completion) to deliver a prompt to the agent as a synthetic user message.
+      # When busy, the message is queued (without a wire-log write — cron fires
+      # are regenerated on resume from cron.json, and task notifications are
+      # transient). When idle, a fresh turn is started (persisted: true so the
+      # run_turn block skips writing a duplicate turn.prompt record).
+      def deliver_external_prompt(text : String) : Nil
+        return if text.strip.empty?
+        if @agent_busy || @is_compacting || @defer_user_messages
+          enqueue_message(text, "external", persist: false)
+        else
+          start_turn(text, persisted: true)
+        end
       end
 
       TOOL_PREVIEW_LINES =   10
@@ -2770,7 +2898,9 @@ module Hcode
           end
         when "tool"
           if name = msg.tool_name
-            if group = msg.read_group
+            if !msg.swarm_members.empty?
+              lines.concat(render_swarm_progress(msg, name, cols))
+            elsif group = msg.read_group
               # Normal TUI never expands tool output; /debug mode shows full history.
               lines.concat(render_read_group(group, name, false, cols))
             else
@@ -4023,6 +4153,108 @@ module Hcode
         end
 
         "#{bullet}#{verb} #{tool_label}#{arg_str}#{chip_str}"
+      end
+
+      BRAILLE_LEVELS = ['⣀', '⣄', '⣤', '⣦', '⣶', '⣷', '⣿']
+
+      # Render a live progress grid for an AgentSwarm/Agent tool call. Each
+      # subagent is one row: an animated braille bar + phase label + item text.
+      # The bar's fill is estimated from tick count relative to the max across
+      # siblings, and the spinner phase animates on each render tick.
+      private def render_swarm_progress(msg : Message, tool_name : String, cols : Int32) : Array(String)
+        lines = [] of String
+        c = @theme.colors
+        pc = ANSI.color(c.primary, nil)
+        dc = ANSI.color(c.dim, nil)
+        sc = ANSI.color(c.success, nil)
+        ec = ANSI.color(c.error, nil)
+        wc = ANSI.color(c.warning, nil)
+        tc = ANSI.color(c.text, nil)
+        mc = ANSI.color(c.muted, nil)
+        r = ANSI.reset
+
+        members = msg.swarm_members
+
+        # Header: ● AgentSwarm (description) — Working... / Completed.
+        has_result = !msg.tool_result.nil?
+        bullet =
+          if msg.is_error
+            "#{ec}✗ #{r}"
+          elsif has_result
+            "#{sc}● #{r}"
+          else
+            "#{tc}● #{r}"
+          end
+
+        description = extract_key_argument(tool_name, msg.tool_args) || tool_name
+        running = members.any?(&.running?)
+        completed = members.count(&.completed?)
+        failed = members.count(&.failed?)
+
+        status_label =
+          if !has_result && running
+            sp = Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
+            "#{pc}#{sp}#{r} "
+          else
+            ""
+          end
+
+        status_word =
+          if has_result
+            failed > 0 ? "Completed with #{failed} failed." : "Completed."
+          elsif running
+            "Working..."
+          else
+            "Done."
+          end
+
+        tool_label = "#{pc}#{ANSI.bold}#{tool_name}#{r}"
+        arg_str = "#{dc} (#{description})#{r}"
+        lines << "#{bullet}#{tool_label}#{arg_str}"
+
+        # Per-member rows.
+        max_ticks = members.max_of(&.ticks)
+        max_ticks = 1 if max_ticks < 1
+
+        members.each do |sm|
+          if sm.completed?
+            mark = "#{sc}✓#{r}"
+            phase_str = "#{sc}done#{r}"
+          elsif sm.failed?
+            mark = "#{ec}✗#{r}"
+            phase_str = "#{ec}#{sm.phase}#{r}"
+          elsif sm.running?
+            mark = "#{pc}#{Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]}#{r}"
+            phase_str = "#{mc}running#{r}"
+          else
+            mark = "#{dc}·#{r}"
+            phase_str = "#{dc}#{sm.phase}#{r}"
+          end
+
+          # Braille bar: fill proportional to ticks relative to max.
+          fill = (sm.ticks.to_f / max_ticks * BRAILLE_LEVELS.size).clamp(0..(BRAILLE_LEVELS.size - 1)).to_i
+          # Animate: nudge the fill up by one level on odd spin phases for
+          # running agents so the bar shimmers even without new events.
+          if sm.running? && (@spin_phase % 4) < 2
+            fill = {fill + 1, BRAILLE_LEVELS.size - 1}.min
+          end
+          bar_char = BRAILLE_LEVELS[fill]
+          bar_color = sm.completed? ? sc : (sm.failed? ? ec : pc)
+          bar = "#{bar_color}#{bar_char}#{r}"
+
+          item = sm.item_text.empty? ? sm.agent_id : sm.item_text
+          # Truncate item text to fit within the terminal width.
+          max_item_w = {cols - 16, 10}.max
+          if CharWidth.visible_width(item) > max_item_w
+            item = CharWidth.truncate_to_width(item, max_item_w)
+          end
+
+          lines << "  #{mark} #{bar} #{tc}#{item}#{r} #{phase_str}"
+        end
+
+        # Footer: aggregate status line.
+        lines << "  #{dc}#{status_label}#{status_word}#{r}"
+        lines << ""
       end
 
       private def extract_key_argument(name : String, args : String?) : String?

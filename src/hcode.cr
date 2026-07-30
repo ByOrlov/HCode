@@ -338,12 +338,12 @@ module Hcode
 
       goal_service = Hcode::Tools::AgentGoalService.new
       Hcode::Tools::Goal.service = goal_service
-      wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
+      agent_runner, swarm_runner = wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
       if prompt
         run_headless(prompt, agent, system_prompt, store, config)
       else
-        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt)
+        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner)
       end
     end
 
@@ -478,7 +478,7 @@ module Hcode
                                            task_service : Tools::InMemoryTaskService,
                                            system_prompt : String,
                                            work_dir : String,
-                                           config : Config::Config) : Nil
+                                           config : Config::Config) : {Loop::SubagentAgentRunner, Loop::SubagentSwarmRunner}
       registry = Loop::SubagentRegistry.new
       permission_mode = Permission::Mode.parse(config.permission_mode)
 
@@ -502,6 +502,7 @@ module Hcode
       # TaskList/TaskOutput/TaskStop are registered for the main agent, so
       # background subagent execution is available.
       Tools::Agent.background_enabled = true
+      {agent_runner, swarm_runner}
     end
 
     private def self.run_headless(prompt, agent, system_prompt, store, config)
@@ -634,7 +635,9 @@ module Hcode
       app.run { |_text, _persisted| }
     end
 
-    private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil)
+    private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil,
+                                     agent_runner : Loop::SubagentAgentRunner? = nil,
+                                     swarm_runner : Loop::SubagentSwarmRunner? = nil)
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
       app.model = agent.provider.model_name
@@ -643,6 +646,16 @@ module Hcode
       app.max_context_tokens = agent.context.max_context_tokens
       app.home = home
       app.work_dir = work_dir
+
+      # Wire subagent lifecycle events from the runners into the TUI so the
+      # swarm progress panel animates live. Each event is routed to
+      # app.on_event just like any other Loop event.
+      if ar = agent_runner
+        ar.event_sink = ->(event : Loop::Event) { app.on_event(event) }
+      end
+      if sr = swarm_runner
+        sr.event_sink = ->(event : Loop::Event) { app.on_event(event) }
+      end
 
       lifecycle = Session::Lifecycle.new(home)
 

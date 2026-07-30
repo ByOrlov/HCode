@@ -203,6 +203,8 @@ module Hcode
         runner = @@runner
         return ToolResult.error(NO_RUNNER_ERROR) if runner.nil?
 
+        runner.tool_call_id = @tool_call_id
+
         spec = AgentLaunchSpec.new(
           prompt: processed.prompt,
           description: processed.description,
@@ -504,6 +506,18 @@ module Hcode
     #   * обработку timeout/abort внутри себя;
     #   * возврат `AgentRunOutcome` с нужной веткой (detached/completed/failed).
     abstract class AgentRunner
+      # Optional callback to emit subagent lifecycle events to the parent's
+      # event loop. Set by the session before the tool runs so the TUI can
+      # render live per-agent progress.
+      property event_sink : (Loop::Event ->)?
+      # Set by the Agent tool before each launch so lifecycle events carry
+      # the parent tool_call_id.
+      property tool_call_id : String = ""
+
+      def emit(event : Loop::Event) : Nil
+        @event_sink.try(&.call(event))
+      end
+
       abstract def launch(spec : AgentLaunchSpec, signal : AbortController?) : AgentRunOutcome
     end
   end

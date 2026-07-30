@@ -301,6 +301,7 @@ module Hcode
           description: child_description(args.description, spec.index, description_name),
           swarm_index: spec.index,
           timeout_ms: timeout_ms,
+          tool_call_id: @tool_call_id,
         )
         runner.call(spec, ctx)
       end
@@ -458,12 +459,14 @@ module Hcode
       getter description : String
       getter swarm_index : Int32
       getter timeout_ms : Int32?
+      getter tool_call_id : String
 
       def initialize(@parent_description : String,
                      @profile_name : String,
                      @description : String,
                      @swarm_index : Int32,
-                     @timeout_ms : Int32? = nil)
+                     @timeout_ms : Int32? = nil,
+                     @tool_call_id : String = "")
       end
     end
 
@@ -476,7 +479,16 @@ module Hcode
     #   * обработку timeout/abort внутри себя;
     #   * lookup сохранённого swarm-item лейбла для resume (v1-parity).
     module SwarmRunner
+      # Optional callback to emit subagent lifecycle events to the parent's
+      # event loop. Set by the session before the tool runs so the TUI can
+      # render live per-agent progress.
+      property event_sink : (Loop::Event ->)?
+
       abstract def call(spec : AgentSwarmSpec, ctx : SwarmRunContext) : SwarmRunResult
+
+      def emit(event : Loop::Event) : Nil
+        @event_sink.try(&.call(event))
+      end
 
       # Опциональный lookup сохранённого item-лейбла для resumed агента.
       # По умолчанию nil — позволяет повторить контракт JS `getSwarmItem`.
