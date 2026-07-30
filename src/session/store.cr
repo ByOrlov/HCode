@@ -163,6 +163,116 @@ module Hcode
         end
       end
 
+      # ------------------------------------------------------------------
+      # Persistence helpers for cron tasks and background-task metadata.
+      # ------------------------------------------------------------------
+
+      # Path to the cron-tasks persistence file for this session.
+      def cron_path : String
+        File.join(@session_dir, "cron.json")
+      end
+
+      # Load persisted cron tasks (array of JSON objects). Returns an empty
+      # array when the file does not exist or is unreadable.
+      def read_cron_tasks : Array(JSON::Any)
+        return [] of JSON::Any unless File.exists?(cron_path)
+        JSON.parse(File.read(cron_path)).as_a
+      rescue JSON::ParseException
+        [] of JSON::Any
+      end
+
+      # Atomically persist the cron-tasks array. Writes to a temp file,
+      # fsyncs, then renames into place so a crash mid-write cannot corrupt
+      # the existing store.
+      def write_cron_tasks(json : String) : Nil
+        atomic_write(cron_path, json)
+      end
+
+      # Directory holding background-task metadata and output logs.
+      def tasks_dir : String
+        File.join(@session_dir, "tasks")
+      end
+
+      # Ensure the tasks directory exists, creating it if needed.
+      def ensure_tasks_dir : Nil
+        Dir.mkdir_p(tasks_dir) unless Dir.exists?(tasks_dir)
+      end
+
+      # Per-task metadata file (`<tasks_dir>/<task_id>.json`).
+      def task_meta_path(task_id : String) : String
+        File.join(tasks_dir, "#{task_id}.json")
+      end
+
+      # Per-task output log (`<tasks_dir>/<task_id>.log`).
+      def task_output_path(task_id : String) : String
+        File.join(tasks_dir, "#{task_id}.log")
+      end
+
+      # Load every persisted task metadata document. Skips files that fail
+      # to parse (defensive against partial writes). Returns task_id → JSON.
+      def read_task_metas : Array({String, JSON::Any})
+        return [] of {String, JSON::Any} unless Dir.exists?(tasks_dir)
+        results = [] of {String, JSON::Any}
+        Dir.children(tasks_dir).each do |name|
+          next unless name.ends_with?(".json")
+          path = File.join(tasks_dir, name)
+          task_id = name.rchop(".json")
+          begin
+            parsed = JSON.parse(File.read(path))
+            results << {task_id, parsed}
+          rescue JSON::ParseException
+            # Skip corrupt files.
+          end
+        end
+        results
+      end
+
+      # Read a single task's metadata document. Returns nil when the file
+      # does not exist or is unreadable.
+      def read_task_meta(task_id : String) : JSON::Any?
+        path = task_meta_path(task_id)
+        return nil unless File.exists?(path)
+        JSON.parse(File.read(path))
+      rescue JSON::ParseException
+        nil
+      end
+
+      # Atomically persist a single task's metadata.
+      def write_task_meta(task_id : String, json : String) : Nil
+        ensure_tasks_dir
+        atomic_write(task_meta_path(task_id), json)
+      end
+
+      # Delete a task's metadata file (used when a one-shot/stale task is
+      # removed entirely). Best-effort; ignores a missing file.
+      def delete_task_meta(task_id : String) : Nil
+        path = task_meta_path(task_id)
+        File.delete(path) if File.exists?(path)
+      rescue
+        # Best-effort.
+      end
+
+      # Atomic write: temp file in the same directory, fsync, rename.
+      # Same-directory rename is atomic on POSIX; keeping the temp file
+      # adjacent ensures the rename does not cross a filesystem boundary.
+      private def atomic_write(path : String, content : String) : Nil
+        dir = File.dirname(path)
+        Dir.mkdir_p(dir) unless Dir.exists?(dir)
+        tmp = File.join(dir, ".#{File.basename(path)}.tmp.#{Random::Secure.hex(4)}")
+        File.open(tmp, "w") do |f|
+          f.print(content)
+          f.fsync
+        end
+        File.rename(tmp, path)
+      rescue ex
+        # Best-effort cleanup of the temp file if rename failed.
+        begin
+          File.delete(tmp) if tmp && File.exists?(tmp)
+        rescue
+        end
+        raise ex
+      end
+
       def self.list_sessions(home : String) : Array(SessionInfo)
         sessions_dir = File.join(home, ".hcode", "sessions")
         return [] of SessionInfo unless Dir.exists?(sessions_dir)

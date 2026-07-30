@@ -333,7 +333,7 @@ module Hcode
         additional_dirs: [] of String,
         skills_listing: skill_catalog.model_listing)
 
-      task_service = Hcode::Tools::InMemoryTaskService.new
+      task_service = Hcode::Tools::InMemoryTaskService.new(store)
       Hcode::Tools::Task.service = task_service
 
       goal_service = Hcode::Tools::AgentGoalService.new
@@ -341,9 +341,9 @@ module Hcode
       agent_runner, swarm_runner = wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
       if prompt
-        run_headless(prompt, agent, system_prompt, store, config)
+        run_headless(prompt, agent, system_prompt, store, config, task_service)
       else
-        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner)
+        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner, task_service)
       end
     end
 
@@ -505,12 +505,14 @@ module Hcode
       {agent_runner, swarm_runner}
     end
 
-    private def self.run_headless(prompt, agent, system_prompt, store, config)
+    private def self.run_headless(prompt, agent, system_prompt, store, config, task_service)
       store.append_simple("turn.prompt", "prompt", prompt)
 
       Signal::INT.trap do
         STDERR.puts "\nInterrupted."
         agent.cancel
+        # Kill any background processes spawned during this headless run.
+        task_service.stop_all_on_exit("process interrupted")
       end
 
       # Headless dispatcher: useful for CI/automation webhooks. StatusTracker
@@ -637,7 +639,8 @@ module Hcode
 
     private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil,
                                      agent_runner : Loop::SubagentAgentRunner? = nil,
-                                     swarm_runner : Loop::SubagentSwarmRunner? = nil)
+                                     swarm_runner : Loop::SubagentSwarmRunner? = nil,
+                                     task_service : Tools::InMemoryTaskService? = nil)
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
       app.model = agent.provider.model_name
@@ -706,9 +709,42 @@ module Hcode
       # TaskService was already created and assigned in `run` so the headless
       # path shares the same instance; reuse it here for the profilers and the
       # /tasks browser.
-      task_service = Hcode::Tools::Task.service.as(Hcode::Tools::InMemoryTaskService)
+      ts = task_service || Hcode::Tools::Task.service.as(Hcode::Tools::InMemoryTaskService)
 
-      register_profilers(agent, app, permission, task_service, system_prompt)
+      # Wire background-task + cron delivery into the TUI. `deliver_external_prompt`
+      # enqueues the message (without a wire-log write) when busy, or starts a
+      # fresh turn when idle.
+      delivery = ->(text : String) { app.deliver_external_prompt(text) }
+
+      # Re-register the Bash tool with task-service + delivery wiring so
+      # run_in_background=true spawns a tracked process instead of erroring.
+      app_work_dir = work_dir
+      ts_value = ts
+      delivery_value = delivery
+      session_dir_value = store.session_dir
+      bash_tool = Hcode::Tools::Bash.new(app_work_dir, ts_value, session_dir_value, delivery_value)
+      agent.tools.register(bash_tool)
+
+      # Create + start the cron scheduler. Reconcile any persisted tasks on
+      # resume; missed fires are coalesced on the next tick.
+      cron_service = Hcode::Tools::LiveCronService.new(
+        store: store,
+        agent: agent,
+        delivery: delivery,
+        enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+      )
+      Hcode::Tools::Cron.service = cron_service
+      ts.mark_lost_on_resume
+      cron_service.start
+
+      # Flush cron state + kill background processes on clean exit.
+      app.on_exit = ->{
+        cron_service.stop
+        ts.stop_all_on_exit("process exited")
+        nil
+      }
+
+      register_profilers(agent, app, permission, ts, system_prompt)
 
       app.on_clear = ->{ agent.context.clear }
       app.on_undo = ->{ agent.context.undo(1) }
@@ -751,6 +787,16 @@ module Hcode
         store.ensure_wire
         app.session_id = store.read_state.try(&.id) || ""
         Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+        # Restart the cron scheduler against the fresh session store.
+        cron_service.stop
+        new_cron = Hcode::Tools::LiveCronService.new(
+          store: store,
+          agent: agent,
+          delivery: delivery,
+          enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+        )
+        Hcode::Tools::Cron.service = new_cron
+        new_cron.start
         nil
       }
       app.on_resume_session = ->(path : String) do
@@ -763,6 +809,18 @@ module Hcode
         app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
         app.load_transcript_from(agent.context)
         Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+        # Restart the cron scheduler against the resumed session store and
+        # reconcile persisted task records (mark non-terminal as Lost).
+        cron_service.stop
+        new_cron = Hcode::Tools::LiveCronService.new(
+          store: store,
+          agent: agent,
+          delivery: delivery,
+          enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+        )
+        Hcode::Tools::Cron.service = new_cron
+        new_cron.start
+        ts.mark_lost_on_resume
         nil
       end
       app.on_fork = ->{

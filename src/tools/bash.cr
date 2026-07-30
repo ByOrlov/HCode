@@ -1,13 +1,12 @@
 module Hcode
   module Tools
     class Bash < Tool
-      # Foreground-only execution. Background task management
-      # (run_in_background / auto-background-on-timeout) is not available —
-      # there is no BackgroundManager in hcode.cr — so a foreground command
-      # that hits its timeout is killed, mirroring the JS config
-      # `autoBackgroundOnTimeout: false`.
       DEFAULT_TIMEOUT_S = 60
       MAX_TIMEOUT_S     = 300
+
+      # Background-specific timeouts.
+      DEFAULT_BG_TIMEOUT_S = 600
+      MAX_BG_TIMEOUT_S     = 86_400
 
       # In-tool output cap. The context budget (Context::Budget) separately
       # truncates at 50k chars for the model context; this cap mirrors the JS
@@ -17,8 +16,14 @@ module Hcode
       OUTPUT_TRUNCATION_SENTINEL  = "\n[...truncated]\nOutput is truncated to fit in the message."
 
       @work_dir : String
+      @task_service : TaskService?
+      @session_dir : String?
+      @delivery : (String -> Nil)?
 
-      def initialize(@work_dir : String = Dir.current)
+      def initialize(@work_dir : String = Dir.current,
+                     @task_service : TaskService? = nil,
+                     @session_dir : String? = nil,
+                     @delivery : (String -> Nil)? = nil)
       end
 
       def name : String
@@ -52,8 +57,10 @@ Guidelines for efficiency:
 - Use `;` to run commands sequentially regardless of success/failure.
 - Use `||` for conditional execution (run second command only if first fails).
 - Use pipe operations (`|`) and redirections (`>`, `>>`) to chain input and output between commands.
-- Always quote file paths containing spaces with double quotes (e.g., cd "/path with spaces/").
-- Compose multi-step logic in a single call with `if` / `case` / `for` / `while` control flows.)
+- Always quote file paths containing spaces with double quotes (e.g. cd "/path with spaces/").
+- Compose multi-step logic in a single call with `if` / `case` / `for` / `while` control flows.
+
+For long-running commands, pass run_in_background: true. The tool returns immediately with a task_id, and the full output is streamed to a file. Use TaskList / TaskOutput / TaskStop to inspect or control the background task; you will be automatically notified when it completes.)
       end
 
       def parameters : JSON::Any
@@ -70,12 +77,22 @@ Guidelines for efficiency:
             },
             "timeout": {
               "type": "integer",
-              "description": "Optional timeout in seconds. The default is #{DEFAULT_TIMEOUT_S}s; the maximum is #{MAX_TIMEOUT_S}s. A command that hits its timeout is killed.",
+              "description": "Optional timeout in seconds. The default is #{DEFAULT_TIMEOUT_S}s; the maximum is #{MAX_TIMEOUT_S}s for foreground and #{MAX_BG_TIMEOUT_S}s for background. A command that hits its timeout is killed (foreground) or timed_out (background).",
               "default": #{DEFAULT_TIMEOUT_S}
             },
             "description": {
               "type": "string",
               "description": "A short description of what this command does. Shown in the approval UI."
+            },
+            "run_in_background": {
+              "type": "boolean",
+              "default": false,
+              "description": "Run the command in the background and return immediately with a task_id. The full output is streamed to a file; use TaskOutput to read it and TaskStop to cancel. Completion is delivered as a notification."
+            },
+            "disable_timeout": {
+              "type": "boolean",
+              "default": false,
+              "description": "When true and run_in_background is true, the background process runs with no timeout. Only effective for background tasks."
             }
           },
           "required": ["command"]
@@ -86,16 +103,27 @@ Guidelines for efficiency:
         command = input["command"]?.try(&.to_s) || ""
         return ToolResult.error("Command cannot be empty.") if command.empty?
 
-        # run_in_background requires a BackgroundManager (not present in
-        # hcode.cr). Reject it explicitly instead of silently running a
-        # long-lived command in the foreground and killing it at the cap.
-        if input["run_in_background"]?.try(&.as_bool?) == true
-          return ToolResult.error(
-            "Background execution is not available for this agent. " \
-            "Do not set run_in_background=true.",
-          )
+        run_in_background = input["run_in_background"]?.try(&.as_bool?) == true
+
+        # Background execution requires a TaskService to track the process.
+        if run_in_background
+          if @task_service.nil?
+            return ToolResult.error(
+              "Background execution is not available for this agent. " \
+              "Do not set run_in_background=true.",
+            )
+          end
+          return execute_background(input, command)
         end
 
+        execute_foreground(input, command)
+      end
+
+      # ------------------------------------------------------------------
+      # Foreground execution
+      # ------------------------------------------------------------------
+
+      private def execute_foreground(input : JSON::Any, command : String) : ToolResult
         timeout_s = parse_timeout(input["timeout"]?)
         cwd = input["cwd"]?.try(&.to_s)
         effective_cwd = (cwd.nil? || cwd.empty?) ? @work_dir : cwd
@@ -170,10 +198,259 @@ Guidelines for efficiency:
         ToolResult.error("Unexpected error: #{ex.message}")
       end
 
+      # ------------------------------------------------------------------
+      # Background execution
+      # ------------------------------------------------------------------
+
+      private def execute_background(input : JSON::Any, command : String) : ToolResult
+        svc = @task_service.not_nil!
+        session_dir = @session_dir.not_nil!
+
+        cwd = input["cwd"]?.try(&.to_s)
+        effective_cwd = (cwd.nil? || cwd.empty?) ? @work_dir : cwd
+
+        disable_timeout = input["disable_timeout"]?.try(&.as_bool?) == true
+        timeout_s = disable_timeout ? nil : parse_bg_timeout(input["timeout"]?)
+
+        # Generate task metadata + output path.
+        task_id = svc.next_task_id("bash")
+        output_path = File.join(session_dir, "tasks", "#{task_id}.log")
+        Dir.mkdir_p(File.dirname(output_path))
+
+        spawn_env = build_env
+
+        # Spawn the process.
+        process = Process.new(
+          command,
+          shell: true,
+          env: spawn_env,
+          input: Process::Redirect::Pipe,
+          output: Process::Redirect::Pipe,
+          error: Process::Redirect::Pipe,
+          chdir: effective_cwd,
+        )
+        process.input.close
+
+        now_ms = Time.utc.to_unix_ms
+        info = AgentTaskInfo.new(
+          task_id: task_id,
+          description: input["description"]?.try(&.to_s) || command,
+          status: AgentTaskStatus::Running,
+          started_at: now_ms,
+          detached: true,
+          timeout_ms: timeout_s.try(&.to_i64.*(1000)),
+          command: command,
+          pid: process.pid.to_i64,
+        )
+        svc.register(info)
+
+        exit_ch = Channel(Process::Status).new
+        svc.register_process(task_id, process, exit_ch)
+
+        # Monitor fiber: capture output to file, wait for exit, update status,
+        # and deliver the completion notification.
+        spawn do
+          monitor_background(svc, task_id, process, output_path, exit_ch, command)
+        end
+
+        # Arm a timeout (if configured) on a separate fiber.
+        if t = timeout_s
+          spawn do
+            select
+            when exit_ch.receive?
+              # Process exited before the timeout; nothing to do.
+            when timeout(t.seconds)
+              # Timeout fired — the monitor is still waiting on process.wait;
+              # kill the process, the monitor will observe the exit and settle
+              # as TimedOut.
+              unless info.status.terminal?
+                kill_two_phase(process)
+              end
+            end
+          end
+        end
+
+        ToolResult.success(background_started_result(task_id, output_path, command))
+      rescue ex : File::NotFoundError
+        ToolResult.error("Failed to execute command: shell not found")
+      rescue ex : IO::Error
+        ToolResult.error("Failed to execute command: #{ex.message}")
+      rescue ex
+        ToolResult.error("Unexpected error: #{ex.message}")
+      end
+
+      private def monitor_background(svc : TaskService, task_id : String,
+                                     process : Process, output_path : String,
+                                     exit_ch : Channel(Process::Status),
+                                     command : String) : Nil
+        # Capture stdout + stderr to the output file in real time. Each stream
+        # is copied in its own fiber; their completion is awaited before the
+        # exit status is read so no output is lost.
+        done_out = Channel(Nil).new
+        done_err = Channel(Nil).new
+        file = File.open(output_path, "w")
+
+        spawn do
+          begin
+            IO.copy(process.output, file)
+          rescue IO::Error
+            # Process closed the stream early — ignore.
+          ensure
+            done_out.send(nil)
+          end
+        end
+
+        spawn do
+          begin
+            # Separate stderr from stdout with a marker line so the combined
+            # output is readable. A simple newline separator is enough for the
+            # agent to parse the tail preview.
+            first = true
+            buf = Bytes.new(8192)
+            loop do
+              read = process.error.read(buf)
+              break if read == 0
+              file.puts unless first
+              first = false
+              file.write(buf[0, read])
+            end
+          rescue IO::Error
+            # Stream closed — ignore.
+          ensure
+            done_err.send(nil)
+          end
+        end
+
+        # Wait for both stream copiers to finish, then close the file and
+        # read the exit status.
+        done_out.receive
+        done_err.receive
+        file.fsync
+        file.close
+
+        status = process.wait
+        exit_ch.send(status)
+        exit_ch.close
+
+        info = svc.get_task(task_id).not_nil!
+        now_ms = Time.utc.to_unix_ms
+        info.ended_at = now_ms
+
+        if !status.normal_exit?
+          info.status = AgentTaskStatus::Failed
+          info.stop_reason = "killed by signal"
+        elsif info.status.terminal?
+          # Already terminal (e.g. killed by TaskStop or timeout) — leave it.
+        elsif status.exit_code != 0
+          info.status = AgentTaskStatus::Failed
+          info.exit_code = status.exit_code
+        else
+          info.status = AgentTaskStatus::Completed
+          info.exit_code = 0
+        end
+
+        # Read a tail preview for TaskOutput.
+        preview = read_tail(output_path, Task::OUTPUT_PREVIEW_BYTES)
+        svc.set_output(task_id, preview,
+          output_path: output_path,
+          full_output_available: true,
+          truncated: preview.bytesize >= Task::OUTPUT_PREVIEW_BYTES)
+
+        svc.persist_task_meta(task_id) if svc.is_a?(InMemoryTaskService)
+
+        # Deliver the completion notification unless suppressed.
+        deliver_completion(svc, task_id, command, output_path) unless svc.notification_suppressed?(task_id)
+      end
+
+      # ------------------------------------------------------------------
+      # Notification delivery
+      # ------------------------------------------------------------------
+
+      private def deliver_completion(svc : TaskService, task_id : String,
+                                     command : String, output_path : String) : Nil
+        info = svc.get_task(task_id)
+        return if info.nil?
+        delivery = @delivery
+        return if delivery.nil?
+
+        status_str = info.status.to_wire
+        completed = info.status.completed?
+
+        body = String.build do |s|
+          s << "Command: #{command}\n"
+          if ec = info.exit_code
+            s << "Exit code: #{ec}\n"
+          end
+          if r = info.stop_reason
+            s << "Reason: #{r}\n"
+          end
+          s << "Output: #{output_path}\n"
+          s << "Use the Read tool with the output_path to read the full log."
+        end
+
+        data = {
+          "id"          => JSON::Any.new("task.#{task_id}.#{status_str}"),
+          "category"    => JSON::Any.new("task_completion"),
+          "type"        => JSON::Any.new(status_str),
+          "source_kind" => JSON::Any.new("bash"),
+          "source_id"   => JSON::Any.new(task_id),
+          "title"       => JSON::Any.new("Background process #{status_str}"),
+          "severity"    => JSON::Any.new(completed ? "info" : "warning"),
+          "body"        => JSON::Any.new(body),
+        } of String => JSON::Any
+
+        xml = Tools.render_notification_xml(data)
+        delivery.call(xml)
+      end
+
+      # ------------------------------------------------------------------
+      # Helpers
+      # ------------------------------------------------------------------
+
+      private def background_started_result(task_id : String, output_path : String,
+                                           command : String) : String
+        lines = [] of String
+        lines << "Background task started."
+        lines << "task_id: #{task_id}"
+        lines << "output_path: #{output_path}"
+        lines << "command: #{command}"
+        lines << "Use TaskOutput to read the output (non-blocking by default) and TaskStop to cancel it."
+        lines.join('\n')
+      end
+
+      private def read_tail(path : String, max_bytes : Int32) : String
+        return "" unless File.exists?(path)
+        size = File.size(path)
+        return File.read(path) if size <= max_bytes
+        File.open(path) do |f|
+          f.seek(size - max_bytes)
+          f.gets_to_end
+        end
+      rescue
+        ""
+      end
+
+      # Two-phase kill: SIGTERM, then SIGKILL after 5s.
+      private def kill_two_phase(process : Process) : Nil
+        process.terminate rescue nil
+        spawn do
+          sleep 5.seconds
+          if process.exists?
+            LibC.kill(process.pid, 9) rescue nil
+          end
+        end
+      end
+
       private def parse_timeout(raw : JSON::Any?) : Int32
         value = raw.try(&.as_i?) || raw.try(&.as_s?).try(&.to_i?) || DEFAULT_TIMEOUT_S
         return DEFAULT_TIMEOUT_S if value <= 0
         {value, MAX_TIMEOUT_S}.min
+      end
+
+      private def parse_bg_timeout(raw : JSON::Any?) : Int32
+        value = raw.try(&.as_i?) || raw.try(&.as_s?).try(&.to_i?) || DEFAULT_BG_TIMEOUT_S
+        return DEFAULT_BG_TIMEOUT_S if value <= 0
+        {value, MAX_BG_TIMEOUT_S}.min
       end
 
       # Hardened child env. Crystal's `Process.new(env:)` merges with the

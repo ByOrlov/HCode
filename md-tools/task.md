@@ -472,40 +472,47 @@ end
 
 ## 7. План реализации (чек-лист)
 
-- [ ] Прочитать JS: `tools/*.ts` + `.md`, `format.ts`, `types.ts`,
+- [x] Прочитать JS: `tools/*.ts` + `.md`, `format.ts`, `types.ts`,
       `task.ts`, `taskService.ts`, `notificationXml.ts`, `taskOps.ts`,
       `persist.ts`, `errors.ts`, `configSection.ts`.
 - [x] Описать контракт в `md-tools/task.md`.
-- [ ] Реализовать `AgentTaskStatus` + `TERMINAL_STATUSES` enum/Set.
-- [ ] Реализовать `format_plain_object(record)` утилиту в
-      `src/tools/task.cr` (или `src/utils/format.cr`):
-  - опускает `nil`,
-  - `CamelCase` → `snake_case`,
-  - `String` → как есть; остальные — `to_s`.
-- [ ] Реализовать `Tools::TaskList` (§2) — минимальный, без blocking.
-- [ ] Реализовать `Tools::TaskOutput` (§3) со всеми ветками:
-  - [ ] `retrieval_status`, `terminal_reason`, `full_output_hint`,
+- [x] Реализовать `AgentTaskStatus` + `TERMINAL_STATUSES` enum/Set.
+- [x] Реализовать `format_plain_object(record)` утилиту в
+      `src/tools/task.cr` (`snake_case_key` + `format_plain_object`).
+- [x] Реализовать `Tools::TaskList` (§2) — минимальный, без blocking.
+- [x] Реализовать `Tools::TaskOutput` (§3) со всеми ветками:
+  - [x] `retrieval_status`, `terminal_reason`, `full_output_hint`,
         `next_step`.
-  - [ ] Read из output snapshot (tail preview).
-- [ ] Реализовать `Tools::TaskStop` (§4):
-  - [ ] `terminal_stop_reason`.
-  - [ ] suppressTerminalNotification перед `stop`.
-- [ ] Реализовать `render_notification_xml` + `escape_xml_attr`.
-- [ ] Реализовать `TaskService` (abstract) + простую in-memory
-      реализацию для background bash.
-- [ ] Подключить к bash-инструменту: при `run_in_background=true`
-      запускать процесс через `TaskService.register_task`, а не
-      синхронно. Это потребует фикс-плана для Bash.
-- [ ] Регистрация тулов в `src/hcode.cr:166` для main agent.
-- [ ] Тесты в `spec/tools/task_spec.cr`:
-  - [ ] TaskList — empty/non-empty; `active_only` filter; `limit` cap;
+  - [x] Read из output snapshot (tail preview).
+- [x] Реализовать `Tools::TaskStop` (§4):
+  - [x] `terminal_stop_reason`.
+  - [x] suppressTerminalNotification перед `stop`.
+- [x] Реализовать `render_notification_xml` + `escape_xml_attr`.
+- [x] Реализовать `TaskService` (abstract) + `InMemoryTaskService`
+      с process tracking (PID, exit channel, SIGTERM→grace→SIGKILL),
+      persistence в `Session::Store`, и `mark_lost_on_resume`.
+- [x] Подключить к bash-инструменту: при `run_in_background=true`
+      запускать процесс через `TaskService.register` +
+      `register_process`, с output capture в файл и notification
+      delivery.
+- [x] Регистрация тулов в `src/hcode.cr` для main agent.
+- [x] JSON-сериализация `AgentTaskInfo` (`to_json_str` / `from_json_obj`).
+- [x] Тесты в `spec/tools/task_spec.cr`:
+  - [x] TaskList — empty/non-empty; `active_only` filter; `limit` cap;
         `lost`-задачи при `active_only=false`.
-  - [ ] TaskOutput — terminal/non-terminal; `block=false` returns
+  - [x] TaskOutput — terminal/non-terminal; `block=false` returns
         snapshot; `block=true` → `timeout` на running; truncation
         banner; `output_path` absent hint; `next_step`.
-  - [ ] TaskStop — already-terminal возвращает status; running → stop;
+  - [x] TaskStop — already-terminal возвращает status; running → stop;
         `Failed to stop`; `Task not found`.
-- [ ] Обновить `FIX-TOOLS.md`: отметить строки #13–#15 выполненными.
+  - [x] Persistence round-trip (`to_json_str` / `from_json_obj`).
+  - [x] `mark_lost_on_resume` — non-terminal → Lost, terminal preserved.
+  - [x] Process kill на stop (реальный `sleep` процесс).
+- [x] Тесты bash background в `spec/tools/bash_spec.cr`:
+  - [x] `run_in_background` запускает процесс, output в файл.
+  - [x] Notification delivery при completion.
+  - [x] TaskStop убивает running процесс.
+- [x] Тесты `Session::Store` persistence helpers (cron.json, task metas).
 
 ---
 

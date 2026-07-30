@@ -455,3 +455,161 @@ describe "Hcode::Tools.snake_case_key" do
     Hcode::Tools.snake_case_key("simple").should eq("simple")
   end
 end
+
+describe Hcode::Tools::AgentTaskInfo do
+  it "round-trips through JSON serialization" do
+    info = make_task("bash-1",
+      status: Hcode::Tools::AgentTaskStatus::Completed,
+      command: "echo hello",
+      pid: 12345_i64,
+      exit_code: 0,
+      ended_at: 999_i64,
+    )
+    json = info.to_json_str
+    parsed = JSON.parse(json)
+    parsed["task_id"].to_s.should eq("bash-1")
+    parsed["status"].to_s.should eq("completed")
+    parsed["command"].to_s.should eq("echo hello")
+    parsed["pid"].as_i64.should eq(12345)
+    parsed["exit_code"].as_i.should eq(0)
+
+    restored = Hcode::Tools::AgentTaskInfo.from_json_obj(parsed)
+    restored.task_id.should eq("bash-1")
+    restored.status.should eq(Hcode::Tools::AgentTaskStatus::Completed)
+    restored.command.should eq("echo hello")
+    restored.pid.should eq(12345)
+    restored.exit_code.should eq(0)
+  end
+
+  it "handles nil fields in JSON round-trip" do
+    info = make_task("agent-2",
+      status: Hcode::Tools::AgentTaskStatus::Running,
+    )
+    json = info.to_json_str
+    parsed = JSON.parse(json)
+    parsed.as_h.has_key?("ended_at").should be_false
+    parsed.as_h.has_key?("command").should be_false
+
+    restored = Hcode::Tools::AgentTaskInfo.from_json_obj(parsed)
+    restored.ended_at.should be_nil
+    restored.command.should be_nil
+  end
+end
+
+describe Hcode::Tools::InMemoryTaskService do
+  it "persists task metadata to the store" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "task-persist-#{Random::Secure.hex(4)}"))
+      svc = Hcode::Tools::InMemoryTaskService.new(store)
+
+      info = make_task("bash-1", status: Hcode::Tools::AgentTaskStatus::Running, command: "sleep 10")
+      svc.register(info)
+
+      path = store.task_meta_path("bash-1")
+      File.exists?(path).should be_true
+      parsed = store.read_task_meta("bash-1").not_nil!
+      parsed["task_id"].to_s.should eq("bash-1")
+      parsed["status"].to_s.should eq("running")
+    end
+  end
+
+  it "marks non-terminal tasks as lost on resume" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "task-lost-#{Random::Secure.hex(4)}"))
+
+      # Simulate a previous session writing a Running task.
+      info = make_task("bash-old", status: Hcode::Tools::AgentTaskStatus::Running)
+      store.write_task_meta("bash-old", info.to_json_str)
+
+      # New session: load + reconcile.
+      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      lost = svc.mark_lost_on_resume
+
+      lost.size.should eq(1)
+      lost.first.task_id.should eq("bash-old")
+      lost.first.status.should eq(Hcode::Tools::AgentTaskStatus::Lost)
+      svc.get_task("bash-old").not_nil!.status.lost?.should be_true
+    end
+  end
+
+  it "does not mark terminal tasks as lost on resume" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "task-term-#{Random::Secure.hex(4)}"))
+
+      info = make_task("bash-done", status: Hcode::Tools::AgentTaskStatus::Completed, exit_code: 0)
+      store.write_task_meta("bash-done", info.to_json_str)
+
+      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      lost = svc.mark_lost_on_resume
+
+      lost.empty?.should be_true
+      svc.get_task("bash-done").not_nil!.status.completed?.should be_true
+    end
+  end
+
+  it "kills a real process on stop" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "task-kill-#{Random::Secure.hex(4)}"))
+      svc = Hcode::Tools::InMemoryTaskService.new(store)
+
+      # Spawn a real sleep process.
+      process = Process.new("sleep", ["100"], input: Process::Redirect::Close,
+        output: Process::Redirect::Close, error: Process::Redirect::Close)
+      exit_ch = Channel(Process::Status).new
+
+      info = make_task("bash-proc", status: Hcode::Tools::AgentTaskStatus::Running, pid: process.pid.to_i64)
+      svc.register(info)
+      svc.register_process("bash-proc", process, exit_ch)
+
+      spawn { exit_ch.send(process.wait) }
+
+      svc.stop("bash-proc", "test kill")
+      info.status.terminal?.should be_true
+    end
+  end
+end
+
+describe Hcode::Session::Store do
+  it "writes and reads cron tasks atomically" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "cron-store-#{Random::Secure.hex(4)}"))
+      store.write_cron_tasks(%([{"id":"abc","cron":"* * * * *","prompt":"hi","recurring":true,"created_at":1000}]))
+
+      tasks = store.read_cron_tasks
+      tasks.size.should eq(1)
+      tasks.first["id"].to_s.should eq("abc")
+      tasks.first["cron"].to_s.should eq("* * * * *")
+    end
+  end
+
+  it "returns empty array for missing cron file" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "cron-missing-#{Random::Secure.hex(4)}"))
+      store.read_cron_tasks.should be_empty
+    end
+  end
+
+  it "writes and reads task metadata" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "meta-store-#{Random::Secure.hex(4)}"))
+      store.write_task_meta("task-1", %({"task_id":"task-1","status":"running"}))
+
+      meta = store.read_task_meta("task-1").not_nil!
+      meta["task_id"].to_s.should eq("task-1")
+      meta["status"].to_s.should eq("running")
+    end
+  end
+
+  it "lists all task metadata files" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "list-store-#{Random::Secure.hex(4)}"))
+      store.write_task_meta("task-1", %({"task_id":"task-1","status":"running"}))
+      store.write_task_meta("task-2", %({"task_id":"task-2","status":"completed"}))
+
+      metas = store.read_task_metas
+      ids = metas.map { |(id, _)| id }
+      ids.should contain("task-1")
+      ids.should contain("task-2")
+    end
+  end
+end

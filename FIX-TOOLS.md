@@ -18,10 +18,10 @@
 | 10 | `GetGoal` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
 | 11 | `UpdateGoal` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
 | 12 | `SetGoalBudget` | Цели | ✅ DONE — combined with `CreateGoal` in `src/tools/goal.cr`. |
-| 13 | `TaskList` | Фоновые задачи | ✅ DONE — `src/tools/task.cr` (39/39 specs shared). `TaskService`/`InMemoryTaskService`, `AgentTaskInfo`/`AgentTaskOutputSnapshot`. |
+| 13 | `TaskList` | Фоновые задачи | ✅ DONE — `src/tools/task.cr` (49/49 specs shared). `TaskService`/`InMemoryTaskService` с process tracking (PID, exit channel, SIGTERM→grace→SIGKILL), persistence в `Session::Store`, `mark_lost_on_resume`. `AgentTaskInfo`/`AgentTaskOutputSnapshot`. |
 | 14 | `TaskOutput` | Фоновые задачи | ✅ DONE — combined with `TaskList` in `src/tools/task.cr`. |
 | 15 | `TaskStop` | Фоновые задачи | ✅ DONE — combined with `TaskList` in `src/tools/task.cr`. |
-| 16 | `CronCreate` | Планировщик | ✅ DONE — `src/tools/cron.cr` (40/40 specs shared). `SessionCronService`/`InMemoryCronService`, cron parser `Cron.parse_expression`/`compute_next_cron_run`/`to_human`. |
+| 16 | `CronCreate` | Планировщик | ✅ DONE — `src/tools/cron.cr` (46/46 specs shared). `SessionCronService`/`InMemoryCronService` + `LiveCronService` (tick-loop fiber, deterministic jitter, coalesce, stale auto-delete, persistence в `cron.json`, reconcile-on-resume). Cron parser `Cron.parse_expression`/`compute_next_cron_run`/`to_human`. |
 | 17 | `CronList` | Планировщик | ✅ DONE — combined with `CronCreate` in `src/tools/cron.cr`. |
 | 18 | `CronDelete` | Планировщик | ✅ DONE — combined with `CronCreate` in `src/tools/cron.cr`. |
 | 19 | `ReadMediaFile` | Мультимодальность | ✅ DONE — `src/tools/read_media.cr` (25/25 specs). `MediaFileSystem`/`LocalMediaFileSystem`, `MediaKind` enum, `detect_media_file_type`/`sniff_image_dimensions`. |
@@ -31,7 +31,7 @@
 
 | Tool | Чего не хватает в Crystal по сравнению с JS | Задача | Приоритет |
 |---|---|---|---|
-| `Bash` | Только foreground; `run_in_background` отклоняется; `timeout` max 300 с; нет `disable_timeout` | Добавить фоновое выполнение (`run_in_background`), `disable_timeout`, auto-background-on-timeout и увеличить max timeout для фона | Высокий |
+| `Bash` | Только foreground; `run_in_background` отклоняется; `timeout` max 300 с; нет `disable_timeout` | ✅ DONE — `run_in_background` теперь спавнит реальный процесс через `TaskService.register_process` с output capture в файл, PID tracking, SIGTERM→grace→SIGKILL через `TaskStop`, notification delivery при completion. `disable_timeout` добавлен. Background timeout max 86400с. Persistence в `<session_dir>/tasks/<task_id>.json` + `.log`. Reconcile-on-resume: non-terminal → `Lost`. | Высокий |
 | `Grep` | Нет `output_mode`, контекста `-A`/`-B`/`-C`, `-i`, `multiline`, пагинации `head_limit`/`offset`, `type`, `include_ignored`, sensitive/VCS-фильтрации и сортировки по mtime | Расширить схему и реализацию до полного паритета с JS `GrepTool` | Высокий |
 | `Read` | Имена параметров расходятся (`filePath`/`offset`/`limit`); нет отрицательного tail-offset; нет детекта NUL/бинарных; нет обработки line-endings; нет транкации строк | Выровнять имена (`path`/`line_offset`/`n_lines`), добавить tail-чтение, бинарный/NUL-детект, нормализацию line-endings и транкацию строк | Высокий |
 | `Write` | Имена параметров расходятся (`filePath`/`content`); нет `mode: append`; нет проверки «родитель — не директория»; нет path access policy | Выровнять имена (`path`/`content`/`mode`), добавить append-режим, валидацию родителя и path access policy | Высокий |

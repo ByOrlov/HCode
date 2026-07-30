@@ -326,6 +326,11 @@ module Hcode
       # up; otherwise the local `/feedback` handler appends to a log file.
       @on_feedback : (String -> Nil)? = nil
       property on_feedback : (String -> Nil)?
+      # Called once when the TUI is about to exit (clean SIGINT while idle),
+      # before the terminal is restored. Used to flush cron state and stop
+      # background processes.
+      @on_exit : (-> Nil)? = nil
+      property on_exit : (-> Nil)?
       # Reload `config.toml` + session state without restarting the process.
       @on_reload : (-> Nil)? = nil
       property on_reload : (-> Nil)?
@@ -642,6 +647,7 @@ module Hcode
             end
             print "\n"
             STDOUT.flush
+            @on_exit.try(&.call)
             @terminal.restore!
             print "\n"
             exit(0)

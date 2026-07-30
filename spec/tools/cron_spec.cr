@@ -385,3 +385,139 @@ describe "Hcode::Tools.format_local_iso_with_offset" do
     formatted.should match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
   end
 end
+
+describe "Hcode::Tools::LiveCronService" do
+  it "delivers a cron-fire when a task is due" do
+    svc = Hcode::Tools::LiveCronService.new(enabled: true)
+    fired = [] of String
+    svc.delivery = ->(xml : String) { fired << xml; nil }
+
+    # Schedule a task that should fire immediately (every minute, created 2 min ago).
+    past = svc.now - 2 * 60 * 1000
+    task = Hcode::Tools::CronTask.new(
+      id: "test01",
+      cron: "* * * * *",
+      prompt: "hello cron",
+      recurring: true,
+      created_at: past,
+    )
+    svc.insert_task(task)
+    svc.tick
+
+    fired.size.should eq(1)
+    xml = fired.first
+    xml.should contain("<cron-fire")
+    xml.should contain(%(jobId="test01"))
+    xml.should contain(%(recurring="true"))
+    xml.should contain("<prompt>")
+    xml.should contain("hello cron")
+  end
+
+  it "coalesces missed fires into a single delivery" do
+    svc = Hcode::Tools::LiveCronService.new(enabled: true)
+    fired = [] of String
+    svc.delivery = ->(xml : String) { fired << xml; nil }
+
+    # A task created 10 minutes ago, last fired 10 minutes ago. With a
+    # every-minute schedule, ~9 fires were missed → coalescedCount >= 2.
+    now = svc.now
+    task = Hcode::Tools::CronTask.new(
+      id: "coal01",
+      cron: "* * * * *",
+      prompt: "check",
+      recurring: true,
+      created_at: now - 10 * 60 * 1000,
+      last_fired_at: now - 10 * 60 * 1000,
+    )
+    svc.insert_task(task)
+    svc.tick
+
+    fired.size.should eq(1)
+    xml = fired.first
+    xml.should contain(%(coalescedCount="))
+    # Extract the coalesced count value.
+    match = xml.match(/coalescedCount="(\d+)"/)
+    match.should_not be_nil
+    count = match.not_nil![1].to_i
+    count.should be >= 2
+  end
+
+  it "auto-deletes a stale recurring task after final fire" do
+    svc = Hcode::Tools::LiveCronService.new(enabled: true)
+    fired = [] of String
+    svc.delivery = ->(xml : String) { fired << xml; nil }
+
+    # A recurring task older than 7 days.
+    now = svc.now
+    task = Hcode::Tools::CronTask.new(
+      id: "stale01",
+      cron: "* * * * *",
+      prompt: "old task",
+      recurring: true,
+      created_at: now - 8 * 24 * 60 * 60 * 1000,
+    )
+    svc.insert_task(task)
+    svc.tick
+
+    fired.size.should eq(1)
+    fired.first.should contain(%(stale="true"))
+    svc.list.empty?.should be_true
+  end
+
+  it "auto-deletes a one-shot task after firing" do
+    svc = Hcode::Tools::LiveCronService.new(enabled: true)
+    fired = [] of String
+    svc.delivery = ->(xml : String) { fired << xml; nil }
+
+    past = svc.now - 2 * 60 * 1000
+    task = Hcode::Tools::CronTask.new(
+      id: "one001",
+      cron: "* * * * *",
+      prompt: "remind me",
+      recurring: false,
+      created_at: past,
+    )
+    svc.insert_task(task)
+    svc.tick
+
+    fired.size.should eq(1)
+    fired.first.should contain(%(recurring="false"))
+    svc.list.empty?.should be_true
+  end
+
+  it "does not fire when disabled" do
+    svc = Hcode::Tools::LiveCronService.new(enabled: false)
+    fired = [] of String
+    svc.delivery = ->(xml : String) { fired << xml; nil }
+
+    past = svc.now - 2 * 60 * 1000
+    task = Hcode::Tools::CronTask.new(
+      id: "dis001",
+      cron: "* * * * *",
+      prompt: "x",
+      recurring: true,
+      created_at: past,
+    )
+    svc.insert_task(task)
+    svc.tick
+
+    fired.empty?.should be_true
+  end
+
+  it "persists and reloads tasks through the store" do
+    Dir.tempdir.tap do |tmp|
+      store = Hcode::Session::Store.new(File.join(tmp, "cron-test-#{Random::Secure.hex(4)}"))
+      svc = Hcode::Tools::LiveCronService.new(store: store, enabled: true)
+      task = svc.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "persist me"))
+      svc.persist!
+
+      svc2 = Hcode::Tools::LiveCronService.new(store: store, enabled: true)
+      svc2.load_from_store
+      svc2.list.size.should eq(1)
+      loaded = svc2.list.first
+      loaded.id.should eq(task.id)
+      loaded.cron.should eq("*/5 * * * *")
+      loaded.prompt.should eq("persist me")
+    end
+  end
+end

@@ -88,6 +88,32 @@ module Hcode
       def profiled_bytes : Int64
         @id.profiled_bytes + @cron.profiled_bytes + @prompt.profiled_bytes
       end
+
+      def to_json_str : String
+        JSON.build do |json|
+          json.object do
+            json.field "id", @id
+            json.field "cron", @cron
+            json.field "prompt", @prompt
+            json.field "recurring", @recurring
+            json.field "created_at", @created_at
+            json.field "last_fired_at", @last_fired_at unless @last_fired_at.nil?
+            json.field "coalesced_count", @coalesced_count
+          end
+        end
+      end
+
+      def self.from_json_obj(parsed : JSON::Any) : CronTask
+        CronTask.new(
+          id: parsed["id"]?.try(&.to_s) || "",
+          cron: parsed["cron"]?.try(&.to_s) || "",
+          prompt: parsed["prompt"]?.try(&.to_s) || "",
+          recurring: parsed["recurring"]?.try(&.as_bool?) || true,
+          created_at: parsed["created_at"]?.try(&.as_i64) || 0_i64,
+          last_fired_at: parsed["last_fired_at"]?.try(&.as_i64?),
+          coalesced_count: parsed["coalesced_count"]?.try(&.as_i?) || 0,
+        )
+      end
     end
 
     struct CronTaskInit
@@ -218,6 +244,293 @@ module Hcode
 
       private def generate_id : String
         Random::Secure.hex(4)
+      end
+    end
+
+    # Live cron scheduler: inherits the in-memory storage from
+    # `InMemoryCronService` and adds a polling tick-loop, deterministic
+    # jitter, coalescing of missed fires, stale auto-delete, and
+    # persistence to `Session::Store`. The tick fires only when the agent
+    # is idle (`@agent.busy?` is false) — cron never interrupts a running
+    # turn. Deliveries go through the `@delivery` callback as a
+    # `<cron-fire>` XML envelope.
+    class LiveCronService < InMemoryCronService
+      @store : Session::Store?
+      @agent : Loop::Agent?
+      @delivery : (String -> Nil)?
+      @running : Bool = false
+      @last_seen_at = {} of String => Int64
+      @seeded = Set(String).new
+      @delivered = [] of String
+
+      DEFAULT_POLL_INTERVAL_MS = 1_000
+      MAX_COALESCE_ITERATIONS   = 10_000
+      JITTER_CAP_MS             = 15 * 60 * 1000
+      ONE_SHOT_BACKWARD_MS      = 90_000
+
+      def initialize(@store : Session::Store? = nil,
+                     @agent : Loop::Agent? = nil,
+                     @delivery : (String -> Nil)? = nil,
+                     enabled : Bool = true)
+        super(enabled)
+      end
+
+      # Test-only setter for the delivery callback.
+      def delivery=(cb : (String -> Nil)?) : Nil
+        @delivery = cb
+      end
+
+      # List of fired cron-fire envelopes since the last call (for tests).
+      def delivered : Array(String)
+        @delivered.dup
+      end
+
+      # ----------------------------------------------------------------
+      # Lifecycle
+      # ----------------------------------------------------------------
+
+      def start : Nil
+        return if @running
+        load_from_store
+        @running = true
+        spawn do
+          while @running
+            begin
+              tick
+            rescue ex
+              # A tick must never crash the loop — log and continue.
+              STDERR.puts "[cron] tick error: #{ex.message}" if ENV["HCODE_DEBUG"]?
+            end
+            sleep DEFAULT_POLL_INTERVAL_MS.milliseconds
+            Fiber.yield
+          end
+        end
+      end
+
+      def stop : Nil
+        @running = false
+        persist!
+      end
+
+      # ----------------------------------------------------------------
+      # Persistence
+      # ----------------------------------------------------------------
+
+      def load_from_store(replace : Bool = true) : Nil
+        s = @store
+        return if s.nil?
+        @tasks.clear if replace
+        @last_seen_at.clear if replace
+        @seeded.clear if replace
+        s.read_cron_tasks.each do |raw|
+          begin
+            task = CronTask.from_json_obj(raw)
+            next if task.id.empty?
+            next if @tasks.any? { |t| t.id == task.id }
+            @tasks << task
+          rescue
+            # Skip corrupt entries.
+          end
+        end
+      end
+
+      def persist! : Nil
+        s = @store
+        return if s.nil?
+        json = JSON.build do |builder|
+          builder.array do
+            @tasks.each do |t|
+              builder.raw(t.to_json_str)
+            end
+          end
+        end
+        s.write_cron_tasks(json)
+      end
+
+      # ----------------------------------------------------------------
+      # Overrides that persist on mutation
+      # ----------------------------------------------------------------
+
+      def add_task(init : CronTaskInit) : CronTask
+        task = super
+        persist!
+        task
+      end
+
+      def remove_tasks(ids : Array(String)) : Array(String)
+        removed = super
+        unless removed.empty?
+          removed.each { |id| @last_seen_at.delete(id) }
+          persist!
+        end
+        removed
+      end
+
+      # ----------------------------------------------------------------
+      # Tick
+      # ----------------------------------------------------------------
+
+      def tick : Nil
+        return if disabled?
+        return if @tasks.empty?
+        return if @agent.try(&.busy?)
+        now_ms = now
+        # Iterate over a snapshot — process_due may remove tasks (stale/one-shot).
+        @tasks.dup.each do |task|
+          process_due(task, now_ms)
+        end
+      end
+
+      def process_due(task : CronTask, now_ms : Int64) : Nil
+        parsed = parse_safe(task.cron)
+        return if parsed.nil?
+
+        # Seed the cursor from the persisted last_fired_at (once per task).
+        unless @seeded.includes?(task.id)
+          if (lf = task.last_fired_at) && lf <= now_ms
+            @last_seen_at[task.id] = lf
+          end
+          @seeded.add(task.id)
+        end
+
+        seen = @last_seen_at[task.id]?
+        base_ms = (seen && seen > task.created_at) ? seen : task.created_at
+
+        ideal = Cron.compute_next_cron_run(parsed, base_ms)
+        return if ideal.nil?
+
+        jittered = apply_jitter(task, parsed, ideal)
+        return if now_ms < jittered
+
+        # Count coalesced fires (how many ideal fires elapsed since the cursor).
+        coalesced = count_coalesced(parsed, ideal, now_ms)
+        stale = stale?(task)
+
+        deliver_fire(task, coalesced, stale)
+
+        # Advance the cursor to the last ideal fire whose jittered delivery
+        # has completed, so any later ideal whose jitter slipped past now
+        # stays reachable next tick.
+        last_ideal = last_completed_ideal(parsed, ideal, now_ms)
+        task.last_fired_at = last_ideal
+        @last_seen_at[task.id] = last_ideal
+        persist!
+
+        if stale || !task.recurring
+          remove_tasks([task.id])
+        end
+      end
+
+      # ----------------------------------------------------------------
+      # Delivery
+      # ----------------------------------------------------------------
+
+      private def deliver_fire(task : CronTask, coalesced : Int32, stale : Bool) : Nil
+        xml = render_cron_fire_xml(task, coalesced, stale)
+        @delivered << xml
+        @delivery.try(&.call(xml))
+      end
+
+      def render_cron_fire_xml(task : CronTask, coalesced : Int32, stale : Bool) : String
+        String.build do |s|
+          s << "<cron-fire"
+          s << %( jobId="#{escape_attr(task.id)}")
+          s << %( cron="#{escape_attr(task.cron)}")
+          s << %( recurring="#{task.recurring}")
+          s << %( coalescedCount="#{coalesced}")
+          s << %( stale="#{stale}")
+          s << ">\n"
+          s << "<prompt>\n"
+          s << task.prompt
+          s << "\n</prompt>\n"
+          s << "</cron-fire>"
+        end
+      end
+
+      # ----------------------------------------------------------------
+      # Jitter (deterministic per task_id)
+      # ----------------------------------------------------------------
+
+      private def apply_jitter(task : CronTask, parsed : ParsedCronExpression, ideal_ms : Int64) : Int64
+        if task.recurring
+          period = parsed.min_period_ms
+          cap = Math.min((period * 0.1).to_i64, JITTER_CAP_MS.to_i64)
+          cap = 0_i64 if cap < 0
+          offset = deterministic_offset(task.id, cap) if cap > 0
+          offset ||= 0_i64
+          ideal_ms + offset
+        else
+          # One-shot: backward jitter up to 90s, only if the ideal fire lands
+          # on a :00 or :30 minute mark.
+          t = Time.unix_ms(ideal_ms).to_local
+          if t.minute == 0 || t.minute == 30
+            offset = deterministic_offset(task.id, ONE_SHOT_BACKWARD_MS.to_i64)
+            ideal_ms - offset
+          else
+            ideal_ms
+          end
+        end
+      end
+
+      private def deterministic_offset(id : String, max_ms : Int64) : Int64
+        return 0_i64 if max_ms <= 0
+        hash = 0_i64
+        id.each_byte { |b| hash = hash * 31 + b.to_i64 }
+        (hash.abs % (max_ms + 1))
+      end
+
+      # ----------------------------------------------------------------
+      # Coalesce counting
+      # ----------------------------------------------------------------
+
+      private def count_coalesced(parsed : ParsedCronExpression, first_ideal : Int64, now_ms : Int64) : Int32
+        count = 1
+        cursor = first_ideal
+        max = MAX_COALESCE_ITERATIONS
+        while count < max
+          nxt = Cron.compute_next_cron_run(parsed, cursor)
+          break if nxt.nil?
+          break if nxt > now_ms
+          cursor = nxt
+          count += 1
+        end
+        count
+      end
+
+      private def last_completed_ideal(parsed : ParsedCronExpression, first_ideal : Int64, now_ms : Int64) : Int64
+        cursor = first_ideal
+        max = MAX_COALESCE_ITERATIONS
+        max.times do
+          nxt = Cron.compute_next_cron_run(parsed, cursor)
+          break if nxt.nil? || nxt > now_ms
+          cursor = nxt
+        end
+        cursor
+      end
+
+      # ----------------------------------------------------------------
+      # Helpers
+      # ----------------------------------------------------------------
+
+      private def parse_safe(cron : String) : ParsedCronExpression?
+        Cron.parse_expression(cron)
+      rescue CronParseError
+        nil
+      end
+
+      private def escape_attr(value : String) : String
+        Tools.escape_xml_attr(value)
+      end
+
+      # Test helper: expose last_seen_at for verification.
+      def last_seen_for(task_id : String) : Int64?
+        @last_seen_at[task_id]?
+      end
+
+      # Test helper: mark the cursor as seen without firing.
+      def set_seen(task_id : String, ms : Int64) : Nil
+        @last_seen_at[task_id] = ms
+        @seeded.add(task_id)
       end
     end
 

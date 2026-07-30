@@ -423,38 +423,41 @@ ISO 8601 с numeric offset:
 
 ## 8. План реализации (чек-лист)
 
-- [ ] Прочитать JS: `tools/cron-*.ts` + `.md`,
+- [x] Прочитать JS: `tools/cron-*.ts` + `.md`,
       `sessionCronService.ts`, `sessionCronServiceImpl.ts`,
       `cronOps.ts`, `app/cron/cron-expr.ts`, `app/cron/cronTask.ts`,
       `app/cron/format.ts`.
 - [x] Описать контракт в `md-tools/cron.md`.
-- [ ] Реализовать `ParsedCronExpression`, `parse_cron_expression` (с
+- [x] Реализовать `ParsedCronExpression`, `parse_expression` (с
       поддержкой `*`, `*/N`, ranges, lists, stepped ranges, dom/dow OR).
-- [ ] Реализовать `compute_next_cron_run` (минутный сканер).
-- [ ] Реализовать `has_fire_within_years`.
-- [ ] Реализовать `cron_to_human`.
-- [ ] Реализовать `format_local_iso_with_offset` (через `Time::Location.local`).
-- [ ] Реализовать `SessionCronService` (abstract) + простую
-      in-memory impl (`Array(CronTask)` + tick-loop fiber).
-- [ ] Реализовать jitter (deterministic hash-based).
-- [ ] Реализовать persistence (`cron.json` save/load).
-- [ ] Реализовать `Tools::CronCreate` (§2) со всеми ветками валидации.
-- [ ] Реализовать `Tools::CronList` (§3) с `preview_prompt` (UTF-8 safe).
-- [ ] Реализовать `Tools::CronDelete` (§4) с ULID-shape проверкой.
-- [ ] Реализовать cron-fire envelope XML injection в
-      `Context::Memory#add_injection` при tick-срабатывании.
-- [ ] Реализовать coalesce (single delivery on wake) + stale
+- [x] Реализовать `compute_next_cron_run` (минутный сканер).
+- [x] Реализовать `has_fire_within_years`.
+- [x] Реализовать `to_human`.
+- [x] Реализовать `format_local_iso_with_offset`.
+- [x] Реализовать `SessionCronService` (abstract) + `InMemoryCronService`
+      (storage) + `LiveCronService` (tick-loop fiber + firing).
+- [x] Реализовать jitter (deterministic hash-based).
+- [x] Реализовать persistence (`cron.json` save/load через `Session::Store`).
+- [x] Реализовать `Tools::CronCreate` (§2) со всеми ветками валидации.
+- [x] Реализовать `Tools::CronList` (§3) с `preview_prompt` (UTF-8 safe).
+- [x] Реализовать `Tools::CronDelete` (§4) с ULID-shape проверкой.
+- [x] Реализовать cron-fire envelope XML injection
+      (`<cron-fire>`) при tick-срабатывании.
+- [x] Реализовать coalesce (single delivery on wake) + stale
       auto-delete.
-- [ ] Регистрация тулов в `src/hcode.cr:166` для main agent.
-- [ ] Уважать `HCODE_DISABLE_CRON=1` (killswitch).
-- [ ] Тесты в `spec/tools/cron_spec.cr`:
-  - [ ] CronCreate — parse errors, 5-year reject, cap reached,
+- [x] Регистрация тулов в `src/hcode.cr` для main agent.
+- [x] Уважать `HCODE_DISABLE_CRON=1` (killswitch).
+- [x] Тесты в `spec/tools/cron_spec.cr`:
+  - [x] CronCreate — parse errors, 5-year reject, cap reached,
         prompt too large, one-shot too far, killswitch, success output
         format, `nextFireAt` formatting.
-  - [ ] CronList — empty/non-empty, preview truncation, stale flag,
+  - [x] CronList — empty/non-empty, preview truncation, stale flag,
         ageDays rounding, malformed cron defensive render.
-  - [ ] CronDelete — invalid id shape, not-found error, success.
-- [ ] Обновить `FIX-TOOLS.md`: отметить строки #16–#18 выполненными.
+  - [x] CronDelete — invalid id shape, not-found error, success.
+  - [x] LiveCronService — tick fire, coalesce, stale auto-delete,
+        one-shot auto-delete, disabled no-fire, persistence round-trip.
+- [x] Reconcile-on-resume: загрузка `cron.json`, курсор из
+      `last_fired_at`, коалесинг пропущенных fires.
 
 ---
 

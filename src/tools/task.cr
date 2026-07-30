@@ -50,6 +50,10 @@ module Hcode
         end
       end
 
+      def completed? : Bool
+        self == AgentTaskStatus::Completed
+      end
+
       def terminal? : Bool
         Task::TERMINAL_STATUSES.includes?(self)
       end
@@ -90,6 +94,61 @@ module Hcode
         total += @command.try(&.profiled_bytes) || 0_i64
         total
       end
+
+      # ----------------------------------------------------------------
+      # JSON serialization for persistence.
+      # ----------------------------------------------------------------
+
+      def to_json_str : String
+        JSON.build do |json|
+          json.object do
+            json.field "task_id", @task_id
+            json.field "description", @description
+            json.field "status", @status.to_wire
+            json.field "started_at", @started_at
+            json.field "ended_at", @ended_at unless @ended_at.nil?
+            json.field "detached", @detached unless @detached.nil?
+            json.field "stop_reason", @stop_reason unless @stop_reason.nil?
+            if (v = @terminal_notification_suppressed)
+              json.field "terminal_notification_suppressed", v
+            end
+            json.field "timeout_ms", @timeout_ms unless @timeout_ms.nil?
+            json.field "command", @command unless @command.nil?
+            json.field "pid", @pid unless @pid.nil?
+            json.field "exit_code", @exit_code unless @exit_code.nil?
+          end
+        end
+      end
+
+      def self.from_json_obj(parsed : JSON::Any) : AgentTaskInfo
+        status = case parsed["status"]?.try(&.to_s)
+                 when "completed" then AgentTaskStatus::Completed
+                 when "failed"    then AgentTaskStatus::Failed
+                 when "timed_out" then AgentTaskStatus::TimedOut
+                 when "killed"    then AgentTaskStatus::Killed
+                 when "lost"      then AgentTaskStatus::Lost
+                 else                  AgentTaskStatus::Running
+                 end
+        info = AgentTaskInfo.new(
+          task_id: parsed["task_id"]?.try(&.to_s) || "",
+          description: parsed["description"]?.try(&.to_s) || "",
+          status: status,
+          started_at: parsed["started_at"]?.try(&.as_i64) || 0_i64,
+        )
+        info.ended_at = parsed["ended_at"]?.try(&.as_i64?)
+        info.detached = parsed["detached"]?.try(&.as_bool?)
+        sr = parsed["stop_reason"]?
+        info.stop_reason = sr ? sr.to_s : nil
+        if (v = parsed["terminal_notification_suppressed"]?.try(&.as_bool?))
+          info.terminal_notification_suppressed = v
+        end
+        info.timeout_ms = parsed["timeout_ms"]?.try(&.as_i64?)
+        cmd = parsed["command"]?
+        info.command = cmd ? cmd.to_s : nil
+        info.pid = parsed["pid"]?.try(&.as_i64?)
+        info.exit_code = parsed["exit_code"]?.try(&.as_i?)
+        info
+      end
     end
 
     struct AgentTaskOutputSnapshot
@@ -121,6 +180,7 @@ module Hcode
       abstract def get_task(task_id : String) : AgentTaskInfo?
       abstract def get_output_snapshot(task_id : String, max_preview_bytes : Int32) : AgentTaskOutputSnapshot
       abstract def suppress_terminal_notification(task_id : String) : Nil
+      abstract def notification_suppressed?(task_id : String) : Bool
       abstract def stop(task_id : String, reason : String? = nil) : AgentTaskInfo?
       abstract def stop_by_user(task_id : String) : AgentTaskInfo?
       abstract def stop_all(reason : String? = nil) : Array(AgentTaskInfo)
@@ -129,14 +189,18 @@ module Hcode
       abstract def detach(task_id : String) : AgentTaskInfo?
     end
 
-    # Простейшая in-memory реализация TaskService.
-    # Не запускает реальных процессов — только хранит метаданные и
-    # (опционально) вывод. Используется тестами и как fallback.
+    # In-memory TaskService with optional process tracking and persistence.
+    # Stores task metadata + output. When a live process is attached via
+    # `register_process`, stop/wait perform a real SIGTERM→grace→SIGKILL and
+    # blocking exit wait. Optionally persists metadata to `Session::Store`.
     class InMemoryTaskService < TaskService
       @tasks = {} of String => AgentTaskInfo
       @outputs = {} of String => AgentTaskOutputSnapshot
+      @handles = {} of String => TaskHandle
+      @store : Session::Store?
+      @task_counter = 0
 
-      def initialize
+      def initialize(@store : Session::Store? = nil)
       end
 
       def profiled_bytes : Int64
@@ -151,7 +215,20 @@ module Hcode
 
       def register(info : AgentTaskInfo) : AgentTaskInfo
         @tasks[info.task_id] = info
+        @handles[info.task_id] ||= TaskHandle.new
+        persist_task_meta(info.task_id)
         info
+      end
+
+      # Associate a live process with a registered task. The task must
+      # already be in `@tasks` (via `register`). The exit channel is
+      # expected to receive exactly one `Process::Status` when the
+      # process terminates.
+      def register_process(task_id : String, process : Process,
+                           exit_channel : Channel(Process::Status)) : Nil
+        handle = @handles[task_id]? || (return)
+        handle.process = process
+        handle.exit_channel = exit_channel
       end
 
       def set_output(task_id : String, preview : String, *,
@@ -202,15 +279,44 @@ module Hcode
         task = @tasks[task_id]?
         return if task.nil?
         task.terminal_notification_suppressed = true
+        if handle = @handles[task_id]?
+          handle.suppressed = true
+        end
+      end
+
+      def notification_suppressed?(task_id : String) : Bool
+        @handles[task_id]?.try(&.suppressed) || false
       end
 
       def stop(task_id : String, reason : String? = nil) : AgentTaskInfo?
         task = @tasks[task_id]?
         return nil if task.nil?
         return task if task.status.terminal?
-        task.status = AgentTaskStatus::Killed
-        task.stop_reason = reason || "Stopped by TaskStop"
-        task.ended_at = Time.utc.to_unix_ms
+        if handle = @handles[task_id]?
+          if process = handle.process
+            kill_process(process)
+            if ch = handle.exit_channel
+              select
+              when ch.receive
+              when timeout(6.seconds)
+              end
+            end
+            unless task.status.terminal?
+              task.status = AgentTaskStatus::Killed
+              task.stop_reason = reason || "Stopped by TaskStop"
+              task.ended_at = Time.utc.to_unix_ms
+            end
+          else
+            task.status = AgentTaskStatus::Killed
+            task.stop_reason = reason || "Stopped by TaskStop"
+            task.ended_at = Time.utc.to_unix_ms
+          end
+        else
+          task.status = AgentTaskStatus::Killed
+          task.stop_reason = reason || "Stopped by TaskStop"
+          task.ended_at = Time.utc.to_unix_ms
+        end
+        persist_task_meta(task_id)
         task
       end
 
@@ -220,12 +326,35 @@ module Hcode
 
       def stop_all(reason : String? = nil) : Array(AgentTaskInfo)
         stopped = [] of AgentTaskInfo
-        @tasks.each_value do |task|
+        @tasks.each_key do |task_id|
+          task = @tasks[task_id]
           next if task.status.terminal?
-          task.status = AgentTaskStatus::Killed
-          task.stop_reason = reason || "Stopped"
-          task.ended_at = Time.utc.to_unix_ms
+          if handle = @handles[task_id]?
+            if process = handle.process
+              kill_process(process)
+              if ch = handle.exit_channel
+                select
+                when ch.receive
+                when timeout(6.seconds)
+                end
+              end
+              unless task.status.terminal?
+                task.status = AgentTaskStatus::Killed
+                task.stop_reason = reason || "Stopped"
+                task.ended_at = Time.utc.to_unix_ms
+              end
+            else
+              task.status = AgentTaskStatus::Killed
+              task.stop_reason = reason || "Stopped"
+              task.ended_at = Time.utc.to_unix_ms
+            end
+          else
+            task.status = AgentTaskStatus::Killed
+            task.stop_reason = reason || "Stopped"
+            task.ended_at = Time.utc.to_unix_ms
+          end
           stopped << task
+          persist_task_meta(task_id)
         end
         stopped
       end
@@ -235,16 +364,104 @@ module Hcode
       end
 
       def wait(task_id : String, timeout_ms : Int64? = nil) : AgentTaskInfo?
-        # Простая in-memory реализация без blocking — сразу возвращаем
-        # текущее состояние. Блокирующий wait требует реального процесса.
-        get_task(task_id)
+        task = @tasks[task_id]?
+        return nil if task.nil?
+        return task if task.status.terminal?
+        handle = @handles[task_id]?
+        return task unless handle && (ch = handle.exit_channel)
+        if t = timeout_ms
+          select
+          when ch.receive
+          when timeout(t.milliseconds)
+          end
+        else
+          ch.receive
+        end
+        @tasks[task_id]?
       end
 
       def detach(task_id : String) : AgentTaskInfo?
         task = @tasks[task_id]?
         return nil if task.nil?
         task.detached = true
+        persist_task_meta(task_id)
         task
+      end
+
+      # ----------------------------------------------------------------
+      # Persistence + reconcile
+      # ----------------------------------------------------------------
+
+      # Persist the current task metadata to the store (if configured).
+      def persist_task_meta(task_id : String) : Nil
+        s = @store
+        task = @tasks[task_id]?
+        return if s.nil? || task.nil?
+        s.write_task_meta(task_id, task.to_json_str)
+      end
+
+      # Load persisted task metadata from the store and mark any non-terminal
+      # tasks as `Lost` (the previous process died with its parent). Called
+      # on session resume. Returns the list of lost tasks.
+      def mark_lost_on_resume : Array(AgentTaskInfo)
+        s = @store
+        return [] of AgentTaskInfo if s.nil?
+        now_ms = Time.utc.to_unix_ms
+        lost = [] of AgentTaskInfo
+        s.read_task_metas.each do |(task_id, parsed)|
+          info = AgentTaskInfo.from_json_obj(parsed)
+          next if info.task_id.empty?
+          # Skip tasks already live (e.g. subagents registered this session).
+          next if @tasks.has_key?(info.task_id)
+          unless info.status.terminal?
+            info.status = AgentTaskStatus::Lost
+            info.ended_at = now_ms
+            info.stop_reason = "Session resumed; process is no longer reachable"
+            s.write_task_meta(info.task_id, info.to_json_str)
+          end
+          @tasks[info.task_id] = info
+          @handles[info.task_id] ||= TaskHandle.new
+          lost << info if info.status == AgentTaskStatus::Lost
+        end
+        lost
+      end
+
+      # ----------------------------------------------------------------
+      # Private helpers
+      # ----------------------------------------------------------------
+
+      # Two-phase kill: SIGTERM, then SIGKILL after a 5s grace window —
+      # mirrors the JS BackgroundManager kill ladder. Sends SIGTERM, waits
+      # up to 5s on a separate fiber, then escalates to SIGKILL if still alive.
+      private def kill_process(process : Process) : Nil
+        process.terminate rescue nil
+        spawn do
+          sleep 5.seconds
+          if process.exists?
+            LibC.kill(process.pid, 9) rescue nil
+          end
+        end
+      end
+
+      def next_task_id(prefix : String = "task") : String
+        @task_counter += 1
+        "#{prefix}-#{@task_counter}"
+      end
+    end
+
+    # Tracks a live background task's OS process handle, exit channel, and
+    # notification-suppression flag. Lives only in-process — never persisted.
+    class TaskHandle
+      property process : Process?
+      property exit_channel : Channel(Process::Status)?
+      property output_path : String?
+      property suppressed : Bool = false
+
+      def suppressed? : Bool
+        @suppressed
+      end
+
+      def initialize
       end
     end
 
