@@ -181,7 +181,7 @@ module Hcode
       @on_model_change : (String -> Bool)?
       @on_fetch_models : (-> Array(String))?
       @on_resume_session : (String -> Nil)?
-      @on_fork : (-> Nil)?
+      @on_fork : (-> Nil)? = nil
       @on_archive : (-> Nil)?
       @on_rename : (String -> Nil)?
       @on_debug : (-> Nil)?
@@ -214,6 +214,7 @@ module Hcode
       @undo_dialog : UndoDialog
       @tasks_browser : TasksBrowser
       @help_panel : HelpPanel
+      @usage_panel : UsagePanel
       @session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
       @session_picker_mode : Symbol = :resume
       @show_welcome : Bool = true
@@ -276,6 +277,8 @@ module Hcode
       # Reload `config.toml` + session state without restarting the process.
       @on_reload : (-> Nil)? = nil
       property on_reload : (-> Nil)?
+      @on_login : (-> Nil)? = nil
+      property on_login : (-> Nil)?
       # Returns the on-disk directory for the current session (where
       # `wire.jsonl` / `state.json` live). Used by `/export-debug-zip`.
       @on_session_dir : (-> String?)? = nil
@@ -327,6 +330,7 @@ module Hcode
         @undo_dialog = UndoDialog.new(@theme)
         @tasks_browser = TasksBrowser.new(@theme)
         @help_panel = HelpPanel.new(@theme)
+        @usage_panel = UsagePanel.new(@theme)
         @work_dir = Dir.current
         @git_branch = detect_git_branch
         @keep_recent_steps = read_keep_recent_steps
@@ -912,6 +916,13 @@ module Hcode
 
         if @help_panel.visible?
           handle_help_key(key)
+          return
+        end
+
+        if @usage_panel.visible?
+          if @usage_panel.handle_input(key)
+            @dirty = true
+          end
           return
         end
 
@@ -1506,19 +1517,10 @@ module Hcode
           build = Hcode.build_date || "dev"
           @messages << Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}")
         when "/usage"
-          usage_stats = String.build do |s|
-            s << "Provider: #{@provider_name}\n"
-            s << "Model: #{@model}\n"
-            if @max_context_tokens > 0
-              used_pct = @context_percent.round(1)
-              s << "Context: #{@context_tokens} / #{@max_context_tokens} tokens (#{used_pct}%)\n"
-            else
-              s << "Context: #{@context_percent.round(1)}%\n"
-            end
-            s << "Messages: #{@messages.size}\n"
-            s << "Queue: #{@queue.size}\n"
-          end
-          @messages << Message.new("system", usage_stats.strip)
+          @usage_panel.show
+          @input.drain_pending_enters
+          @show_command_hints = false
+          @dirty = true
         when "/editor"
           handle_external_editor
         when "/copy"
@@ -1681,24 +1683,24 @@ module Hcode
             "Plugins: not supported in this build.\n" \
             "Plugin runtime is tracked as future work.")
         when "/login"
-          # hcode has no in-process OAuth device-code flow (no src/auth/
-          # yet). Surface the manual config options so the user can still
-          # authenticate.
-          cfg_path = File.join(@home, ".hcode", "config.toml")
-          cred_path = File.join(@home, ".kimi-code", "credentials", "kimi-code.json")
-          body = String.build do |s|
-            s << "Authentication options:\n"
-            s << "  1. API key in config.toml:\n"
-            s << "       [provider.moonshot]\n"
-            s << "       api_key = \"sk-...\"\n"
-            s << "     Path: #{cfg_path}\n"
-            s << "  2. Moonshot OAuth credentials (JSON file from kimi-code TS):\n"
-            s << "       #{cred_path}\n"
-            s << "  3. Environment variable:\n"
-            s << "       HCODE_API_KEY=sk-...\n\n"
-            s << "OAuth device-code login (/login interactive) is tracked as future work."
+          if cb = @on_login
+            @messages << Message.new("system", "Starting OAuth device-code login...")
+            cb.call
+          else
+            cfg_path = File.join(@home, ".hcode", "config.toml")
+            cred_path = File.join(@home, ".kimi-code", "credentials", "kimi-code.json")
+            body = String.build do |s|
+              s << "Interactive login is not available in this build.\n\n"
+              s << "Manual authentication options:\n"
+              s << "  1. API key in config.toml:\n"
+              s << "       [provider.moonshot]\n"
+              s << "       api_key = \"sk-...\"\n"
+              s << "     Path: #{cfg_path}\n"
+              s << "  2. OAuth credentials (JSON from kimi-code TS login):\n"
+              s << "       #{cred_path}\n"
+            end
+            @messages << Message.new("system", body.strip)
           end
-          @messages << Message.new("system", body.strip)
         when "/logout"
           if cb = @on_logout
             cb.call
@@ -1710,12 +1712,70 @@ module Hcode
           open_tasks_browser
         when "/memory"
           @messages << Message.new("system", ProfiledMemory.format_report)
+        when "/goal"
+          handle_goal_command(args)
         else
           @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
         end
 
         @show_command_hints = false
         @dirty = true
+      end
+
+      private def handle_goal_command(args : String) : Nil
+        service = Hcode::Tools::Goal.service
+        unless service
+          @messages << Message.new("error", "Goal service is not wired up.")
+          return
+        end
+
+        sub = args.strip.downcase
+        case sub
+        when "", "status"
+          snapshot = service.not_nil!.get_goal
+          if snapshot
+            @messages << Message.new("system", format_goal_snapshot(snapshot))
+          else
+            @messages << Message.new("system", "No active goal.")
+          end
+        when "pause"
+          begin
+            snapshot = service.not_nil!.pause_goal
+            @messages << Message.new("system", "Goal paused.\n#{format_goal_snapshot(snapshot)}")
+          rescue ex
+            @messages << Message.new("error", "Cannot pause: #{ex.message}")
+          end
+        when "resume"
+          begin
+            snapshot = service.not_nil!.resume_goal
+            @messages << Message.new("system", "Goal resumed.\n#{format_goal_snapshot(snapshot)}")
+          rescue ex
+            @messages << Message.new("error", "Cannot resume: #{ex.message}")
+          end
+        when "cancel"
+          begin
+            snapshot = service.not_nil!.cancel_goal
+            @messages << Message.new("system", "Goal cancelled.\n#{format_goal_snapshot(snapshot)}")
+          rescue ex
+            @messages << Message.new("error", "Cannot cancel: #{ex.message}")
+          end
+        else
+          @messages << Message.new("error", "Usage: /goal [status|pause|resume|cancel]")
+        end
+      end
+
+      private def format_goal_snapshot(s : Hcode::Tools::GoalSnapshot) : String
+        String.build do |str|
+          str << "Goal: #{s.objective}\n"
+          str << "Status: #{s.status}\n"
+          str << "ID: #{s.goal_id}\n"
+          if c = s.completion_criterion
+            str << "Completion: #{c}\n"
+          end
+          if r = s.terminal_reason
+            str << "Reason: #{r}\n"
+          end
+        end.strip
       end
 
       private def open_tasks_browser : Nil
@@ -2233,6 +2293,10 @@ module Hcode
           # Modal `/help` replaces the editor — mirrors JS `mountEditorReplacement`.
           # Skip command hints too: the editor (and its autocomplete) is hidden.
           new_lines.concat(@help_panel.render(cols))
+        elsif @usage_panel.visible?
+          new_lines.concat(@usage_panel.render(cols, @provider_name, @model,
+            @context_tokens, @max_context_tokens, @context_percent,
+            @messages.size, @queue.size))
         else
           new_lines.concat(render_editor_box(cols))
 

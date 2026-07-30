@@ -18,6 +18,7 @@ require "./llm/http_transport"
 require "./llm/provider"
 require "./llm/openai_chat_provider"
 require "./llm/moonshot_provider"
+require "./auth/oauth"
 require "./llm/zai_provider"
 require "./llm/ollama_provider"
 require "./llm/lmstudio_provider"
@@ -94,6 +95,7 @@ require "./tui/undo_dialog"
 require "./tui/tasks_browser"
 require "./tui/app"
 require "./tui/diff"
+require "./tui/usage_panel"
 
 module Hcode
   # Headless print-mode palette, ported from the original Moonshot kimi-code
@@ -329,6 +331,9 @@ module Hcode
 
       task_service = Hcode::Tools::InMemoryTaskService.new
       Hcode::Tools::Task.service = task_service
+
+      goal_service = Hcode::Tools::AgentGoalService.new
+      Hcode::Tools::Goal.service = goal_service
       wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
       if prompt
@@ -586,6 +591,10 @@ module Hcode
         puts "\nInterrupted by user.".colorize.yellow
         status_tracker.transition!(Notify::AgentStatus::Done, "Cancelled")
         status_tracker.transition!(Notify::AgentStatus::Idle)
+      rescue ex : Loop::NetworkFailureError
+        puts "\n#{ex.message}".colorize.yellow
+        status_tracker.transition!(Notify::AgentStatus::Done, "Network failure")
+        status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex
         STDERR.puts "Fatal: #{ex.message}".colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
@@ -839,6 +848,34 @@ module Hcode
         nil
       end
 
+      login_cb = Proc(Nil).new do
+        spawn do
+          begin
+            cred_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
+            creds = Auth::OAuth.login(credentials_path: cred_path) do |auth|
+              app.on_event(Loop::Event.info("Open this URL to authorize: #{auth.verification_uri_complete}"))
+              app.on_event(Loop::Event.info("User code: #{auth.user_code}"))
+            end
+            # Rebuild the provider with fresh credentials so the next turn uses
+            # them without a restart.
+            provider = LLM::MoonshotProvider.new(
+              model: config.model || "kimi-for-coding",
+              endpoint: config.endpoint || LLM::MoonshotProvider::DEFAULT_ENDPOINT,
+              oauth: creds,
+              api_key: "",
+              temperature: config.temperature,
+            )
+            agent.swap_provider!(provider)
+            app.on_event(Loop::Event.info("Login successful. Credentials saved to #{cred_path}"))
+          rescue ex : Auth::OAuth::OAuthError
+            app.on_event(Loop::Event.error("Login failed: #{ex.message}"))
+          rescue ex
+            app.on_event(Loop::Event.error("Login error: #{ex.message}"))
+          end
+        end
+      end
+      app.on_login = login_cb
+
       # Thinking-effort selector (off/low/medium/high/...). Backed by the
       # provider's `thinking_effort` property; setting it persists into the
       # next chat request via `build_request`.
@@ -927,6 +964,8 @@ module Hcode
         rescue ex : Loop::UserCancellationError
           agent.context.add_user("Interrupted by user")
           app.show_interrupted
+        rescue ex : Loop::NetworkFailureError
+          app.show_interrupted(ex.message.to_s)
         rescue ex
           app.on_event(Loop::Event.error(ex.message.to_s))
         end

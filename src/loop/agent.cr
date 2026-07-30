@@ -224,7 +224,8 @@ module Hcode
               on_event.call(Event.info("Retrying in #{delay}s... (#{ex.message})"))
               sleep delay.seconds
             else
-              raise "LLM call failed after #{retry_policy.max_retries} retries: #{ex.message}"
+              raise NetworkFailureError.new(
+                "Network failure: Interrupted after #{retry_policy.max_retries} retries (#{ex.message})")
             end
           end
         end

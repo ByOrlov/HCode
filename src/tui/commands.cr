@@ -57,6 +57,7 @@ module Hcode
         CommandInfo.new("/logout", "Clear credentials from config"),
         CommandInfo.new("/tasks", "Browse background tasks"),
         CommandInfo.new("/memory", "Show memory profile of live collections"),
+        CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]"),
       ]
 
       def self.names : Array(String)

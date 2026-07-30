@@ -2,6 +2,27 @@ require "../spec_helper"
 require "../../src/loop/agent"
 require "random/secure"
 
+# Provider that always raises an IO::Error to simulate a network drop.
+private class NetworkDropProvider < Hcode::LLM::Provider
+  def name : String
+    "network-drop"
+  end
+
+  def model_name : String
+    "test"
+  end
+
+  def fetch_models : Array(String)
+    [] of String
+  end
+
+  def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
+           system_prompt : String? = nil, aborted? : -> Bool = -> { false },
+           &block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+    raise IO::Error.new("Broken pipe")
+  end
+end
+
 # Integration coverage for the agent loop, driven end-to-end by the offline
 # MockProvider. No network, no API key: the mock replays a fixed multi-step
 # script (parallel tool calls → write → finish) so run_turn, the parallel
@@ -210,5 +231,28 @@ describe Hcode::Loop::Agent do
     agent.context.history.size.should eq(1)
     agent.context.history.last.message.role.should eq("user")
     agent.context.history.last.message.content.should eq("a side note")
+  end
+
+  it "raises NetworkFailureError after exhausting retries on a network error" do
+    provider = NetworkDropProvider.new
+    memory = Hcode::Context::Memory.new
+    memory.max_context_tokens = 131_072
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+
+    events = [] of Hcode::Loop::Event
+    error = expect_raises(Hcode::Loop::NetworkFailureError) do
+      agent.run_turn("hi", nil) { |e| events << e }
+    end
+
+    (error.message || "").should contain("Network failure")
+    (error.message || "").should contain("3 retries")
+    (error.message || "").should contain("Broken pipe")
+
+    # The user should have seen retry info messages.
+    retry_infos = events.select(&.type.info?).map(&.text)
+    retry_infos.size.should eq(3)
+    retry_infos.all? { |t| t.includes?("Retrying") }.should be_true
   end
 end

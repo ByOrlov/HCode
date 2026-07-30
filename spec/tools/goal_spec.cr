@@ -257,3 +257,47 @@ describe Hcode::Tools::SetGoalBudget do
     tool.to_milliseconds(1.0, "hours").should eq(3_600_000.0)
   end
 end
+
+describe Hcode::Tools::AgentGoalService do
+  it "creates, pauses, resumes, and cancels a goal" do
+    service = Hcode::Tools::AgentGoalService.new
+
+    created = service.create_goal(Hcode::Tools::CreateGoalInput.new(
+      objective: "Fix the bug",
+      completion_criterion: "tests pass",
+    ))
+    created.status.active?.should be_true
+
+    paused = service.pause_goal
+    paused.status.paused?.should be_true
+
+    resumed = service.resume_goal
+    resumed.status.active?.should be_true
+
+    cancelled = service.cancel_goal
+    cancelled.status.complete?.should be_true
+    cancelled.terminal_reason.should eq("cancelled")
+  end
+
+  it "returns nil snapshot when no goal exists" do
+    service = Hcode::Tools::AgentGoalService.new
+    service.get_goal.should be_nil
+  end
+
+  it "raises when pausing with no active goal" do
+    service = Hcode::Tools::AgentGoalService.new
+    expect_raises(Hcode::Tools::GoalError) do
+      service.pause_goal
+    end
+  end
+
+  it "replaces existing goal when replace=true" do
+    service = Hcode::Tools::AgentGoalService.new
+    service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "first"))
+    replaced = service.create_goal(Hcode::Tools::CreateGoalInput.new(
+      objective: "second",
+      replace: true,
+    ))
+    replaced.objective.should eq("second")
+  end
+end

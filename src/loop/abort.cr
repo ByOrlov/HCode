@@ -37,6 +37,12 @@ module Hcode
       end
     end
 
+    # Raised when the LLM call fails after exhausting all retries due to a
+    # network error (broken pipe, connection reset, timeout). Distinct from
+    # `UserCancellationError` so the TUI can render a different message.
+    class NetworkFailureError < Exception
+    end
+
     GRACE_TIMEOUT_SECONDS = 2
     ABORT_POLL_INTERVAL   = 100.milliseconds
 

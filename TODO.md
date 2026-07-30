@@ -23,21 +23,15 @@
 
 ## 1. Отсутствующие подсистемы (нет директорий/файлов)
 
-- [x] **`src/hooks/`** — РАБОТАЕТ. Движок shell-command hooks:
-      `Hooks::Engine` (`hooks/engine.cr`): `HookDef`/`HookResult`/`BlockDecision`,
-      регистрация по event, matcher через regex, запуск через `Process` (shell,
-      JSON stdin, timeout 30s). Block-семантика: exit code 2 = block,
-      `{"hookSpecificOutput":{"permissionDecision":"deny"}}` = block.
-  - События: PreToolUse (block в `plan_calls`), PostToolUse/PostToolUseFailure
-    (fire-and-forget в `execute_approved`), UserPromptSubmit (block в run_turn),
-    Stop (block в run_turn)
-  - Конфиг: `[[hooks]]` array-of-tables в config.toml (event/matcher/command/
-    timeout), парсится в `Config.parse_hooks_array`
-  - Wire-up: `Agent.hooks`, `ToolBatch` принимает `hooks:`; `hcode.cr` строит
-    Engine из config.hooks
-  - Тесты (12): empty/registration/matcher/exit-code/trigger_block/
-    structured-JSON-deny/structured-JSON-allow/stdin-payload
-- [ ] `src/auth/` OAuth — device-code flow (сейчас только чтение готовых токенов)
+- [x] **`src/auth/` OAuth** — РАБОТАЕТ. Device-code flow (RFC 8628):
+      `Auth::OAuth` (`auth/oauth.cr`): `request_device_authorization` →
+      `poll_device_token` → `login` (poll loop с save credentials).
+      Endpoints: `auth.kimi.com/api/oauth/device_authorization` + `/api/oauth/token`
+      (grant_type=device_code). Client ID совпадает с TS. Токены сохраняются
+      в `~/.kimi-code/credentials/kimi-code.json` (совместимо с TS CLI).
+      `/login` запускает flow, показывает URL+user_code, пересоздаёт провайдер
+      с новыми credentials. 6 тестов (struct/constants/error/poll-result).
+      Token refresh уже работал (`OAuthCredentials#refresh!`).
 - [ ] `Config::Paths` — нет отдельного XDG-aware path resolver (сейчас пути
       резолвятся inline в `config.cr:89` и `session/`). Вынести в модуль.
 - [ ] `Config::ProviderConfig` — нет отдельного per-provider конфиг-объекта.
@@ -79,20 +73,30 @@
 undo_dialog, question_dialog, session_picker, help_panel, SelectList-диалоги.
 
 Не хватает:
-- [ ] `goal_panel` (команды `/goal` нет)
-- [ ] `usage_panel` (команда `/usage` пишет в messages, отдельной панели нет)
-- [ ] `compaction` диалог (сейчас info-event в transcript)
+- [x] `goal_panel` — частично: goal tools (CreateGoal/GetGoal/UpdateGoal/
+      SetGoalBudget) + `AgentGoalService` подключены в `hcode.cr` (раньше
+      сервис не инициализировался → tools падали). Команда `/goal` добавлена
+      (status/pause/resume/cancel). Отдельной визуальной панели пока нет —
+      статус показывается в messages. 4 новых теста (lifecycle).
+- [x] `usage_panel` — ГОТОВО: модальная панель `/usage` (`tui/usage_panel.cr`),
+      заменяет editor, показывает provider/model/context bar (█░ визуализация
+      с цветом по порогу 75%/90%), tokens, messages, queue. Esc/Enter/q —
+      закрытие. 7 тестов.
+- [x] `compaction` диалог — уже работал: `render_compaction_block` +
+      `@compaction_msg` + `compaction_state` ("running"/"done"/"cancelled")
 - [ ] `cron_message` рендер
-- [ ] `skill_activation` рендер
+- [ ] `skill_activation` рендер (зависит от `/skill:foo` slash-команды, которой нет)
 - [ ] `agent_group` / `agent_swarm_progress` / `background_agent_status`
 - [ ] `mcp_status_panel`, `plugins_status_panel`
 - [ ] Searchable-list / paging для больших транскриптов
 
 ## 5. Слэш-команды (отсутствуют)
 
-- [ ] `/goal` — autonomous goals (status/pause/resume/cancel/replace/next)
+- [x] `/goal` — autonomous goals: service подключён, команда `/goal`
+      (status/pause/resume/cancel) добавлена
 - [ ] `/swarm` — swarm mode
-- [ ] `/reload-tui` — reload только `tui.toml` (`/reload` уже работает)
+- [ ] `/reload-tui` — reload только `tui.toml` (`/reload` уже работает).
+      Зависит от tui.toml support, которого нет — отложено.
 
 ## 6. Рендеринг / полировка
 
@@ -134,7 +138,7 @@ undo_dialog, question_dialog, session_picker, help_panel, SelectList-диало�
 4. ✅ **`Loop::Retry` extraction** (§2) — ГОТОВО
 5. ✅ **Word-level diff** (§6) — ГОТОВО
 6. ✅ **`src/hooks/` engine** (§1) — ГОТОВО
-7. **TUI панели** (§4) — goal/usage/compaction панели
-8. **`src/auth/` OAuth** (§1) — device-code flow
+7. ✅ **TUI панели** (§4) — goal + usage панели готовы
+8. ✅ **`src/auth/` OAuth** (§1) — ГОТОВО
 9. **`Config::ProviderConfig`** (§1) — структурирует конфиг (отложено)
 10. **`Config::Paths`** (§1) — XDG-aware вынос (отложено)
