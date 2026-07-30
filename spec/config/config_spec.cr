@@ -91,6 +91,22 @@ describe Hcode::Config::Config do
     end
   end
 
+  describe "#provider_configured?(name)" do
+    it "checks an arbitrary provider name independent of provider_name" do
+      config = Hcode::Config::Config.new
+      config.provider_name = "ollama"
+      config.api_key = "sk-test"
+      config.provider_configured?("moonshot").should be_true
+      config.provider_configured?("zai").should be_false
+      config.provider_configured?("ollama").should be_true
+    end
+
+    it "returns false for nil" do
+      config = Hcode::Config::Config.new
+      config.provider_configured?(nil).should be_false
+    end
+  end
+
   describe "TOML round-trip" do
     it "parses nil-able fields from TOML" do
       toml = <<-TOML

@@ -258,7 +258,13 @@ module Hcode
       # to attempt a connection. Used to decide whether the setup wizard runs.
       # Does NOT validate the key — only that one is present.
       def provider_configured? : Bool
-        case provider_name
+        provider_configured?(provider_name)
+      end
+
+      # Same check for an arbitrary provider name — used to decide whether a
+      # runtime /provider switch needs to launch the setup wizard.
+      def provider_configured?(name : String?) : Bool
+        case name
         when "moonshot"        then !api_key.to_s.empty? || oauth_credentials_present?
         when "zai"             then !zai_api_key.empty?
         when "zai-coding-plan" then !zai_api_key.empty?

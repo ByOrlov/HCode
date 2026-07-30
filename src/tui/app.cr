@@ -180,6 +180,13 @@ module Hcode
       @on_provider_change : (String -> Bool)?
       @on_model_change : (String -> Bool)?
       @on_fetch_models : (-> Array(String))?
+      # Fetch the model list for an arbitrary provider name — used by the
+      # setup wizard's Model step to call the real provider API.
+      @on_fetch_models_for : (String -> Array(String))?
+      # Returns true when the named provider has credentials configured and
+      # needs no further setup. Used by /provider to decide whether to launch
+      # the setup wizard for the selected provider.
+      @on_provider_configured : (String -> Bool)?
       @on_resume_session : (String -> Nil)?
       @on_fork : (-> Nil)? = nil
       @on_archive : (-> Nil)?
@@ -249,6 +256,13 @@ module Hcode
       property on_provider_change : (String -> Bool)?
       property on_model_change : (String -> Bool)?
       property on_fetch_models : (-> Array(String))?
+      # Fetch the model list for an arbitrary provider name — used by the
+      # setup wizard's Model step to call the real provider API.
+      property on_fetch_models_for : (String -> Array(String))?
+      # Returns true when the named provider has credentials configured and
+      # needs no further setup. Used by /provider to decide whether to launch
+      # the setup wizard for the selected provider.
+      property on_provider_configured : (String -> Bool)?
       property on_resume_session : (String -> Nil)?
       property on_fork : (-> Nil)?
       property on_archive : (-> Nil)?
@@ -413,6 +427,127 @@ module Hcode
 
         @status = "Setup: #{wizard.step.to_s.downcase}"
         @editor.clear
+        @dirty = true
+
+        # On the Model step, replace the text input with a live model selector
+        # driven by a real provider API call. Falls back to text input if the
+        # callback is not wired up or the fetch fails.
+        if wizard.step == Setup::Wizard::Step::Model
+          fetch_setup_models
+        end
+      end
+
+      # Fetch the model list for the provider being configured and open the
+      # model selector. On error or empty list, reset the wizard back to the
+      # provider selection so the user can start over.
+      private def fetch_setup_models : Nil
+        wizard = @wizard
+        return unless wizard
+        cb = @on_fetch_models_for
+        unless cb
+          # No way to list models — stay on the text input with the default.
+          return
+        end
+
+        name = wizard.provider_name.to_s
+        @status = "Loading models..."
+        @editor.clear
+        @dirty = true
+
+        spawn do
+          begin
+            models = cb.call(name)
+            if models.empty?
+              @messages << Message.new("system", "Models unavailable.")
+              restart_setup
+            else
+              @model_list.show("Select model (#{name})", models)
+              default = wizard.model || wizard.current_choice.try(&.default_model) || models.first?
+              @model_list.selected = models.index(default) || 0
+            end
+          rescue ex
+            @messages << Message.new("system", "Models unavailable.")
+            restart_setup
+          ensure
+            @status = "Setup: #{wizard.step.to_s.downcase}"
+            @dirty = true
+          end
+        end
+      end
+
+      # Handle keys while the model selector is open during setup. Enter
+      # commits the selection; Esc closes the selector and steps back.
+      private def handle_setup_model_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @model_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          wizard = @wizard
+          return unless wizard
+          model = @model_list.current || wizard.current_choice.try(&.default_model) || ""
+          @model_list.hide
+          @dirty = true
+          @messages << Message.new("user", model)
+          wizard.model = model
+          wizard.step = Setup::Wizard::Step::Done
+          advance_setup_step
+        when .escape?
+          @model_list.hide
+          @dirty = true
+          back_setup_step
+        end
+      end
+
+      # Step the wizard backward, mirroring `Setup::Wizard#back`. On the
+      # Credentials step we drop back to the provider selector; on later
+      # steps we just clear the value and re-render.
+      private def back_setup_step : Nil
+        wizard = @wizard
+        return unless wizard
+
+        case wizard.step
+        when .welcome?
+          # Already at the top: cancel setup (no-op selector already closed).
+          @editor.clear
+          @dirty = true
+        when .credentials?
+          wizard.back
+          @editor.clear
+          @status = "Setup: #{wizard.step.to_s.downcase}"
+          open_setup_provider_selector
+          @dirty = true
+        when .endpoint?
+          wizard.back
+          @editor.clear
+          @status = "Setup: #{wizard.step.to_s.downcase}"
+          @dirty = true
+        when .model?
+          wizard.back
+          @model_list.hide
+          @editor.clear
+          @status = "Setup: #{wizard.step.to_s.downcase}"
+          @dirty = true
+        end
+      end
+
+      # Reset the wizard to the provider-selection step. Used when fetching
+      # models fails so the user can pick a different provider.
+      private def restart_setup : Nil
+        wizard = @wizard
+        return unless wizard
+        @model_list.hide
+        @editor.clear
+        wizard.back if wizard.step.credentials?
+        wizard.back if wizard.step.endpoint?
+        wizard.back if wizard.step.model?
+        wizard.api_key = ""
+        wizard.endpoint = nil
+        wizard.model = nil
+        wizard.provider_name = nil
+        wizard.step = Setup::Wizard::Step::Welcome
+        @status = "Setup: select provider"
+        open_setup_provider_selector
         @dirty = true
       end
 
@@ -897,14 +1032,27 @@ module Hcode
             handle_setup_provider_key(key)
             return
           end
+          # While the model selector is open in the Model step it owns input;
+          # ESC closes the selector first, a second ESC steps back.
+          if @model_list.visible?
+            handle_setup_model_key(key)
+            return
+          end
           case key.key
           when .enter?
-            unless @editor.empty?
+            wizard = @wizard
+            step = wizard.try(&.step)
+            # On endpoint/model an empty Enter keeps the default. Credentials
+            # requires a non-empty key, so the submit gate stays there.
+            if step == Setup::Wizard::Step::Endpoint || step == Setup::Wizard::Step::Model
+              text = @editor.empty? ? "" : @editor.submit!
+              submit_setup_text(text)
+            elsif !@editor.empty?
               text = @editor.submit!
               submit_setup_text(text)
             end
           when .escape?
-            @editor.clear
+            back_setup_step
           else
             @editor.handle_input(key)
           end
@@ -1920,6 +2068,10 @@ module Hcode
           @dirty = true
           if name == @provider_name
             @messages << Message.new("system", "Provider already set to #{name}.")
+          elsif needs_setup?(name)
+            # Credentials missing for the selected provider: launch the setup
+            # wizard for it instead of failing the switch.
+            start_setup_for_provider(name)
           elsif cb = @on_provider_change
             if cb.call(name)
               @provider_name = name
@@ -1931,6 +2083,44 @@ module Hcode
         when .escape?
           @provider_list.hide
           @dirty = true
+        end
+      end
+
+      # Does the named provider need the setup wizard? True when a configured
+      # check is wired up and it reports the provider as not yet configured.
+      private def needs_setup?(name : String) : Bool
+        if cb = @on_provider_configured
+          !cb.call(name)
+        else
+          false
+        end
+      end
+
+      # Launch the setup wizard at runtime for an already-chosen provider. The
+      # welcome message and provider selector are skipped: we already know the
+      # provider, so the wizard drops straight into the Credentials step.
+      private def start_setup_for_provider(name : String) : Nil
+        wizard = Setup::Wizard.new
+        wizard.select_provider(name)
+        @wizard = wizard
+        @setup_mode = true
+        @provider_name = name
+        @status = "Setup: #{wizard.step.to_s.downcase}"
+        @editor.clear
+        @messages << Message.new("user", provider_label(name))
+        if wizard.step == Setup::Wizard::Step::Endpoint
+          # Keyless provider: jump straight to endpoint, but still show a
+          # transcript entry so the user knows why no key was asked.
+          @messages << Message.new("system", "No API key needed for #{name}.")
+        end
+        advance_setup_step
+      end
+
+      private def provider_label(name : String) : String
+        if choice = Setup::Wizard.choices.find { |c| c.name == name }
+          choice.label
+        else
+          name
         end
       end
 

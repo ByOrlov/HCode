@@ -76,9 +76,9 @@ module Hcode
             "Enter API key..."
           end
         when Step::Endpoint
-          "Endpoint [#{default_endpoint}]"
+          "Endpoint [#{default_endpoint}] — press Enter to use default"
         when Step::Model
-          "Model [#{default_model}]"
+          "Model [#{default_model}] — press Enter to use default"
         else
           ""
         end
@@ -120,6 +120,23 @@ module Hcode
         when Step::Model
           self.model = text.empty? ? default_model : text
           self.step = Step::Done
+        end
+      end
+
+      # Step the wizard one step backward. Clears any value collected on the
+      # step being left so re-entering it starts clean.
+      def back : Nil
+        case step
+        when Step::Credentials
+          self.api_key = ""
+          self.provider_name = nil
+          self.step = Step::Welcome
+        when Step::Endpoint
+          self.endpoint = nil
+          self.step = Step::Credentials
+        when Step::Model
+          self.model = nil
+          self.step = Step::Endpoint
         end
       end
 

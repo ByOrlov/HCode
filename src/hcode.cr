@@ -826,6 +826,38 @@ module Hcode
         agent.provider.fetch_models
       end
 
+      # Whether the named provider already has credentials configured. The TUI
+      # uses this to decide whether /provider can switch directly or must run
+      # the setup wizard first.
+      app.on_provider_configured = ->(name : String) : Bool do
+        config.provider_configured?(name)
+      end
+
+      # Fetch the live model list for an arbitrary provider name. Used by the
+      # setup wizard's Model step to show a real selector instead of a text
+      # input. Builds a throwaway provider so the running agent is untouched.
+      app.on_fetch_models_for = ->(name : String) : Array(String) do
+        provider = build_named_provider(name, config, oauth)
+        provider.fetch_models
+      end
+
+      # Runtime setup-wizard completion (vs the first-run path wired in
+      # `run_setup_wizard`). Applies the collected values, rebuilds the agent's
+      # provider, and persists the config.
+      app.on_setup_complete = ->(wizard : Setup::Wizard) do
+        wizard.apply_to(config)
+        config.save
+        begin
+          provider = build_named_provider(wizard.provider_name, config, oauth)
+          configure_provider(provider, config, store.meta_id?)
+          agent.swap_provider!(provider)
+          app.model = provider.model_name
+        rescue ex : ProviderConfigError
+          app.add_message("error", "Failed to switch provider: #{ex.message}")
+        end
+        nil
+      end
+
       # Expose the TodoList tool's state to the TUI so it can render a
       # progress panel above the editor. Returns nil if the tool isn't
       # registered (no TodoList in this agent) or the list is empty.

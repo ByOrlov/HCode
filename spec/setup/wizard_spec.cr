@@ -109,6 +109,38 @@ describe Hcode::Setup::Wizard do
     end
   end
 
+  describe "#back" do
+    it "steps credentials back to welcome and clears the api key" do
+      wizard = Hcode::Setup::Wizard.new
+      wizard.select_provider("moonshot")
+      wizard.submit_text("sk-test")
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Endpoint)
+      wizard.back # Endpoint → Credentials, clears endpoint
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Credentials)
+      wizard.back # Credentials → Welcome, clears api_key + provider_name
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Welcome)
+      wizard.api_key.should eq("")
+      wizard.provider_name.should be_nil
+    end
+
+    it "steps model back to endpoint and clears the model" do
+      wizard = Hcode::Setup::Wizard.new
+      wizard.select_provider("moonshot")
+      wizard.submit_text("sk-test")
+      wizard.submit_text("")
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Model)
+      wizard.back # Model → Endpoint, clears model
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Endpoint)
+      wizard.model.should be_nil
+    end
+
+    it "is a no-op on welcome" do
+      wizard = Hcode::Setup::Wizard.new
+      wizard.back
+      wizard.step.should eq(Hcode::Setup::Wizard::Step::Welcome)
+    end
+  end
+
   describe "#apply_to" do
     it "writes ollama config fields" do
       wizard = Hcode::Setup::Wizard.new
