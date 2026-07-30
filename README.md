@@ -1,8 +1,7 @@
-# HCode
+# HCode — Vibe-code even on a potato
 
 > **HCode by Orlov** — a lighter-than-air AI agent. Written in Crystal.
 > Hydrogen-light: H for the lightest element, Code for what you ship.
-> **Vibe-code even on a potato.**
 
 **Crystal 1.14 · GPL-2.0-or-later · Native Binary · No Runtime**
 **~3 MB of RAM per agent at idle. A single static binary. Open source, forever.**
@@ -51,15 +50,15 @@ ships a Node.js runtime pays for it — per process, forever.
 
 | Setup                       | Idle RAM       |
 |-----------------------------|----------------|
-| 5 × opencode (Node.js)      | **≈ 2–10 GB**  |
+| 5 × opencode (Node.js)      | **≈ 2 GB**     |
 | 5 × kimi-code (Node.js)     | **> 1 GB**     |
 | 5 × Claude Code (Node.js)   | **≈ 600 MB**   |
 | 5 × HCode (Crystal, native) | **≈ 15 MB**    |
 
 Each HCode process sits around 3 MB resident while it waits for the next
-prompt — not 120, not 250, not 2 GB. That's **~40× less than Claude
-Code**, **~80× less than kimi-code**, and hundreds of times less than
-opencode — which leaks past 2 GB per process once it warms up. Your
+prompt — not 120, not 250, not 400 MB. That's **~40× less than Claude
+Code**, **~80× less than kimi-code**, and **~130× less than opencode**,
+which idles around 400 MB per process. Your
 editor keeps its memory budget. Your laptop stays cool. The OS stops
 swapping. You can finally run a swarm of agents on the machine you
 already own.
@@ -225,12 +224,12 @@ From featherweight to heavyweight.
 | 5 | Claude Code | TS / Node  | ~120 MB (grows)  | proprietary         | [7]    |
 | 6 | Aider       | Python     | ~150–250 MB(est) | Apache-2.0          | [6]    |
 | 7 | kimi-code   | TS / Node  | ~250 MB+         | MIT                 | [5]    |
-| 8 | opencode    | TS / Bun   | **~1–2 GB+**     | MIT                 | [8]    |
+| 8 | opencode    | TS / Bun   | ~400 MB          | MIT                 | [8]    |
 
 **The gap.** HCode sits ~10× under the nearest Rust agent (Codex), ~40×
 under the lightest Node agent (Claude Code), ~80× under kimi-code, and
-**~300–600× under opencode.** The Node family spans an enormous range —
-from ~120 MB up to 2 GB+ — because each one ships a V8 runtime per
+**~130× under opencode.** The Node family spans an enormous range —
+from ~120 MB up to ~400 MB — because each one ships a V8 runtime per
 process and grows with use. The Rust agents (Codex, grok-build, Goose)
 are native and lean; HCode keeps pace with them on RAM and beats them on
 readability and license (see [Why Crystal?](#why-crystal)).
@@ -255,7 +254,7 @@ allowed to run it, and where your prompts actually go.
 | **HCode**   | **GPL-2.0-or-later**| **no**          | **no**          | **yes**      |
 
 **Two stories, one agent.** Against the Node agents (opencode, Claude
-Code, kimi-code), HCode wins on RAM by 40–600×. Against the Rust agents
+Code, kimi-code), HCode wins on RAM by 40–130×. Against the Rust agents
 (Codex, grok-build, Goose), the RAM gap is small — there HCode wins on
 **readability** (no borrow checker, Ruby-like syntax) and **license**
 (GPL stays open forever; Apache can be closed). Against the
@@ -284,10 +283,8 @@ and the only one with zero vendor strings attached.
   RSS; grows over time via a native memory leak ("119.6 MB/hour"):
   [`anthropics/claude-code#70168`](https://github.com/anthropics/claude-code/issues/70168)
   and the `perf:memory` label.
-- **[8] opencode** — maintainer Memory Megathread; RSS regularly exceeds
-  2 GB, auto-snapshot triggers above 2 GB:
-  [`anomalyco/opencode#20695`](https://github.com/anomalyco/opencode/issues/20695).
-  Additional OOM/leak reports: #34288, #33213, #32274.
+- **[8] opencode** — author measurement, ~400 MB idle RSS (TypeScript /
+  Bun). [`anomalyco/opencode`](https://github.com/anomalyco/opencode).
 
 *Idle RSS varies by OS, repo size, and session length. Native binaries
 (Rust/Crystal) are stable; runtimes (Node/Python) grow with use. Numbers
