@@ -6,8 +6,7 @@
 > Um agente de IA mais leve que o ar, por Orlov — leve como o hidrogênio: **H** do elemento mais leve, **Code** do que você entrega.
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · Binário nativo · Sem runtime**
@@ -113,17 +112,69 @@ Troque em quente pela TUI (`/provider`), ou fixe um em `~/.hcode/config.toml`.
 
 ---
 
-## Início rápido
+## Instalação
+
+O HCode é distribuído como um único binário nativo — sem runtime, sem `node_modules`. Escolha sua plataforma:
+
+### macOS / Linux
 
 ```sh
-# Instale Crystal ≥ 1.14 — https://crystal-lang.org/install/
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+O instalador baixa o release mais recente para sua arquitetura, coloca o binário em `~/.hcode/bin/hcode` e adiciona esse diretório ao seu `PATH`. Reinicie seu shell (ou `source ~/.zshrc` / `~/.bashrc`) e execute:
+
+```sh
+hcode
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+O instalador baixa o release mais recente, coloca o binário em `%LOCALAPPDATA%\hcode\bin\hcode.exe` e adiciona esse diretório ao seu `PATH` de usuário. Reinicie seu terminal e execute:
+
+```powershell
+hcode
+```
+
+### Plataformas suportadas
+
+| Plataforma            | Asset                              |
+|-----------------------|------------------------------------|
+| Linux x86_64          | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64         | `hcode-aarch64-linux.tar.gz`       |
+| macOS (Intel)         | `hcode-x86_64-darwin.tar.gz`       |
+| macOS (Apple Silicon) | `hcode-aarch64-darwin.tar.gz`      |
+| Windows x86_64        | `hcode-x86_64-windows.zip`         |
+
+### Atualizando
+
+Execute `/upgrade` dentro da TUI para verificar o release mais recente do GitHub e substituir seu binário no lugar — sem reinstalação, sem gerenciador de pacotes:
+
+```
+/upgrade
+```
+
+A versão de release contínuo segue `YYYY.MM.DD.N` (p. ex. `2026.07.31.1`). Para instalar um release específico manualmente, baixe o asset correspondente na [página de releases](https://github.com/ByOrlov/HCode/releases).
+
+---
+
+## Compilação a partir do código-fonte
+
+Se você prefere compilar o HCode por conta própria, precisa do Crystal ≥ 1.14:
+
+```sh
+# Instale o Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # veja a docs para Debian/Ubuntu/Windows
 
 # Compilação
-git clone https://github.com/YOU/hcode
-cd hcode
+git clone https://github.com/ByOrlov/HCode
+cd HCode
 shards install
 rake build            # → ./hcode (flags de release)
 

@@ -12,6 +12,8 @@ require "system"
 require "colorize"
 
 require "./version"
+require "./version_compare"
+require "./upgrader"
 require "./llm/types"
 require "./llm/token_counter"
 require "./llm/http_transport"

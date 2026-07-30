@@ -6,8 +6,7 @@
 > Orlov द्वारा निर्मित हवा से भी हल्का AI एजेंट — हाइड्रोजन-हल्का: सबसे हल्के तत्व के लिए **H**, और जो आप शिप करते हैं उसके लिए **Code**।
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · नेटिव बाइनरी · कोई रनटाइम नहीं**
@@ -113,7 +112,59 @@ TUI (`/provider`) से लाइव स्विच करें, या `~/.h
 
 ---
 
-## त्वरित शुरुआत
+## इंस्टॉल
+
+HCode एकल नेटिव बाइनरी के रूप में आता है — कोई रनटाइम नहीं, कोई `node_modules` नहीं। अपना प्लेटफ़ॉर्म चुनें:
+
+### macOS / Linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+इंस्टॉलर आपके आर्किटेक्चर के लिए नवीनतम रिलीज़ डाउनलोड करता है, बाइनरी को `~/.hcode/bin/hcode` पर रखता है, और उस डायरेक्टरी को आपके `PATH` में जोड़ता है। अपना शेल रीस्टार्ट करें (या `source ~/.zshrc` / `~/.bashrc`) और चलाएँ:
+
+```sh
+hcode
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+इंस्टॉलर नवीनतम रिलीज़ डाउनलोड करता है, बाइनरी को `%LOCALAPPDATA%\hcode\bin\hcode.exe` पर रखता है, और उस डायरेक्टरी को आपके यूज़र `PATH` में जोड़ता है। अपना टर्मिनल रीस्टार्ट करें और चलाएँ:
+
+```powershell
+hcode
+```
+
+### समर्थित प्लेटफ़ॉर्म
+
+| प्लेटफ़ॉर्म             | एसेट                              |
+|------------------------|------------------------------------|
+| Linux x86_64           | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64          | `hcode-aarch64-linux.tar.gz`       |
+| macOS (Intel)          | `hcode-x86_64-darwin.tar.gz`       |
+| macOS (Apple Silicon)  | `hcode-aarch64-darwin.tar.gz`      |
+| Windows x86_64         | `hcode-x86_64-windows.zip`         |
+
+### अपडेट करना
+
+TUI के भीतर `/upgrade` चलाएँ ताकि नवीनतम GitHub रिलीज़ की जाँच हो और आपकी बाइनरी उसी स्थान पर बदल जाए — कोई रीइंस्टॉल नहीं, कोई पैकेज मैनेजर नहीं:
+
+```
+/upgrade
+```
+
+रोलिंग रिलीज़ संस्करण `YYYY.MM.DD.N` का अनुसरण करता है (जैसे `2026.07.31.1`)। किसी विशिष्ट रिलीज़ को मैन्युअली इंस्टॉल करने के लिए, [रिलीज़ पेज](https://github.com/ByOrlov/HCode/releases) से मिलान वाला एसेट डाउनलोड करें।
+
+---
+
+## सोर्स से बिल्ड करें
+
+यदि आप HCode को स्वयं बिल्ड करना पसंद करते हैं, तो आपको Crystal ≥ 1.14 चाहिए:
 
 ```sh
 # Crystal ≥ 1.14 इंस्टॉल करें — https://crystal-lang.org/install/
@@ -121,9 +172,9 @@ brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # Debian/Ubuntu/Windows के लिए डॉक्स देखें
 
-# संकलन
-git clone https://github.com/YOU/hcode
-cd hcode
+# बिल्ड करें
+git clone https://github.com/ByOrlov/HCode
+cd HCode
 shards install
 rake build            # → ./hcode (release फ़्लैग्स)
 

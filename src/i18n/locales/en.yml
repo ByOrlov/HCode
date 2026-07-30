@@ -106,6 +106,7 @@ en:
     memory: "Show memory profile of live collections"
     goal: "Show goal status"
     language: "Switch interface language"
+    upgrade: "Update hcode to the latest release"
   help:
     title: "help"
     subtitle: "· Esc / Enter / q to cancel · ↑↓ scroll"
@@ -191,6 +192,12 @@ en:
     goal_paused: "Goal paused."
     goal_resumed: "Goal resumed."
     goal_cancelled: "Goal cancelled."
+    upgrade_checking: "Checking for updates…"
+    upgrade_uptodate: "Already on the latest version (%{version})."
+    upgrade_fetch_failed: "Could not check for updates. Check your network connection and try again."
+    upgrade_download_failed: "Download failed: %{error}"
+    upgrade_install_failed: "Installation failed: %{error}"
+    upgrade_done: "Updated to %{version}. Restart hcode to use the new version."
   language:
     changed: "Language changed to %{name}"
     unknown: "Unknown language: %{name}"

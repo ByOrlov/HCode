@@ -6,8 +6,7 @@
 > Orlov による空気より軽い AI エージェント —— 水素のように軽い：最も軽い元素から **H**、あなたが届けるものから **Code**。
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · ネイティブバイナリ · ランタイムなし**
@@ -113,31 +112,81 @@ TUI からライブ切替（`/provider`）、または `~/.hcode/config.toml` �
 
 ---
 
-## クイックスタート
+## インストール
+
+HCode は単一のネイティブバイナリとして提供される —— ランタイムなし、`node_modules` なし。プラットフォームを選ぼう：
+
+### macOS / Linux
 
 ```sh
-# Crystal ≥ 1.14 をインストール — https://crystal-lang.org/install/
-brew install crystal          # macOS
-# sudo pacman -S crystal      # Arch
-# Debian/Ubuntu/Windows はドキュメントを参照
-
-# ビルド
-git clone https://github.com/YOU/hcode
-cd hcode
-shards install
-rake build            # → ./hcode（release フラグ）
-
-# 認証情報のスモークテスト
-./hcode --hi
-
-# ヘッドレス —— 単発プロンプト、stdout にストリーミング
-./hcode -p "explain this repo's entry point"
-
-# インタラクティブ TUI
-./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
-キーは環境変数で：`MOONSHOT_API_KEY`、`ZAI_API_KEY` / `ZHIPU_API_KEY`、……または `~/.hcode/config.toml` の `[provider.*]` ブロック。セッションは `~/.hcode/sessions/` 配下；`-c` で再開、または TUI から選択。
+インストーラはあなたのアーキテクチャ向けの最新リリースをダウンロードし、バイナリを `~/.hcode/bin/hcode` に配置して、そのディレクトリを `PATH` に追加する。シェルを再起動（または `source ~/.zshrc` / `~/.bashrc`）して実行：
+
+```sh
+hcode
+```
+
+### Windows（PowerShell）
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+インストーラは最新リリースをダウンロードし、バイナリを `%LOCALAPPDATA%\hcode\bin\hcode.exe` に配置して、そのディレクトリをユーザの `PATH` に追加する。ターミナルを再起動して実行：
+
+```powershell
+hcode
+```
+
+### サポートされるプラットフォーム
+
+| プラットフォーム       | Asset                              |
+|------------------------|------------------------------------|
+| Linux x86_64           | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64          | `hcode-aarch64-linux.tar.gz`       |
+| macOS（Intel）         | `hcode-x86_64-darwin.tar.gz`       |
+| macOS（Apple Silicon） | `hcode-aarch64-darwin.tar.gz`      |
+| Windows x86_64         | `hcode-x86_64-windows.zip`         |
+
+### アップデート
+
+TUI 内で `/upgrade` を実行すると、最新の GitHub リリースを確認し、バイナリをその場で置き換える —— 再インストールもパッケージマネージャも不要：
+
+```
+/upgrade
+```
+
+ローリングリリースのバージョンは `YYYY.MM.DD.N`（例：`2026.07.31.1`）に従う。特定のリリースを手動でインストールするには、[リリースページ](https://github.com/ByOrlov/HCode/releases)から該当するアセットをダウンロードする。
+
+---
+
+## ソースからビルド
+
+ご自身で HCode をビルドしたい場合は、Crystal ≥ 1.14 が必要：
+
+```sh
+# Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
+brew install crystal          # macOS
+# sudo pacman -S crystal      # Arch
+# see docs for Debian/Ubuntu/Windows
+
+# Build
+git clone https://github.com/ByOrlov/HCode
+cd HCode
+shards install
+rake build            # → ./hcode (release flags)
+
+# Smoke-test your credentials
+./hcode --hi
+
+# Headless — one-shot prompt, streams to stdout
+./hcode -p "explain this repo's entry point"
+
+# Interactive TUI
+./hcode
+```
 
 ---
 

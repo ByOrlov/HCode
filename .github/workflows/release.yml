@@ -1,0 +1,240 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]*.[0-9]*.[0-9]*"
+      - "[0-9]*.[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (YYYY.MM.DD or YYYY.MM.DD.N)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  compute-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version (auto-increment build number per day)
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Resolve the raw tag pushed (or the dispatch input).
+          if [ -n "${{ inputs.version }}" ]; then
+            RAW="${{ inputs.version }}"
+          else
+            RAW="${GITHUB_REF_NAME}"
+          fi
+          echo "Pushed tag: $RAW"
+
+          # YYYY.MM.DD form → compute next build number for today.
+          if [[ "$RAW" =~ ^([0-9]{4})\.([0-9]{2})\.([0-9]{2})$ ]]; then
+            DAY="${BASH_REMATCH[0]}"
+            # Find existing release tags for this day and pick the max N.
+            EXISTING=$(git tag -l "${DAY}.*" 2>/dev/null || true)
+            MAX=0
+            if [ -n "$EXISTING" ]; then
+              for t in $EXISTING; do
+                n=$(echo "$t" | awk -F. '{print $4}')
+                n=${n:-0}
+                if [ "$n" -gt "$MAX" ] 2>/dev/null; then MAX=$n; fi
+              done
+            fi
+            # Also check the GitHub releases API (covers tags pushed then deleted).
+            LATEST_API=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 2>/dev/null || true)
+            if echo "$LATEST_API" | grep -qE "${DAY}\."; then
+              for t in $(echo "$LATEST_API" | grep -oE "${DAY}\.[0-9]+"); do
+                n=$(echo "$t" | awk -F. '{print $4}')
+                if [ "$n" -gt "$MAX" ] 2>/dev/null; then MAX=$n; fi
+              done
+            fi
+            N=$((MAX + 1))
+            VERSION="${DAY}.${N}"
+          elif [[ "$RAW" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]; then
+            VERSION="$RAW"
+          else
+            echo "::error::Tag '$RAW' does not match YYYY.MM.DD or YYYY.MM.DD.N"
+            exit 1
+          fi
+
+          echo "Final version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: compute-version
+    runs-on: ${{ matrix.runner }}
+    env:
+      HCODE_VERSION: ${{ needs.compute-version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-linux
+            runner: ubuntu-latest
+            archive: tar.gz
+            qemu: true
+          - target: x86_64-darwin
+            runner: macos-13
+            archive: tar.gz
+          - target: aarch64-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: x86_64-windows
+            runner: windows-latest
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Linux x86_64 (native) ----
+      - name: Install Crystal (linux x86_64)
+        if: matrix.target == 'x86_64-linux'
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.14.0
+
+      - name: Build (linux x86_64)
+        if: matrix.target == 'x86_64-linux'
+        run: |
+          shards install
+          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
+          ./hcode --version
+
+      # ---- Linux aarch64 (QEMU cross via Docker) ----
+      - name: Set up QEMU
+        if: matrix.qemu == true
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build (linux aarch64 via Docker)
+        if: matrix.target == 'aarch64-linux'
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            --platform linux/arm64 \
+            -e HCODE_VERSION="$HCODE_VERSION" \
+            crystallang/crystal:1.14.0-arm64 bash -lc '
+              shards install
+              crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
+              file hcode
+            '
+
+      # ---- macOS x86_64 ----
+      - name: Install Crystal (darwin x86_64)
+        if: matrix.target == 'x86_64-darwin'
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.14.0
+
+      - name: Build (darwin x86_64)
+        if: matrix.target == 'x86_64-darwin'
+        run: |
+          shards install
+          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
+          ./hcode --version
+
+      # ---- macOS aarch64 ----
+      - name: Install Crystal (darwin aarch64)
+        if: matrix.target == 'aarch64-darwin'
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.14.0
+
+      - name: Build (darwin aarch64)
+        if: matrix.target == 'aarch64-darwin'
+        run: |
+          shards install
+          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
+          ./hcode --version
+
+      # ---- Windows x86_64 ----
+      - name: Install Crystal (windows x86_64)
+        if: matrix.target == 'x86_64-windows'
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.14.0
+
+      - name: Build (windows x86_64)
+        if: matrix.target == 'x86_64-windows'
+        shell: pwsh
+        run: |
+          shards install
+          crystal build src/hcode.cr -o hcode.exe --release --no-debug --warnings none
+          .\hcode.exe --version
+
+      # ---- Archive + upload ----
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: tar -czf "hcode-${{ matrix.target }}.tar.gz" hcode
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: Compress-Archive -Path hcode.exe -DestinationPath "hcode-${{ matrix.target }}.zip"
+
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          if [ -f "hcode-${{ matrix.target }}.tar.gz" ]; then
+            sha256sum "hcode-${{ matrix.target }}.tar.gz"
+          else
+            sha256sum "hcode-${{ matrix.target }}.zip"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hcode-${{ matrix.target }}
+          path: hcode-${{ matrix.target }}.*
+
+  release:
+    needs: [compute-version, build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.compute-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum hcode-* > ../hcode-checksums.txt
+          cat ../hcode-checksums.txt
+
+      - name: Create tag (if short form was pushed)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            git tag "$VERSION"
+            git push origin "$VERSION"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            artifacts/hcode-*
+            hcode-checksums.txt

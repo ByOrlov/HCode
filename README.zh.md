@@ -6,8 +6,7 @@
 > 由 Orlov 打造的轻如空气的 AI Agent —— 轻如氢气：**H** 取自最轻的元素，**Code** 取自你交付的代码。
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · 原生二进制 · 无运行时**
@@ -113,7 +112,59 @@ HCode 说的是 SSE 之上的 OpenAI Chat Completions 线协议格式。**任何
 
 ---
 
-## 快速开始
+## 安装
+
+HCode 以单一原生二进制形式发布 —— 无运行时，无 `node_modules`。选择你的平台：
+
+### macOS / Linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+安装器会下载与你架构匹配的最新 release，把二进制放到 `~/.hcode/bin/hcode`，并把该目录加入你的 `PATH`。重启 shell（或 `source ~/.zshrc` / `~/.bashrc`）后运行：
+
+```sh
+hcode
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+安装器会下载最新 release，把二进制放到 `%LOCALAPPDATA%\hcode\bin\hcode.exe`，并把该目录加入你的用户 `PATH`。重启终端后运行：
+
+```powershell
+hcode
+```
+
+### 支持的平台
+
+| 平台               | 产物                               |
+|--------------------|------------------------------------|
+| Linux x86_64       | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64      | `hcode-aarch64-linux.tar.gz`       |
+| macOS（Intel）     | `hcode-x86_64-darwin.tar.gz`       |
+| macOS（Apple Silicon）| `hcode-aarch64-darwin.tar.gz`   |
+| Windows x86_64     | `hcode-x86_64-windows.zip`         |
+
+### 更新
+
+在 TUI 里运行 `/upgrade` 检查最新的 GitHub release 并原地替换你的二进制 —— 无需重装，无需包管理器：
+
+```
+/upgrade
+```
+
+滚动发布版本号遵循 `YYYY.MM.DD.N`（例如 `2026.07.31.1`）。如需手动安装特定版本，从 [releases 页面](https://github.com/ByOrlov/HCode/releases)下载对应的产物。
+
+---
+
+## 从源码构建
+
+如果你更愿意自己构建 HCode，需要 Crystal ≥ 1.14：
 
 ```sh
 # 安装 Crystal ≥ 1.14 — https://crystal-lang.org/install/
@@ -122,8 +173,8 @@ brew install crystal          # macOS
 # Debian/Ubuntu/Windows 见文档
 
 # 构建
-git clone https://github.com/YOU/hcode
-cd hcode
+git clone https://github.com/ByOrlov/HCode
+cd HCode
 shards install
 rake build            # → ./hcode（release 标志）
 

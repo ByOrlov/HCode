@@ -6,8 +6,7 @@
 > یک عامل هوش مصنوعی سبک‌تر از هوا، از طرف Orlov — سبک مانند هیدروژن: **H** برای سبک‌ترین عنصر، و **Code** برای چیزی که تحویل می‌دهید.
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · باینری بومی · بدون زمان اجرا**
@@ -113,27 +112,79 @@ HCode قالب سیم OpenAI Chat Completions از طریق SSE صحبت می‌
 
 ---
 
-## شروع سریع
+## نصب
+
+HCode به‌صورت یک باینری بومی تک‌فایلی تحویل داده می‌شود — بدون زمان اجرا، بدون `node_modules`. پلتفرم خود را انتخاب کنید:
+
+### macOS / Linux
 
 ```sh
-# Crystal ≥ ۱.۱۴ نصب کنید — https://crystal-lang.org/install/
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+نصب‌کننده آخرین release برای معماری شما را دانلود می‌کند، باینری را در `~/.hcode/bin/hcode` قرار می‌دهد و آن پوشه را به `PATH` شما اضافه می‌کند. شل خود را ری‌استارت کنید (یا `source ~/.zshrc` / `~/.bashrc`) و اجرا کنید:
+
+```sh
+hcode
+```
+
+### ویندوز (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+نصب‌کننده آخرین release را دانلود می‌کند، باینری را در `%LOCALAPPDATA%\hcode\bin\hcode.exe` قرار می‌دهد و آن پوشه را به `PATH` کاربر شما اضافه می‌کند. ترمینال را ری‌استارت کنید و اجرا کنید:
+
+```powershell
+hcode
+```
+
+### پلتفرم‌های پشتیبانی‌شده
+
+| پلتفرم           | Asset                              |
+|------------------|------------------------------------|
+| Linux x86_64     | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64    | `hcode-aarch64-linux.tar.gz`       |
+| macOS (Intel)    | `hcode-x86_64-darwin.tar.gz`       |
+| macOS (Apple Silicon) | `hcode-aarch64-darwin.tar.gz`   |
+| Windows x86_64   | `hcode-x86_64-windows.zip`         |
+
+### به‌روزرسانی
+
+دستور `/upgrade` را داخل TUI اجرا کنید تا آخرین release گیت‌هاب بررسی شود و باینری شما درجا جایگزین شود — بدون نصب مجدد، بدون مدیر بسته:
+
+```
+/upgrade
+```
+
+نسخه انتشار غلتان از الگوی `YYYY.MM.DD.N` پیروی می‌کند (مثلاً `2026.07.31.1`). برای نصب دستی یک release مشخص، Asset متناظر را از [صفحه releaseها](https://github.com/ByOrlov/HCode/releases) دانلود کنید.
+
+---
+
+## کامپایل از سورس
+
+اگر ترجیح می‌دهید HCode را خودتان کامپایل کنید، به Crystal ≥ 1.14 نیاز دارید:
+
+```sh
+# Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
-# برای Debian/Ubuntu/Windows مستندات را ببینید
+# see docs for Debian/Ubuntu/Windows
 
-# کامپایل
-git clone https://github.com/YOU/hcode
-cd hcode
+# Build
+git clone https://github.com/ByOrlov/HCode
+cd HCode
 shards install
-rake build            # → ./hcode (فلگ‌های release)
+rake build            # → ./hcode (release flags)
 
-# تست دودی اعتبارنامه‌هایتان
+# Smoke-test your credentials
 ./hcode --hi
 
-# بدون سر — اعلان یک‌مرحله‌ای، استریم به stdout
+# Headless — one-shot prompt, streams to stdout
 ./hcode -p "explain this repo's entry point"
 
-# TUI تعاملی
+# Interactive TUI
 ./hcode
 ```
 

@@ -21,7 +21,7 @@ module Hcode
     # animated grid cell by `render_swarm_progress`.
     struct SwarmMember
       property agent_id : String
-      property phase : String        # "Running" | "Completed" | "Failed" | "Aborted"
+      property phase : String # "Running" | "Completed" | "Failed" | "Aborted"
       property ticks : Int32 = 0
       property item_text : String = ""
       property swarm_index : Int32 = 0
@@ -65,12 +65,12 @@ module Hcode
       # auto-approved, or rejected), the plan body is lifted out of the raw
       # result text and rendered as a bordered box — mirrors TS PlanBoxComponent.
       property plan_path : String?
-      property plan_kind : String = ""  # "approved" | "auto_approved" | "rejected"
+      property plan_kind : String = "" # "approved" | "auto_approved" | "rejected"
       # Compaction block: a transcript entry that blinks while compaction is
       # in flight, then settles into a "complete (N → M tokens)" summary.
       # Mirrors TS `CompactionComponent`. Ctrl-O expands/collapses the
       # summary inline (reuses the generic `expanded` flag).
-      property compaction_state : String = ""  # "" | "running" | "done" | "cancelled"
+      property compaction_state : String = "" # "" | "running" | "done" | "cancelled"
       property tokens_before : Int32? = nil
       property tokens_after : Int32? = nil
       property summary : String = ""
@@ -1081,7 +1081,7 @@ module Hcode
         @approval_pending = ApprovalRequest.new(tool_name, args, danger)
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
-                                          Hcode.t("ui.approval_required"), tool_name))
+          Hcode.t("ui.approval_required"), tool_name))
         select
         when choice = @approval_channel.receive
           @approval_pending = nil
@@ -1647,7 +1647,7 @@ module Hcode
         out_path = File.join(tmp_dir, "hcode-debug-#{Time.utc.to_unix}.tar.gz")
         begin
           Process.run("tar", ["-czf", out_path, "-C", File.dirname(bundle_dir), File.basename(bundle_dir)],
-                      output: Process::Redirect::Close, error: Process::Redirect::Close)
+            output: Process::Redirect::Close, error: Process::Redirect::Close)
           out_path if File.exists?(out_path)
         rescue
           nil
@@ -1823,6 +1823,10 @@ module Hcode
           version = Hcode::VERSION
           build = Hcode.build_date || "dev"
           @messages << Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}")
+        when "/upgrade"
+          @messages << Message.new("system", Hcode.t("ui.upgrade_checking"))
+          ok, msg = Hcode::Upgrader.run
+          @messages << Message.new(ok ? "system" : "error", msg)
         when "/usage"
           @usage_panel.show
           @input.drain_pending_enters
@@ -2285,8 +2289,8 @@ module Hcode
       end
 
       PERMISSION_MODES = ["manual", "auto", "yolo"]
-      EFFORT_LEVELS   = ["off", "low", "medium", "high"]
-      THEMES          = ["dark", "light"]
+      EFFORT_LEVELS    = ["off", "low", "medium", "high"]
+      THEMES           = ["dark", "light"]
 
       # Prompt sent by `/init` — mirrors TS `DEFAULT_INIT_PROMPT`
       # (`packages/agent-core/src/profile/default/init.md`).

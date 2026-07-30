@@ -6,8 +6,7 @@
 > Лягчэйшы за паветра AI-агент ад Орлава — лягчэйшы за вадарод: **H** — самы лёгкі элемент, **Code** — тое, што ты адгружаеш.
 
 ```sh
-brew install crystal && git clone https://github.com/YOU/hcode
-cd hcode && shards install && rake build && ./hcode
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · Натыўны бінар · Без runtime**
@@ -113,31 +112,81 @@ HCode размаўляе фарматам OpenAI Chat Completions праз SSE. 
 
 ---
 
-## Хуткі старт
+## Устаноўка
+
+HCode пастаўляецца як адзіны натыўны бінар — без runtime, без `node_modules`. Выбери сваю платформу:
+
+### macOS / Linux
 
 ```sh
-# Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+Інсталятар спампоўвае апошні рэліз для твайвой архітэктуры, кладзе бінар у `~/.hcode/bin/hcode` і дадае гэты каталог у твой `PATH`. Перапусці shell (альбо `source ~/.zshrc` / `~/.bashrc`) і запусці:
+
+```sh
+hcode
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
+```
+
+Інсталятар спампоўвае апошні рэліз, кладзе бінар у `%LOCALAPPDATA%\hcode\bin\hcode.exe` і дадае гэты каталог у твой карыстальніцкі `PATH`. Перапусці тэрмінал і запусці:
+
+```powershell
+hcode
+```
+
+### Падтрымліваемыя платформы
+
+| Платформа                | Asset                              |
+|--------------------------|------------------------------------|
+| Linux x86_64             | `hcode-x86_64-linux.tar.gz`        |
+| Linux aarch64            | `hcode-aarch64-linux.tar.gz`       |
+| macOS (Intel)            | `hcode-x86_64-darwin.tar.gz`       |
+| macOS (Apple Silicon)    | `hcode-aarch64-darwin.tar.gz`      |
+| Windows x86_64           | `hcode-x86_64-windows.zip`         |
+
+### Абнаўленне
+
+Запусці `/upgrade` унутры TUI, каб праверыць апошні рэліз на GitHub і замяніць бінар на месцы — без пераўстаноўкі, без пакетнага менеджара:
+
+```
+/upgrade
+```
+
+Версія rolling-release ідзе па схеме `YYYY.MM.DD.N` (напрыклад `2026.07.31.1`). Каб усталяваць пэўны рэліз уручную, спампуй адпаведны asset са [старонкі рэлізаў](https://github.com/ByOrlov/HCode/releases).
+
+---
+
+## Зборка з зыходнікаў
+
+Калі ты воліш збіраць HCode сам, табе патрэбны Crystal ≥ 1.14:
+
+```sh
+# Устанаві Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
-# see docs for Debian/Ubuntu/Windows
+# гл. дакументацыю для Debian/Ubuntu/Windows
 
-# Build
-git clone https://github.com/YOU/hcode
-cd hcode
+# Зборка
+git clone https://github.com/ByOrlov/HCode
+cd HCode
 shards install
 rake build            # → ./hcode (release flags)
 
-# Smoke-test your credentials
+# Праверка сваіх уліковых даных
 ./hcode --hi
 
-# Headless — one-shot prompt, streams to stdout
+# Headless — аднаразовы промпт, стрымінг у stdout
 ./hcode -p "explain this repo's entry point"
 
-# Interactive TUI
+# Інтэрактыўны TUI
 ./hcode
 ```
-
-Ключы праз env: `MOONSHOT_API_KEY`, `ZAI_API_KEY` / `ZHIPU_API_KEY`, … ці блокі `[provider.*]` у `~/.hcode/config.toml`. Сесіі жывуць пад `~/.hcode/sessions/`; аднаві іх з `-c` або выбары з TUI.
 
 ---
 

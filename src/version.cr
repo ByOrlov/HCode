@@ -1,5 +1,8 @@
 module Hcode
-  VERSION = "0.1.0"
+  # Rolling-release version: YYYY.MM.DD.N (e.g. "2026.07.31.1").
+  # Set at build time via the HCODE_VERSION env var (CI injects the git tag).
+  # Local builds without the var fall back to "0.0.0-dev".
+  VERSION = {{ (env("HCODE_VERSION") || "0.0.0-dev") }}
   # Build timestamp. Crystal has no compile-time -D flag like C, so we read
   # it from the SOURCE_DATE_EPOCH env var at build time when present (repro
   # builds set this); otherwise fall back to "dev".
