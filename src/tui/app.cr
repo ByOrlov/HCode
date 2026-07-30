@@ -97,7 +97,6 @@ module Hcode
     end
 
     class App
-      PASTE_MARKER_RE           = /\[paste #\d+(?: \+\d+ lines| \d+ chars)?\]/
       THINKING_PREVIEW_LINES    = 2
       THINKING_INDENT           = "  "
       STATUS_BULLET             = "● "
@@ -134,8 +133,6 @@ module Hcode
       @streaming_text : String = ""
       @streaming_thinking : String = ""
       @streaming_tool : String?
-      @pasted_block : String?
-      @pasted_lines : Int32 = 0
       @status : String = ""
       @model : String = "kimi-for-coding"
       @provider_name : String = "moonshot"
@@ -958,29 +955,7 @@ module Hcode
           @exit_key = "CTRL+D"
           @dirty = true
         when .enter?
-          if pasted = @pasted_block
-            editor_text = @editor.text
-            if editor_text.includes?(paste_marker)
-              final_text = editor_text.sub(paste_marker, pasted)
-              @pasted_block = nil
-              @pasted_lines = 0
-              @editor.clear
-
-              if final_text.starts_with?('/')
-                handle_slash_command(final_text)
-              else
-                submit_message(final_text)
-              end
-            elsif !@editor.empty?
-              text = @editor.submit!
-
-              if text.starts_with?('/')
-                handle_slash_command(text)
-              else
-                submit_message(text)
-              end
-            end
-          elsif !@editor.empty?
+          if !@editor.empty?
             text = @editor.submit!
 
             if text.starts_with?('/')
@@ -1028,8 +1003,6 @@ module Hcode
             @status = "Cancelling..."
             @dirty = true
             @on_cancel.try(&.call)
-          elsif @pasted_block
-            cancel_pasted_block
           elsif !@editor.empty?
             @editor.clear
           end
@@ -1037,35 +1010,19 @@ module Hcode
           if text = key.text
             paste_lines = text.count('\n') + 1
             if paste_lines > 10 || text.size > 1000
-              @pasted_block = text
-              @pasted_lines = paste_lines
-              @editor.insert_text(paste_marker)
+              @editor.insert_paste_marker(text, paste_lines)
             else
               @editor.insert_text(text)
             end
             update_command_hints
           end
         when .ctrl_e?
-          if pasted = @pasted_block
-            editor_text = @editor.text
-            if editor_text.includes?(paste_marker)
-              @editor.set(editor_text.sub(paste_marker, pasted))
-            end
-            @pasted_block = nil
-            @pasted_lines = 0
-          end
+          @editor.expand_markers
         when .backspace?
-          if @pasted_block
-            cancel_pasted_block
-          else
-            @editor.handle_input(key)
-          end
+          @editor.handle_input(key)
+          update_command_hints
         when .delete?
-          if @pasted_block
-            cancel_pasted_block
-          else
-            @editor.handle_input(key)
-          end
+          @editor.handle_input(key)
         else
           @editor.handle_input(key)
           update_command_hints
@@ -1088,19 +1045,6 @@ module Hcode
         when .escape?
           @approval_channel.send(Permission::ApprovalChoice::Deny)
         end
-      end
-
-      private def paste_marker : String
-        "[paste #1 +#{@pasted_lines} lines]"
-      end
-
-      private def cancel_pasted_block : Nil
-        return unless @pasted_block
-
-        editor_text = @editor.text
-        @editor.set(editor_text.sub(PASTE_MARKER_RE, ""))
-        @pasted_block = nil
-        @pasted_lines = 0
       end
 
       private def submit_message(text : String) : Nil
@@ -1291,7 +1235,7 @@ module Hcode
         editor_cmd = ENV["EDITOR"]? || ENV["VISUAL"]? || "vim"
         tmp_dir = ENV["TMPDIR"]? || "/tmp"
         tmp_file = File.join(tmp_dir, "hcode-edit-#{Random::Secure.hex(4)}.md")
-        File.write(tmp_file, @editor.text)
+        File.write(tmp_file, @editor.expanded_text)
 
         @terminal.restore!
 
@@ -2539,8 +2483,16 @@ module Hcode
         when "error"
           # Split by `\n` so each rendered line maps to one `lines[]` entry —
           # the diff-renderer invariant (1 entry == 1 terminal row) must hold.
-          msg.content.split('\n').each do |l|
-            lines << "#{ANSI.color(@theme.colors.error, nil)}Error: #{l}#{ANSI.reset}"
+          ec = ANSI.color(@theme.colors.error, nil)
+          dc = ANSI.color(@theme.colors.dim, nil)
+          r = ANSI.reset
+          err_lines = msg.content.split('\n')
+          err_lines.each_with_index do |l, idx|
+            if idx == 0
+              lines << "#{ec}✗ #{l}#{r}"
+            else
+              lines << "#{dc}  #{l}#{r}"
+            end
           end
           lines << ""
         when "status"

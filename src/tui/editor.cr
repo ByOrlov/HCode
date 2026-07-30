@@ -1,6 +1,8 @@
 module Hcode
   module TUI
     class Editor < Component
+      PASTE_MARKER_RE = /\[paste #\d+(?: \+\d+ lines| \d+ chars)?\]/
+
       @lines : Array(String) = [""]
       @cursor_row : Int32 = 0
       @cursor_col : Int32 = 0
@@ -8,6 +10,10 @@ module Hcode
       @history_index : Int32 = -1
       @draft : String = ""
       @placeholder : String = ""
+      # Paste-marker expansion: when a large paste is collapsed into a
+      # `[paste #N ...]` marker, the original text is stored here keyed by id.
+      @pastes : Hash(Int32, String) = {} of Int32 => String
+      @paste_counter : Int32 = 0
 
       property? multiline : Bool = true
       property placeholder : String
@@ -25,6 +31,7 @@ module Hcode
         @lines = [""]
         @cursor_row = 0
         @cursor_col = 0
+        @pastes.clear
       end
 
       def set(text : String) : Nil
@@ -32,6 +39,7 @@ module Hcode
         @lines = [""] if @lines.empty?
         @cursor_row = @lines.size - 1
         @cursor_col = @lines.last.size
+        @pastes.clear
       end
 
       def empty? : Bool
@@ -66,6 +74,118 @@ module Hcode
         @cursor_row += pasted_lines.size - 1
         @cursor_col = pasted_lines.last.size - suffix.size
         clamp_cursor_col
+      end
+
+      # Insert a paste block as an atomic `[paste #N ...]` marker and store
+      # the original text for later expansion (on submit or Ctrl+E).
+      def insert_paste_marker(text : String, lines : Int32) : Nil
+        @paste_counter += 1
+        id = @paste_counter
+        @pastes[id] = text
+        marker = "[paste ##{id} +#{lines} lines]"
+        insert_text(marker)
+      end
+
+      # True when there is at least one unexpanded paste marker in the buffer.
+      def pasted? : Bool
+        !@pastes.empty?
+      end
+
+      # Expand every paste marker in `str` back to its stored text.
+      def expand_paste_markers(str : String) : String
+        result = str
+        @pastes.each do |id, content|
+          re = /\[paste ##{id}(?: \+\d+ lines| \d+ chars)?\]/
+          result = result.gsub(re, content)
+        end
+        result
+      end
+
+      # Expand markers and clear paste tracking.
+      def expanded_text : String
+        expand_paste_markers(text)
+      end
+
+      # Expand all paste markers in place (Ctrl+E). Returns true if any marker
+      # was expanded.
+      def expand_markers : Bool
+        return false if @pastes.empty?
+        expanded = expand_paste_markers(text)
+        set(expanded)
+        true
+      end
+
+      # Detect whether `text` contains *any* valid (tracked) paste marker.
+      def contains_paste_marker?(str : String = text) : Bool
+        return false if @pastes.empty?
+        str.scan(PASTE_MARKER_RE) do |m|
+          id = parse_paste_id(m[0])
+          return true if id && @pastes.has_key?(id)
+        end
+        false
+      end
+
+      # Extract the numeric id from a marker string like "[paste #3 +5 lines]".
+      private def parse_paste_id(marker : String) : Int32?
+        if m = marker.match(/#(\d+)/)
+          m[1].to_i?
+        end
+      end
+
+      # After an edit, drop paste ids whose markers no longer appear in the
+      # buffer so expansion and `pasted?` stay accurate.
+      private def prune_dead_pastes : Nil
+        return if @pastes.empty?
+        body = text
+        @pastes.reject! do |id, _|
+          re = /\[paste ##{id}(?: \+\d+ lines| \d+ chars)?\]/
+          !body.matches?(re)
+        end
+      end
+
+      # Scan the current line for a *tracked* paste marker whose span overlaps
+      # or ends at `col`. Returns {start, end} (end exclusive) or nil.
+      # Used by backspace/cursor_left to find the marker just before the cursor.
+      private def marker_range_at_or_before(col : Int32) : {Int32, Int32}?
+        return nil if @pastes.empty?
+        line = @lines[@cursor_row]? || ""
+        line.scan(PASTE_MARKER_RE) do |m|
+          start_col = m.begin || next
+          end_col = m.end || next
+          next if start_col >= col # marker starts at/after col — not "before"
+          id = parse_paste_id(m[0])
+          next unless id && @pastes.has_key?(id)
+          # The marker must contain col or end at col.
+          if start_col < col && end_col >= col
+            return {start_col, end_col}
+          end
+        end
+        nil
+      end
+
+      # Scan the current line for a tracked paste marker that starts exactly
+      # at `col`. Returns {start, end} (end exclusive) or nil.
+      private def marker_range_starting_at(col : Int32) : {Int32, Int32}?
+        return nil if @pastes.empty?
+        line = @lines[@cursor_row]? || ""
+        line.scan(PASTE_MARKER_RE) do |m|
+          start_col = m.begin || next
+          next unless start_col == col
+          id = parse_paste_id(m[0])
+          next unless id && @pastes.has_key?(id)
+          end_col = m.end || next
+          return {start_col, end_col}
+        end
+        nil
+      end
+
+      # Delete the marker covering `range` on the current line and move the
+      # cursor to the marker's start.
+      private def delete_marker(range : {Int32, Int32}) : Nil
+        line = @lines[@cursor_row]
+        @lines[@cursor_row] = line[0...range[0]] + line[range[1]..]
+        @cursor_col = range[0]
+        prune_dead_pastes
       end
 
       def handle_input(key : KeyEvent) : Bool
@@ -128,13 +248,14 @@ module Hcode
       end
 
       def submit! : String
-        text = self.text.strip
-        unless text.empty?
-          @history << text
+        full_text = expanded_text
+        stripped = full_text.strip
+        unless stripped.empty?
+          @history << stripped
         end
         @history_index = -1
         clear
-        text
+        stripped
       end
 
       def render(io : IO) : Nil
@@ -200,6 +321,13 @@ module Hcode
       end
 
       private def backspace : Nil
+        # If the character(s) immediately before the cursor form a tracked
+        # paste marker, delete the whole marker atomically.
+        if range = marker_range_at_or_before(@cursor_col)
+          delete_marker(range)
+          return
+        end
+
         if @cursor_col > 0
           line = @lines[@cursor_row]
           @lines[@cursor_row] = line[0...@cursor_col - 1] + line[@cursor_col..]
@@ -211,6 +339,7 @@ module Hcode
           @lines.delete_at(@cursor_row)
           @cursor_row -= 1
         end
+        prune_dead_pastes
       end
 
       private def delete_word_back : Nil
@@ -242,6 +371,15 @@ module Hcode
       end
 
       private def delete_forward : Nil
+        # If a tracked paste marker starts exactly at the cursor, delete it
+        # atomically (forward delete jumps over the whole marker).
+        if range = marker_range_at_or_before(@cursor_col + 1)
+          if range[0] == @cursor_col
+            delete_marker(range)
+            return
+          end
+        end
+
         line = @lines[@cursor_row]
         if @cursor_col < line.size
           @lines[@cursor_row] = line[0...@cursor_col] + line[@cursor_col + 1..]
@@ -249,9 +387,17 @@ module Hcode
           @lines[@cursor_row] = line + @lines[@cursor_row + 1]
           @lines.delete_at(@cursor_row + 1)
         end
+        prune_dead_pastes
       end
 
       private def cursor_left : Nil
+        # Jump over a paste marker atomically when the cursor is at its end.
+        if range = marker_range_at_or_before(@cursor_col)
+          if range[1] == @cursor_col
+            @cursor_col = range[0]
+            return
+          end
+        end
         if @cursor_col > 0
           @cursor_col -= 1
         elsif @cursor_row > 0
@@ -261,6 +407,11 @@ module Hcode
       end
 
       private def cursor_right : Nil
+        # Jump over a paste marker atomically when the cursor is at its start.
+        if range = marker_range_starting_at(@cursor_col)
+          @cursor_col = range[1]
+          return
+        end
         if @cursor_col < @lines[@cursor_row].size
           @cursor_col += 1
         elsif @cursor_row < @lines.size - 1
