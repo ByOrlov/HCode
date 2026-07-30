@@ -378,10 +378,16 @@ module Hcode
 
     struct SkillMetadata
       property type : String?
+      property name : String?
+      property description : String?
+      property when_to_use : String?
       property arguments : String? | Array(String)?
       property disable_model_invocation : Bool
 
       def initialize(@type : String? = nil,
+                     @name : String? = nil,
+                     @description : String? = nil,
+                     @when_to_use : String? = nil,
                      @arguments : String? | Array(String)? = nil,
                      @disable_model_invocation : Bool = false)
       end
@@ -399,6 +405,18 @@ module Hcode
                      @metadata : SkillMetadata = SkillMetadata.new,
                      @path : String? = nil,
                      @source : String = "project")
+      end
+
+      def description : String
+        @metadata.description || description_from_body
+      end
+
+      private def description_from_body : String
+        @content.strip.lines.first?.try(&.strip) || ""
+      end
+
+      def when_to_use : String?
+        @metadata.when_to_use
       end
 
       def profiled_bytes : Int64
@@ -450,6 +468,220 @@ module Hcode
         renderer = Skill.new
         skill_dir = skill.path ? File.dirname(skill.path.not_nil!) : nil
         renderer.render_skill_prompt(skill, args, session_id, skill_dir)
+      end
+
+      # Listing injected into the system prompt so the model knows which
+      # skills exist and when to call them. Mirrors TS `getModelSkillListing`.
+      def model_listing : String
+        return "" if @skills.empty?
+        lines = ["DISREGARD any earlier skill listings. Current available skills:"]
+        @skills.values.each do |skill|
+          next if skill.metadata.disable_model_invocation
+          lines << "- #{skill.name}: #{truncate(skill.description, 80)}"
+          if w = skill.when_to_use
+            lines << "  When to use: #{w}"
+          end
+          if p = skill.path
+            lines << "  Path: #{p}"
+          end
+        end
+        lines.size == 1 ? "" : lines.join('\n')
+      end
+
+      private def truncate(s : String, max : Int32) : String
+        return s if s.size <= max
+        "#{s[0, max - 3]}..."
+      end
+    end
+
+    # Filesystem skill discovery: scans the standard skill directories
+    # (mirrors TS `skillRoots.ts` + `fileSkillDiscovery.ts`) and parses each
+    # `SKILL.md` into a `SkillDefinition`.
+    module SkillDiscovery
+      USER_BRAND_DIRS   = ["skills"]
+      USER_GENERIC_DIRS = [".agents/skills"]
+      PROJECT_BRAND_DIRS   = [".hcode/skills"]
+      PROJECT_GENERIC_DIRS = [".agents/skills"]
+
+      # Scan both user (home) and project (work_dir) roots, parse SKILL.md
+      # files, return deduplicated skills ordered by discovery.
+      def self.discover(home : String, work_dir : String) : Array(SkillDefinition)
+        roots = [] of {String, String} # {dir, source}
+        roots.concat(user_roots(home))
+        roots.concat(project_roots(work_dir))
+
+        skills = [] of SkillDefinition
+        seen = Set(String).new
+
+        roots.each do |dir, source|
+          next unless Dir.exists?(dir)
+          walk_skill_dir(dir, source, 0, skills, seen)
+        end
+
+        skills
+      end
+
+      private def self.user_roots(home : String) : Array({String, String})
+        dirs = [] of {String, String}
+        USER_BRAND_DIRS.each { |d| dirs << {File.join(home, d), "user"} }
+        USER_GENERIC_DIRS.each { |d| dirs << {File.join(home, d), "user"} }
+        dirs
+      end
+
+      private def self.project_roots(work_dir : String) : Array({String, String})
+        project_root = find_project_root(work_dir)
+        dirs = [] of {String, String}
+        PROJECT_BRAND_DIRS.each { |d| dirs << {File.join(project_root, d), "project"} }
+        PROJECT_GENERIC_DIRS.each { |d| dirs << {File.join(project_root, d), "project"} }
+        dirs
+      end
+
+      # Walk up from `work_dir` to the nearest `.git`, returning that root.
+      # Falls back to `work_dir` itself if no git boundary is found, so
+      # discovery still scans the given workspace (not the filesystem root).
+      private def self.find_project_root(work_dir : String) : String
+        start = File.expand_path(work_dir)
+        current = start
+        loop do
+          return current if Dir.exists?(File.join(current, ".git"))
+          parent = File.dirname(current)
+          return start if parent == current
+          current = parent
+        end
+      end
+
+      private def self.walk_skill_dir(dir : String, source : String, depth : Int32,
+                                      skills : Array(SkillDefinition), seen : Set(String)) : Nil
+        return if depth > 8
+        begin
+          entries = Dir.children(dir).sort
+        rescue File::Error
+          return
+        end
+
+        entries.each do |entry|
+          path = File.join(dir, entry)
+          skill_md = File.join(path, "SKILL.md")
+
+          # Subdirectory with a SKILL.md → directory skill
+          if Dir.exists?(path) && File.file?(skill_md)
+            parse_and_register(skill_md, entry, source, skills, seen)
+          end
+        end
+
+        # A SKILL.md directly in the root dir itself
+        root_skill = File.join(dir, "SKILL.md")
+        if File.file?(root_skill)
+          parse_and_register(root_skill, File.basename(dir), source, skills, seen)
+        end
+      end
+
+      private def self.parse_and_register(skill_md_path : String, dir_name : String,
+                                          source : String, skills : Array(SkillDefinition),
+                                          seen : Set(String)) : Nil
+        return if seen.includes?(skill_md_path)
+        begin
+          text = File.read(skill_md_path)
+        rescue
+          return
+        end
+
+        begin
+          skill = Parser.parse(text, skill_md_path, dir_name, source)
+          seen << skill_md_path
+          skills << skill
+        rescue ex : Exception
+          # Skip unparseable skills silently; logged at debug in TS.
+        end
+      end
+    end
+
+    # SKILL.md parser: frontmatter (simple YAML) + body. Mirrors TS `parser.ts`
+    # for the subset of fields hcode uses (name, description, type, when-to-use,
+    # arguments, disable-model-invocation).
+    module Parser
+      FENCE = "---"
+
+      def self.parse(text : String, skill_md_path : String, dir_name : String,
+                     source : String) : SkillDefinition
+        data, body = parse_frontmatter(text)
+        metadata = normalize_metadata(data)
+
+        name = metadata.name || dir_name
+        content = body.strip
+
+        SkillDefinition.new(
+          name: name,
+          content: content,
+          metadata: metadata,
+          path: File.expand_path(skill_md_path),
+          source: source,
+        )
+      end
+
+      private def self.parse_frontmatter(text : String) : {Hash(String, JSON::Any), String}
+        lines = text.lines(chomp: true)
+        empty = {} of String => JSON::Any
+        return {empty, text} unless lines[0]?.try(&.strip) == FENCE
+
+        close_idx = (1...lines.size).find { |i| lines[i].strip == FENCE }
+        raise "Missing closing frontmatter fence in SKILL.md" unless close_idx
+
+        yaml_text = lines[1...close_idx].join('\n')
+        body = lines[(close_idx + 1)..].join('\n')
+        data = parse_simple_yaml(yaml_text)
+        {data, body}
+      end
+
+      # Minimal YAML parser for flat key: value frontmatter (no nesting,
+      # no flow sequences beyond `arguments: [a, b]`). Avoids a YAML shard
+      # dependency for this narrow use case.
+      private def self.parse_simple_yaml(text : String) : Hash(String, JSON::Any)
+        result = {} of String => JSON::Any
+        text.each_line do |raw|
+          line = raw.strip
+          next if line.empty? || line.starts_with?('#')
+          idx = line.index(':')
+          next unless idx
+          key = line[0...idx].strip
+          val = line[(idx + 1)..].strip
+
+          # Handle aliases: when-to-use / when_to_use → whenToUse, etc.
+          key = normalize_key(key)
+
+          if val.starts_with?('[') && val.ends_with?(']')
+            items = val[1...-1].split(',').map(&.strip.strip('"'))
+            arr = items.reject(&.empty?).map { |s| JSON::Any.new(s) }
+            result[key] = JSON::Any.new(arr)
+          else
+            result[key] = JSON::Any.new(val.strip('"'))
+          end
+        end
+        result
+      end
+
+      KEY_ALIASES = {
+        "when-to-use"            => "when_to_use",
+        "disable-model-invocation" => "disable_model_invocation",
+      }
+
+      private def self.normalize_key(key : String) : String
+        KEY_ALIASES[key]? || key
+      end
+
+      private def self.normalize_metadata(data : Hash(String, JSON::Any)) : SkillMetadata
+        meta = SkillMetadata.new
+        meta.name = data["name"]?.try(&.as_s?)
+        meta.description = data["description"]?.try(&.as_s?)
+        meta.type = data["type"]?.try(&.as_s?)
+        meta.when_to_use = data["when_to_use"]?.try(&.as_s?)
+        if a = data["arguments"]?
+          meta.arguments = a.as_a?.try(&.map(&.as_s))
+        end
+        if d = data["disable_model_invocation"]?
+          meta.disable_model_invocation = d.as_s? == "true"
+        end
+        meta
       end
     end
   end

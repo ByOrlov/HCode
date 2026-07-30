@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -8 276 116" width="260" height="100" role="img" aria-label="HCode logo">
+  <title>HCode</title>
+  <!--
+    Pixel-robot face, mirrored from the ASCII art in src/tui/app.cr
+    (render_welcome_box, logo_lines). Grid is 13 columns × 5 rows,
+    cell = 20px. Body uses currentColor; the 🔴 eyes are red.
+  -->
+  <g fill="currentColor" shape-rendering="crispEdges">
+    <!-- row 0 — antennae at columns 4 and 8 -->
+    <rect x="80" y="0" width="20" height="20"/>
+    <rect x="160" y="0" width="20" height="20"/>
+    <!-- row 1 — crown, columns 2..10 -->
+    <rect x="40" y="20" width="180" height="20"/>
+    <!-- row 2 — cheeks (cols 2,3 / 7,8) + nose bridge (col 5) -->
+    <rect x="40" y="40" width="40" height="20"/>
+    <rect x="100" y="40" width="20" height="20"/>
+    <rect x="140" y="40" width="40" height="20"/>
+    <!-- row 3 — brow bar, columns 0..12 -->
+    <rect x="0" y="60" width="260" height="20"/>
+    <!-- row 4 — chin: solid sides, ▙▄▟ chamfered/recessed middle -->
+    <rect x="0" y="80" width="40" height="20"/>
+    <polygon points="40,80 40,100 60,100"/>
+    <rect x="40" y="90" width="180" height="10"/>
+    <polygon points="200,100 220,100 220,80"/>
+    <rect x="220" y="80" width="40" height="20"/>
+  </g>
+  <!-- eyes — 🔴 at columns 4 and 6 of row 2 -->
+  <circle cx="90" cy="50" r="10" fill="#ef4444"/>
+  <circle cx="130" cy="50" r="10" fill="#ef4444"/>
+</svg>

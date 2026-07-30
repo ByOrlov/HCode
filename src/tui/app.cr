@@ -219,6 +219,7 @@ module Hcode
       @show_welcome : Bool = true
       @session_id : String = ""
       @work_dir : String = ""
+      @additional_dirs : Array(String) = [] of String
       @home : String = ENV["HOME"]? || "/tmp"
       @git_branch : String = ""
 
@@ -230,6 +231,11 @@ module Hcode
       property max_context_tokens : Int32
       property session_id : String
       property work_dir : String
+      property additional_dirs : Array(String)
+      # Fired when `/add-dir` adds a directory; the host rebuilds the system
+      # prompt (so the new dir shows up in the workspace tree) and may extend
+      # the tools' permission scope. Receives the full updated list.
+      property on_additional_dirs_change : (Array(String) -> Nil)?
       property home : String
       property git_branch : String
       property on_compact : (-> Nil)?
@@ -1469,7 +1475,19 @@ module Hcode
           if args.empty?
             @messages << Message.new("system", "Usage: /add-dir <path>")
           else
-            @messages << Message.new("system", "Added directory: #{args}")
+            path = File.expand_path(args.strip, @work_dir)
+            unless Dir.exists?(path)
+              @messages << Message.new("error", "Directory does not exist: #{path}")
+            else
+              if @additional_dirs.includes?(path)
+                @messages << Message.new("system", "Already added: #{path}")
+              else
+                @additional_dirs << path
+                on_additional_dirs_change.try(&.call(@additional_dirs.dup))
+                @messages << Message.new("system",
+                  "Added directory: #{path}\n#{@additional_dirs.size} additional dir(s) total.")
+              end
+            end
           end
         when "/theme"
           if args.empty?
@@ -3614,20 +3632,55 @@ module Hcode
         end
 
         lines = [] of String
+        changed = DiffComputer.changed_lines(old_str, new_str)
 
-        old_lines = old_str.split('\n')
-        new_lines = new_str.split('\n')
+        added = changed.count(&.kind.add?)
+        removed = changed.count(&.kind.delete?)
+        header = ""
+        header += "#{ANSI.bold}#{ANSI.color(@theme.colors.success, nil)}+#{added} #{ANSI.reset}" if added > 0
+        header += "#{ANSI.bold}#{ANSI.color(@theme.colors.error, nil)}-#{removed} #{ANSI.reset}" if removed > 0
 
-        old_lines.each do |l|
-          lines << "#{ANSI.color(@theme.colors.error, nil)}  - #{l}#{ANSI.reset}"
-        end
-        new_lines.each do |l|
-          lines << "#{ANSI.color(@theme.colors.success, nil)}  + #{l}#{ANSI.reset}"
+        changed.each do |dl|
+          case dl.kind
+          when .delete?
+            lines << "#{ANSI.color(@theme.colors.error, nil)}  - #{dl.content}#{ANSI.reset}"
+          when .add?
+            lines << render_highlighted_add(dl)
+          end
         end
 
         lines
       rescue
         [] of String
+      end
+
+      # Renders an added diff line with word-level emphasis: the common
+      # prefix/suffix are dimmed, the changed middle span is bold. Falls back
+      # to a plain green line when no highlight span is attached.
+      private def render_highlighted_add(dl : DiffComputer::DiffLine) : String
+        content = dl.content
+        span = dl.highlight
+
+        prefix = "  + "
+        unless span && span.length > 0
+          return "#{ANSI.color(@theme.colors.success, nil)}#{prefix}#{content}#{ANSI.reset}"
+        end
+
+        before = content[0, span.start]
+        changed_text = content[span.start, span.length]
+        after = content[(span.start + span.length)..]
+
+        String.build do |s|
+          s << ANSI.color(@theme.colors.success, nil)
+          s << prefix
+          s << before if span.start > 0
+          s << ANSI.bold
+          s << changed_text
+          s << ANSI.reset
+          s << ANSI.color(@theme.colors.success, nil)
+          s << after unless after.empty?
+          s << ANSI.reset
+        end
       end
 
       private def tool_header(name : String, args : String?, tool_result : String?,

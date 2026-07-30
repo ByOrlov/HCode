@@ -160,6 +160,12 @@ module Hcode
         {100, 64, 0, 0, 10}, # 100.64.0.0/10 CGNAT
       ]
 
+      @transport : HttpTransport
+
+      def initialize(transport : HttpTransport? = nil)
+        @transport = transport || HttpTransport::RealHttpTransport.new(->(uri : URI) { HTTP::Client.new(uri) })
+      end
+
       def fetch(url : String,
                 tool_call_id : String? = nil,
                 signal : AbortController? = nil) : UrlFetchResult
@@ -174,7 +180,7 @@ module Hcode
         status_code = 0
         content_type = ""
         body = String.build do |io|
-          response = HTTP::Client.get(uri, headers: headers)
+          response = @transport.request("GET", uri, headers)
           status_code = response.status_code
           content_type = response.headers["Content-Type"]? || ""
           if response.status_code >= 400
@@ -318,7 +324,11 @@ module Hcode
     end
 
     class LocalWebFetchService < WebFetchService
-      @fetcher = LocalFetcher.new
+      @fetcher : LocalFetcher
+
+      def initialize(transport : HttpTransport? = nil)
+        @fetcher = LocalFetcher.new(transport)
+      end
 
       def get_url_fetcher : UrlFetcher
         @fetcher

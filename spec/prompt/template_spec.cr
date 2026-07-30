@@ -89,4 +89,18 @@ describe Hcode::Prompt::SystemPrompt do
     prompt.should contain("Operating System")
     prompt.should contain("Working Directory")
   end
+
+  it ".build omits the Additional Directories section when no dirs given" do
+    prompt = Hcode::Prompt::SystemPrompt.build(Dir.current)
+
+    prompt.should_not contain("## Additional Directories")
+  end
+
+  it ".build includes Additional Directories listing when dirs are provided" do
+    tmp = Dir.tempdir
+    prompt = Hcode::Prompt::SystemPrompt.build(Dir.current, additional_dirs: [tmp])
+
+    prompt.should contain("## Additional Directories")
+    prompt.should contain(tmp)
+  end
 end

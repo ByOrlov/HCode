@@ -32,7 +32,8 @@ module Hcode
         Time.unix(@expires_at) - Time.utc < 60.seconds
       end
 
-      def refresh!(oauth_host : String, client_id : String) : Nil
+      def refresh!(oauth_host : String, client_id : String,
+                   transport : HttpTransport? = nil) : Nil
         form = "grant_type=refresh_token&refresh_token=#{URI.encode_path(@refresh_token)}&client_id=#{client_id}"
         headers = HTTP::Headers.new
         headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -44,8 +45,8 @@ module Hcode
         # `hcode --login` on a network path that does not require it, or set
         # the tokens manually.
         uri = URI.parse("#{oauth_host}/api/oauth/token")
-        client = HTTP::Client.new(uri)
-        response = client.post(uri.request_target, headers: headers, body: form)
+        t = transport || HttpTransport::RealHttpTransport.new(->(u : URI) { HTTP::Client.new(u) })
+        response = t.request("POST", uri, headers, form)
         if response.status_code == 200
           data = JSON.parse(response.body)
           @access_token = data["access_token"].to_s

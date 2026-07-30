@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "../support/mock_http_transport"
 
 describe Hcode::Notify::Webhook do
   describe ".build_payload" do
@@ -62,6 +63,36 @@ describe Hcode::Notify::Webhook do
         next_status: Hcode::Notify::AgentStatus::Done,
       ))
       10.times { Fiber.yield }
+    end
+
+    it "uses injected transport and swallows network errors silently" do
+      transport = Hcode::MockHttpTransport.new
+      transport.request_error = IO::Error.new("Broken pipe")
+
+      webhook = Hcode::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
+      webhook.fire(Hcode::Notify::Transition.new(
+        event: "turn_done",
+        prev_status: Hcode::Notify::AgentStatus::Working,
+        next_status: Hcode::Notify::AgentStatus::Done,
+      ))
+      10.times { Fiber.yield }
+      # No exception propagated — the IO::Error was swallowed.
+      transport.last_uri.not_nil!.to_s.should contain("example.com")
+    end
+
+    it "delivers payload through transport on success" do
+      transport = Hcode::MockHttpTransport.new
+      transport.response_status = 200
+      transport.response_body = "ok"
+
+      webhook = Hcode::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
+      webhook.fire(Hcode::Notify::Transition.new(
+        event: "turn_done",
+        prev_status: Hcode::Notify::AgentStatus::Working,
+        next_status: Hcode::Notify::AgentStatus::Done,
+      ))
+      10.times { Fiber.yield }
+      (transport.last_body || "").should contain("turn_done")
     end
   end
 end

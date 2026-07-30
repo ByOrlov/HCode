@@ -11,15 +11,26 @@ module Hcode
       @headers : Hash(String, String)
       @secret : String
       @timeout : Time::Span
+      @transport : HttpTransport
 
       def initialize(@url : String,
                      method : String = "POST",
                      headers : Hash(String, String) = {} of String => String,
                      @secret : String = "",
-                     timeout_ms : Int32 = 5000)
+                     timeout_ms : Int32 = 5000,
+                     transport : HttpTransport? = nil)
         @method = method.upcase
         @headers = headers
         @timeout = timeout_ms.milliseconds
+        @transport = transport || begin
+          t = @timeout
+          HttpTransport::RealHttpTransport.new(->(uri : URI) do
+            c = HTTP::Client.new(uri)
+            c.connect_timeout = t
+            c.read_timeout = t
+            c
+          end)
+        end
       end
 
       def fire(payload : Transition) : Nil
@@ -32,14 +43,7 @@ module Hcode
             headers["X-HCode-Webhook-Secret"] = @secret unless @secret.empty?
 
             uri = URI.parse(@url)
-            client = HTTP::Client.new(uri)
-            client.connect_timeout = @timeout
-            client.read_timeout = @timeout
-
-            response = case @method
-                       when "PUT"  then client.put(uri.path || "/", body: body, headers: headers)
-                       else             client.post(uri.path || "/", body: body, headers: headers)
-                       end
+            @transport.request(@method, uri, headers, body)
           rescue ex
             # Swallow — a flaky webhook must never break a turn.
           end

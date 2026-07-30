@@ -1,13 +1,5 @@
 module Hcode
   module LLM
-    # Mutable holder shared between the fiber driving the HTTP request and the
-    # fiber consuming its chunks, so the consumer can close the connection on
-    # abort and surface any error the worker captured.
-    private class StreamingSession
-      property client : HTTP::Client?
-      property error : Exception?
-    end
-
     # Shared transport for any backend that speaks the OpenAI Chat Completions
     # wire format over SSE (Moonshot, Z.AI/Zhipu, ...).
     #
@@ -54,10 +46,16 @@ module Hcode
       # `usesMaxCompletionTokens`.
       property? uses_max_completion_tokens : Bool = false
 
+      # Transport used for all outbound HTTP. Defaults to the real proxy-aware
+      # client; tests inject a fake to simulate network drops and aborts.
+      @transport : HttpTransport
+
       def initialize(@model : String, @endpoint : String,
                      @api_key : String = "",
                      @temperature : Float64? = nil,
-                     @max_tokens : Int32? = nil)
+                     @max_tokens : Int32? = nil,
+                     transport : HttpTransport? = nil)
+        @transport = transport || HttpTransport::RealHttpTransport.new(->make_client(URI))
       end
 
       def used_context_tokens=(@used_context_tokens : Int32) : Nil
@@ -198,9 +196,7 @@ module Hcode
         apply_auth(headers)
         headers["Accept"] = "application/json"
 
-        client = make_client(uri)
-
-        response = client.get(uri.request_target, headers: headers)
+        response = @transport.request("GET", uri, headers)
 
         if response.status_code != 200
           raise ApiError.new(response.status_code,
@@ -422,8 +418,7 @@ module Hcode
           headers = HTTP::Headers.new
           apply_auth(headers)
           headers["Accept"] = "application/json"
-          client = make_client(uri)
-          response = client.get(uri.request_target, headers: headers)
+          response = @transport.request("GET", uri, headers)
           return unless response.status_code == 200
 
           json = JSON.parse(response.body)
@@ -453,7 +448,7 @@ module Hcode
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "text/event-stream"
 
-        active = StreamingSession.new
+        active = HttpTransport::Session.new
         chunks = Channel(StreamChunk).new(64)
 
         # The HTTP request runs in its own fiber so this fiber is never stuck
@@ -461,18 +456,18 @@ module Hcode
         # the consumer loop below and tear the connection down mid-flight —
         # which is the only way to interrupt a request that is still connecting.
         spawn do
-          client = make_client(uri)
-          active.client = client
           begin
             reader, writer = IO.pipe
             spawn do
               begin
                 request.to_json(writer)
+              rescue ex : IO::Error | Channel::ClosedError
+                # Consumer closed the pipe (abort / network drop) mid-write.
               ensure
-                writer.close
+                writer.close rescue nil
               end
             end
-            client.post(uri.request_target, headers: headers, body: reader) do |response|
+            @transport.request_stream("POST", uri, headers, reader, active) do |response|
               if response.status_code != 200
                 error_body = response.body_io.gets_to_end
                 status = response.status_code
@@ -506,8 +501,6 @@ module Hcode
           rescue ex
             active.error = ex
           ensure
-            active.client = nil
-            client.close rescue nil
             reader.try(&.close) rescue nil
             chunks.close
           end
@@ -521,7 +514,7 @@ module Hcode
           when timeout(100.milliseconds)
             if aborted?.call
               chunks.close
-              active.client.try(&.close)
+              active.close!
               raise AbortedError.new
             end
           end

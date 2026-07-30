@@ -47,6 +47,7 @@ module Hcode
         @dedup : DedupTracker,
         @abort_controller : AbortController,
         @context : Context::Memory,
+        @hooks : Hooks::Engine? = nil,
       )
       end
 
@@ -123,6 +124,20 @@ module Hcode
             next
           end
 
+          # PreToolUse hook: a block decision denies the call with the hook's
+          # reason visible to the model. Runs after permission (which may
+          # itself block) so the hook sees only user-approved calls.
+          if engine = @hooks
+            if block = engine.trigger_block("PreToolUse", tc.name,
+                {"tool_name" => JSON::Any.new(tc.name),
+                 "tool_input" => JSON.parse(tc.arguments)})
+              msg = "Blocked by PreToolUse hook: #{block.reason}"
+              on_event.call(Event.tool_result(tc.id, msg, true))
+              planned << PlannedCall.new(idx, tc, PlannedCallStatus::Skipped, msg, true)
+              next
+            end
+          end
+
           planned << PlannedCall.new(idx, tc, PlannedCallStatus::Approved)
         end
 
@@ -150,6 +165,19 @@ module Hcode
           @abort_controller.throw_if_aborted!
 
           budgeted_content, _truncated = Context::Budget.budget(tc.name, tc.id, result.content)
+
+          # PostToolUse hook: fire-and-forget (not blocking). Lets external
+          # tooling observe completed tool calls.
+          if engine = @hooks
+            event_type = result.is_error ? "PostToolUseFailure" : "PostToolUse"
+            spawn(same_thread: true) do
+              engine.trigger(event_type, tc.name,
+                {"tool_name" => JSON::Any.new(tc.name),
+                 "tool_input" => JSON.parse(tc.arguments),
+                 "tool_result" => JSON::Any.new(budgeted_content)})
+            end
+          end
+
           channel.send(ToolBatchResult.new(pc.index, tc.id, budgeted_content, result.is_error, result.display))
         rescue ex : UserCancellationError
           channel.send(ToolBatchResult.new(pc.index, tc.id, "Cancelled: #{ex.reason}", true))

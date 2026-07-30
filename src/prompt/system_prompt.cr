@@ -112,6 +112,16 @@ module Hcode
       {{HCODE_ADDITIONAL_DIRS_INFO}}
       {% endif %}
 
+      {% if HCODE_SKILLS %}
+
+      # Skills
+
+      The following skills are available. A skill is a reusable, parameterized prompt you can invoke through the `Skill` tool. When the user's request matches a skill, call it instead of answering free-form.
+
+      {{HCODE_SKILLS}}
+
+      {% endif %}
+
       # Project Information
 
       When working on files in subdirectories, check whether those directories contain their own `AGENTS.md` with more specific guidance. You may also check `README`/`README.md` files for more information about the project. If you modified any files, styles, structures, configurations, workflows, or other conventions mentioned in `AGENTS.md` files, update the corresponding `AGENTS.md` files to keep them current.
@@ -146,7 +156,8 @@ module Hcode
       - Before you finalize a reply, re-read the user's latest request and confirm you are answering that one — not an earlier ask left over from a resume, interruption, mid-task steer, or context compaction.
       TEXT
 
-      def self.build(work_dir : String) : String
+      def self.build(work_dir : String, additional_dirs : Array(String) = [] of String,
+                     skills_listing : String = "") : String
         vars = {} of String => String
 
         vars["HCODE_OS"] = os_name
@@ -154,10 +165,10 @@ module Hcode
         vars["HCODE_NOW"] = Time.utc.to_rfc3339
         vars["HCODE_WORK_DIR"] = work_dir
         vars["HCODE_WORK_DIR_LS"] = directory_listing(work_dir)
-        vars["HCODE_ADDITIONAL_DIRS_INFO"] = ""
+        vars["HCODE_ADDITIONAL_DIRS_INFO"] = additional_dirs_info(additional_dirs)
         agents_md = AgentsMd.discover(work_dir)
         vars["HCODE_AGENTS_MD"] = agents_md.empty? ? "(none found)" : agents_md
-        vars["HCODE_SKILLS"] = ""
+        vars["HCODE_SKILLS"] = skills_listing
 
         Template.render(SYSTEM_TEMPLATE, vars)
       end
@@ -178,6 +189,19 @@ module Hcode
         shell = ENV["SHELL"]? || "/bin/bash"
         name = File.basename(shell)
         "#{name} (`#{shell}`)"
+      end
+
+      private def self.additional_dirs_info(additional_dirs : Array(String)) : String
+        return "" if additional_dirs.empty?
+        String.build do |s|
+          additional_dirs.each do |dir|
+            label = File.expand_path(dir)
+            s << "### #{label}\n"
+            s << "```\n"
+            s << directory_listing(label)
+            s << "\n```\n\n"
+          end
+        end.strip
       end
 
       private def self.directory_listing(dir : String, levels : Int32 = 2) : String

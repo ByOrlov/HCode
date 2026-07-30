@@ -179,13 +179,16 @@ module Hcode
       @api_key : String?
       @default_headers : Hash(String, String)
       @custom_headers : Hash(String, String)
+      @transport : HttpTransport
 
       def initialize(@base_url : String,
                      api_key : String? = nil,
                      @default_headers : Hash(String, String) = {} of String => String,
-                     @custom_headers : Hash(String, String) = {} of String => String)
+                     @custom_headers : Hash(String, String) = {} of String => String,
+                     transport : HttpTransport? = nil)
         # trim; пустой → nil
         @api_key = api_key.try(&.strip).try { |s| s.empty? ? nil : s }
+        @transport = transport || HttpTransport::RealHttpTransport.new(->(uri : URI) { HTTP::Client.new(uri) })
       end
 
       def search(query : String,
@@ -203,7 +206,7 @@ module Hcode
 
         uri = URI.parse(@base_url)
 
-        response = HTTP::Client.post(uri, headers: headers, body: body_json)
+        response = @transport.request("POST", uri, headers, body_json)
         status = response.status_code
         detail = response.body
 

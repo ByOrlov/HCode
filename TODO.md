@@ -1,160 +1,140 @@
 # hcode — TODO (сравнение с kimi-code TS)
 
-Состояние на 2026-07-18. Источник: прямое сравнение `src/` (Crystal) с `kimi-code/` (TS).
-Билд собирается, спеки зелёные. Ядро агента ≈80% готово.
+Состояние на 2026-07-30. Источник: прямая проверка `src/` (Crystal) + билд.
+Билд собирается (`crystal build` зелёный). Ядро агента готово.
 
-## 1. Критическое (ломает базовый UX)
+## Фактическая проверка переписала картину
 
-- [x] **Очередь сообщений + steer** — ГОТОВО
-  - `QueuedMessage` struct (text + mode), `@queue : Array(QueuedMessage)`
-  - Drain-loop через `TurnEnd` event: каждое завершение turn-а шарит следующее
-    сообщение, рекурсивно пока очередь не опустеет (раньше шарился только 1)
-  - `Agent#steer(text)` — инжект в текущий turn (mirrors `session.steer`)
-  - `EventType::TurnEnd` + `Event.turn_end(cancelled)` эмитится всегда
-    (через `ensure`), флаг `cancelled` отличает cancel от нормального конца
-  - 3-флаговый gate как в TS: `@agent_busy || @is_compacting || @defer_user_messages`
-  - Ctrl+S: compacting/deferred → enqueue, idle → send, busy → steer
-  - Persistence: `on_persist_queued` колбэк пишет `turn.prompt` / `turn.steer`
-    в JSONL (привязан в `hcode.cr`) — очередь переживает resume
-  - Cleanup при cancel: очередь чистится в обработчике `turn_end` (`is_error`)
-  - `render_queue_pane` компонент: показывает размер, превью, контекстный hint
-  - Команда `/queue` (просмотр) и `/queue clear` (очистка)
-  - `@dispatch_pending` guard от race между shift и start_turn
-  - Тесты: TurnEnd эмитится 1 раз (нормально + cancel), `Agent#steer` инжектит
+Многое из того, что числилось отсутствующим, УЖЕ реализовано:
 
-- [x] **Provider-свитчер** — РАБОТАЕТ (`hcode.cr:523-539`):
-  `on_provider_change` привязан → `build_named_provider` → `agent.swap_provider!`
-  → `config.save`. То же для `on_model_change`. Список рендерится через SelectList.
+- **Workspace file tree** (2 уровня) — есть, `directory_listing` в
+  `prompt/system_prompt.cr:188`, подставляется в `{{HCODE_WORK_DIR_LS}}`.
+- **Syntax highlighting** (8 языков: crystal/ruby/python/js/ts/go/rust/bash/json)
+  — есть, `highlight_code` в `tui/markdown.cr:721`.
+- **Paste markers** `[paste #N ...]` — есть, `tui/editor.cr:4` + `@pastes`.
+- **Ctrl+G / external editor** — есть, `handle_external_editor` (`app.cr:1234`).
+- **Light theme** — есть, `Theme.light` (`theme.cr:79`).
+- **Runtime selectors** `/provider` `/model` `/theme` `/permission` `/effort`
+  через `SelectList` — есть, `open_*_selector` (`app.cr:1801+`), привязаны к
+  колбэкам `on_provider_change`/`on_model_change`/... в `hcode.cr`.
+- **`/add-dir`** — частично: только пишет "Added directory: X", НЕ хранит
+  список и НЕ инжектит в system prompt (см. §3).
+- **`Setup::Wizard`** — есть (148 строк), onboarding-флоу для первого запуска.
 
-## 2. Отсутствующие подсистемы (нет директорий)
+## 1. Отсутствующие подсистемы (нет директорий/файлов)
 
-- [ ] `src/auth/` — OAuth/device-code flow (сейчас только чтение готовых токенов)
-- [ ] `src/hooks/` — PreToolUse/PostToolUse/UserPromptSubmit/Stop hooks
-- [x] **`src/notify/`** — РАБОТАЕТ: status tracker + sound + webhook + OSC-9
-  - `Notify::AgentStatus` enum (Idle/Working/Done/InputRequired)
-  - `Notify::StatusTracker` — отслеживает переходы, эмитит `Transition` только
-    при реальной смене статуса (staying-in-Working тихо)
-  - `Notify::TerminalChannel` — порт TS `terminal-notification.ts`: OSC 9 на
-    поддерживаемых терминалах (iTerm2/WezTerm/Kitty/Ghostty/Warp), BEL fallback,
-    tmux DCS passthrough, sanitize control chars, `MAX_MESSAGE_LENGTH` cap,
-    de-dupe по ключу, `condition` (unfocused|always) + focus gate
-  - `Notify::Player` — sound playback: probe OS-native player при init
-    (afplay/pw-play/paplay/aplay/powershell/ffplay), detached fiber,
-    fire-and-forget, play_for(event) выбирает done/alert/working путь
-  - `Notify::Webhook` — async POST в detached fiber, timeout, secret header,
-    опциональные headers, swallow errors (flaky endpoint не ломает turn)
-  - `Notify::Dispatcher` — fan-out + per-channel gating + global switch;
-    `from_config` строит только включённые каналы
-  - `Notify::Config` — `[notifications]` TOML-схема (sound/terminal/webhook),
-    интегрирован в `Config::Config` (parse + save)
-  - Wire-up: `App` принимает `Dispatcher?`, строит `StatusTracker`; переходы
-    в `start_turn` (→Working), `turn_end` (→Done→Idle), `request_approval`
-    (→InputRequired→Working). Headless `hcode.cr -p` тоже строит dispatcher
-  - Тесты (39): status transitions, terminal format/build_sequences/OSC9/tmux/
-    de-dupe/focus, player candidates per OS, webhook payload + resilience,
-    dispatcher fan-out + gating + from_config
+- [x] **`src/hooks/`** — РАБОТАЕТ. Движок shell-command hooks:
+      `Hooks::Engine` (`hooks/engine.cr`): `HookDef`/`HookResult`/`BlockDecision`,
+      регистрация по event, matcher через regex, запуск через `Process` (shell,
+      JSON stdin, timeout 30s). Block-семантика: exit code 2 = block,
+      `{"hookSpecificOutput":{"permissionDecision":"deny"}}` = block.
+  - События: PreToolUse (block в `plan_calls`), PostToolUse/PostToolUseFailure
+    (fire-and-forget в `execute_approved`), UserPromptSubmit (block в run_turn),
+    Stop (block в run_turn)
+  - Конфиг: `[[hooks]]` array-of-tables в config.toml (event/matcher/command/
+    timeout), парсится в `Config.parse_hooks_array`
+  - Wire-up: `Agent.hooks`, `ToolBatch` принимает `hooks:`; `hcode.cr` строит
+    Engine из config.hooks
+  - Тесты (12): empty/registration/matcher/exit-code/trigger_block/
+    structured-JSON-deny/structured-JSON-allow/stdin-payload
+- [ ] `src/auth/` OAuth — device-code flow (сейчас только чтение готовых токенов)
+- [ ] `Config::Paths` — нет отдельного XDG-aware path resolver (сейчас пути
+      резолвятся inline в `config.cr:89` и `session/`). Вынести в модуль.
+- [ ] `Config::ProviderConfig` — нет отдельного per-provider конфиг-объекта.
+      Сейчас provider-поля разбросаны по `Config`. Нужен структурированный
+      `[provider.<name>]`.
+- [ ] MCP-клиент — нет; `/mcp` заглушка.
+- [ ] Plugins runtime — нет; `/plugins` заглушка.
+- [ ] `/btw` — forked side-agent — нет.
 
-## 3. TUI панели/диалоги (есть в TS, нет в Crystal)
+## 2. Инфраструктура: реализована inline, не вынесена в модули
 
-В TS ~30 (`tui/components/dialogs/` + `messages/`), в Crystal только `help_panel`.
-- [x] `plan_box` — РАБОТАЕТ: `render_plan_box` (бокс `┌── plan: ... ──┐`)
-      + детект ExitPlanMode результата (approved/auto_approved/rejected) +
-      путь файла плана + markdown body через `@markdown.render`
-- [ ] `goal_panel`
-- [ ] `usage_panel` (tokens / context / quotas) — есть команда `/usage`,
-      нет отдельной панели
-- [x] `tasks_browser` + `task_output_viewer` — РАБОТАЕТ: полный порт
-      `TasksBrowser` (3 панели, рамки, scroll, filter, stop-confirm, vim)
-      + `/tasks` команда + привязка к `InMemoryTaskService`
-- [x] `todo_panel` (тулза есть, UI нет) — РЕАБОТАЕТ: `render_todo_panel` +
-      `on_fetch_todos`/`on_clear_todos` колбэки + `/todos` команда
+- [x] **`Context::Compaction`** — ВЫНЕСЕН. Логика суммаризации из
+      `Agent#trigger_compaction` в `Context::Compaction` класс (`context/compaction.cr`).
+      `Agent` делегирует; 3 теста (summarize/failure/token-reduction).
+- [x] **`Loop::Retry`** — ВЫНЕСЕН. `RetryPolicy` класс (`loop/retry.cr`):
+      delay-расчёт (экспоненциальный backoff 2^n, cap 30s), retryable?
+      (ApiError flag, UserCancellationError→false, network→true).
+      `execute_step` делегирует; 6 тестов.
+
+## 3. `/add-dir` — не доведён (real storage)
+
+✅ **ГОТОВО** — `/add-dir` теперь real storage:
+- `@additional_dirs : Array(String)` в `App` + property + колбэк
+  `on_additional_dirs_change`
+- `/add-dir <path>`: `File.expand_path`, проверка `Dir.exists?`, дедуп,
+  добавление, вызов колбэка
+- `SystemPrompt.build(work_dir, additional_dirs)` — рендерит listing
+  каждого каталога в `HCODE_ADDITIONAL_DIRS_INFO` → блок
+  `## Additional Directories` в system prompt
+- `hcode.cr` привязывает колбэк: ре-билд `system_prompt` при изменении
+  (замкнутая переменная обновляется → следующий turn видит новый prompt)
+- Тесты: 2 новых (omits section / includes listing)
+- Note: permission-scope уже не нужен — `PathAccess` разрешает абсолютные
+  пути вне work_dir для Read/Search/Write
+
+## 4. TUI панели/диалоги (есть в TS, нет в Crystal)
+
+Есть: thinking/step_summary, plan_box, todo_panel, tasks_browser,
+undo_dialog, question_dialog, session_picker, help_panel, SelectList-диалоги.
+
+Не хватает:
+- [ ] `goal_panel` (команды `/goal` нет)
+- [ ] `usage_panel` (команда `/usage` пишет в messages, отдельной панели нет)
+- [ ] `compaction` диалог (сейчас info-event в transcript)
 - [ ] `cron_message` рендер
 - [ ] `skill_activation` рендер
 - [ ] `agent_group` / `agent_swarm_progress` / `background_agent_status`
 - [ ] `mcp_status_panel`, `plugins_status_panel`
-- [ ] `compaction` диалог
-- [x] `undo_selector` (preview turns) — РАБОТАЕТ: `UndoDialog` с choices из
-      `agent.context.history`, навигация ↑↓, выбор Enter, cancel Esc,
-      `/undo` без аргумента открывает селектор
-- [x] `question_dialog` (reverse-rpc для AskUserQuestion) — полный порт
-      TS `QuestionDialogComponent`: табы, single/multi-select, Other free-text,
-      auto-advance, submit review, `AppQuestionService` биндит тулзу к диалогу
-- [x] `session_picker` как интерактивный SelectList — `/sessions` и `/restore`
-- [x] `thinking` / `step_summary` рендер — уже работает (`render_thinking_block`,
-      `render_step_summary`, live streaming preview, ctrl+o expand)
-- [x] SelectList-диалоги permission / effort / theme (model уже был);
-      experiments — будущая работа (нет флаг-системы)
+- [ ] Searchable-list / paging для больших транскриптов
 
-## 4. Слэш-команды (TS-only, отсутствуют в Crystal)
+## 5. Слэш-команды (отсутствуют)
 
 - [ ] `/goal` — autonomous goals (status/pause/resume/cancel/replace/next)
 - [ ] `/swarm` — swarm mode
-- [x] `/tasks` (`/task`) — РАБОТАЕТ: открывает `TasksBrowser`, привязан к
-      `InMemoryTaskService` (list/stop/open output)
-- [ ] `/reload-tui` — reload tui.toml (`/reload` уже работает)
-- [ ] `/btw` — forked side-agent question
-- [x] `/init` — шлёт init-промпт как turn (AGENTS.md генерация через агент)
-- [x] `/mcp` — заглушка: нет MCP-клиента, явное сообщение
-- [x] `/plugins` — заглушка: нет plugin runtime, явное сообщение
-- [x] `/experiments` — env-driven (HCODE_EXPERIMENTAL_*) flags, master switch
-- [x] `/login` — инструкция по ручной настройке api_key/OAuth
-- [x] `/logout` — очистка api_key в config через `on_logout`
-- [x] `/export-debug-zip` — tar.gz: manifest + wire.jsonl + state.json + hcode.log
-- [x] `/plan` — toggle через `on_plan_mode` колбэк
-- [x] `/effort` (`/thinking`) — SelectList selector через `on_get_effort`/`on_set_effort`
-- [x] `/permission` — SelectList selector manual/auto/yolo
-- [x] `/editor` — открытие `$EDITOR`
-- [x] `/usage` — tokens + context window
-- [x] `/version` — version info (Hcode::VERSION + build_date)
-- [x] `/copy` — copy last assistant message (pbcopy/wl-copy/xclip/xsel)
-- [x] `/reload` — колбэк `on_reload`
-- [x] `/settings` — show provider/model/permission/theme/effort/home/work
-- [x] `/feedback` — лог в `~/.hcode/feedback.log` (или через `on_feedback` колбэк)
-- [x] `/web` — session URL для Web UI
+- [ ] `/reload-tui` — reload только `tui.toml` (`/reload` уже работает)
 
-## 5. Рендеринг / полировка
+## 6. Рендеринг / полировка
 
-- [ ] Syntax highlighting (TS/JS/Python/bash/go/rust/json) — в TS через `cli-highlight`
-- [ ] Word-level intra-line diff highlighting (сейчас line-level +/-)
-- [x] Slash autocomplete (имя + описание + arg hints, сейчас простой список) —
-      `usage` поле в CommandInfo, рендерится с описанием и `<args>` хинтом
-- [ ] Paste markers `[paste #N +48 lines]` (сейчас raw paste в буфер)
-- [x] Footer badges: git / goal / tips rotation (сейчас model+context%) —
-      git branch уже был; добавлены rotating tips (5 шт, цикл по 5с)
-- [ ] Light theme + кастомные темы через `tui.toml`
-- [ ] Inline images (Kitty graphics protocol)
-- [ ] External editor (Ctrl+G — open `$EDITOR`)
+- [x] **Word-level intra-line diff** — ГОТОВО. `DiffComputer` (`tui/diff.cr`):
+      line-level LCS (как в TS), парные delete+ad получают word-level
+      highlight span (changed middle между common prefix/suffix).
+      `render_edit_diff` рендерит bold-подсветку изменённых слов внутри
+      добавленной строки, header показывает +N/-M. 8 тестов.
+- [ ] **Inline images** (Kitty graphics) — нет (намеренно отложено).
+- [ ] **Image paste** (clipboard native bindings) — нет (отложено).
+- [ ] **Custom themes через `tui.toml`** — только dark/light presets.
 
-## 6. Поддерживающая инфраструктура
+## 7. Skills — загрузка с диска отсутствует
 
-- [x] **Прокси**: HTTPS-туннель через `CONNECT` реализован в `make_client`
-      (HTTP-прокси для HTTPS-endpoints), `NO_PROXY` и loopback bypass. HTTP
-      endpoints используют absolute-URI через прокси-хост. OAuth refresh
-      без прокси (см. комментарий в moonshot_provider.cr)
-- [x] **Сессии**: `/sessions` и `/restore` открывают интерактивный `SelectList`
-      с навигацией и resume/restore, `handle_session_key` обрабатывает выбор
-- [x] **Danger detection** — РАБОТАЕТ: `Danger.detect` → `approval_callback`
-      → `ApprovalRequest.danger` → `! DANGER:` в approval panel
-- [x] **`/compact`** — привязан к `trigger_compaction_tui` через `on_compact`,
-      блокирует при busy, ставит `@is_compacting`, сбрасывается при info-event
-      "compacted"
-- [ ] `Context::Compaction` — LLM-based summarization как отдельный модуль
-      (сейчас встроен в `Agent#trigger_compaction`)
-- [ ] `Loop::Retry` — rate-limit / error retry (429, 500s) — частично в
-      `execute_step` (3 retries с backoff), но без отдельных классов
-- [ ] `Config::Paths` — XDG-aware path resolution
-- [ ] `Config::ProviderConfig` — отдельный конфиг per-provider
-- [x] `Permission::Policies` — полноценный: Rule/RuleSet/glob_match/parse_pattern,
-      4 scope (User/Project/SessionRuntime/TurnOverride), integrated в Manager
-      (deny/allow/ask evaluated до approval prompt)
-- [ ] `Prompt::Workspace` — cwd file tree (2 levels) в system prompt
+✅ **ГОТОВО** — skills загружаются с диска:
+- `SkillDiscovery.discover(home, work_dir)` — сканирует стандартные каталоги
+  (`~/skills`, `~/.agents/skills`, `<project>/.hcode/skills`,
+  `<project>/.agents/skills`), обходит подкаталоги с `SKILL.md`, дедуплит
+- `Parser.parse` — парсит frontmatter (упрощённый YAML: name, description,
+  type, when-to-use, arguments[], disable-model-invocation) + body
+- `InMemorySkillCatalog#model_listing` — рендерит listing для system prompt
+  (mirrors TS `getModelSkillListing`)
+- `SkillMetadata` расширен: name, description, when_to_use
+- `SkillDefinition#description` / `#when_to_use` getters
+- `SystemPrompt.build(work_dir, additional_dirs, skills_listing)` — рендерит
+  секцию `# Skills` в system prompt когда listing непустой
+- Wire-up в `hcode.cr`: discover при старте → `Skill.catalog=` → listing
+  в system prompt → пересборка при `/add-dir`
+- Тесты: 7 новых (parser frontmatter/body/name-fallback/arguments-array,
+  catalog listing skip-disabled/empty, discovery project/user/none)
+- Багфикс: `find_project_root` возвращал `/` вместо `work_dir` при отсутствии
+  `.git` (поднимался до корня ФС)
 
-## Приоритет починки
+## Приоритет реализации
 
-1. Очередь сообщений + steer (§1) — ломает интерактив
-2. Provider-свитчер довести (§1)
-3. `/compact` реальный + компакция UI
-4. Danger labels в approval
-5. `/sessions` как SelectList
-6. Прокси в HTTP::Client
-7. Дальше — панели/команды по скоупу фаз
+1. ✅ **`/add-dir` real storage** (§3) — ГОТОВО
+2. ✅ **Skills loading** (§7) — ГОТОВО
+3. ✅ **`Context::Compaction` extraction** (§2) — ГОТОВО
+4. ✅ **`Loop::Retry` extraction** (§2) — ГОТОВО
+5. ✅ **Word-level diff** (§6) — ГОТОВО
+6. ✅ **`src/hooks/` engine** (§1) — ГОТОВО
+7. **TUI панели** (§4) — goal/usage/compaction панели
+8. **`src/auth/` OAuth** (§1) — device-code flow
+9. **`Config::ProviderConfig`** (§1) — структурирует конфиг (отложено)
+10. **`Config::Paths`** (§1) — XDG-aware вынос (отложено)

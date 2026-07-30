@@ -1,5 +1,6 @@
 require "../spec_helper"
 require "../../src/tools/fetch_url"
+require "../support/mock_http_transport"
 
 # Тестовый fetcher: возвращает заданные данные / ошибки.
 private class FakeFetcher < Hcode::Tools::UrlFetcher
@@ -203,6 +204,42 @@ describe Hcode::Tools::FetchURL do
       expect_raises(Exception, /Failed to extract meaningful content/) do
         fetcher.extract_main_content("<html><body><script>x</script></body></html>", "text/html")
       end
+    end
+  end
+
+  describe "LocalFetcher with MockHttpTransport" do
+    it "fetches content through the transport" do
+      transport = Hcode::MockHttpTransport.new
+      transport.response_body = "hello world"
+      transport.response_status = 200
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      result = fetcher.fetch("https://example.com")
+      result.content.should contain("hello world")
+      transport.last_uri.not_nil!.to_s.should contain("example.com")
+    end
+
+    it "raises HttpFetchError on 404" do
+      transport = Hcode::MockHttpTransport.new
+      transport.response_status = 404
+      transport.response_body = "Not Found"
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      error = expect_raises(Hcode::Tools::HttpFetchError) do
+        fetcher.fetch("https://example.com")
+      end
+      error.status.should eq(404)
+    end
+
+    it "surfaces IO::Error (broken pipe) as a network error" do
+      transport = Hcode::MockHttpTransport.new
+      transport.request_error = IO::Error.new("Broken pipe")
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      error = expect_raises(IO::Error) do
+        fetcher.fetch("https://example.com")
+      end
+      (error.message || "").should contain("Broken pipe")
     end
   end
 end

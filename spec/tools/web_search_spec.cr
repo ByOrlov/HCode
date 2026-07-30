@@ -1,5 +1,6 @@
 require "../spec_helper"
 require "../../src/tools/web_search"
+require "../support/mock_http_transport"
 
 private class FakeProvider < Hcode::Tools::WebSearchProvider
   def initialize(@behaviour : Proc(String, Array(Hcode::Tools::WebSearchResult)))
@@ -164,5 +165,47 @@ describe Hcode::Tools::MoonshotWebSearchProvider do
     provider = Hcode::Tools::MoonshotWebSearchProvider.new("https://example.com/search", "key")
     results = provider.parse_results(%({"foo":"bar"}))
     results.should be_empty
+  end
+
+  it "uses injected transport and parses results" do
+    transport = Hcode::MockHttpTransport.new
+    transport.response_status = 200
+    transport.response_body = %({
+      "search_results": [
+        {"title": "T", "url": "https://x.com", "snippet": "S"}
+      ]
+    })
+
+    provider = Hcode::Tools::MoonshotWebSearchProvider.new(
+      "https://example.com/search", "key", transport: transport)
+    results = provider.search("query")
+    results.size.should eq(1)
+    results[0].title.should eq("T")
+    (transport.last_body || "").should contain("query")
+  end
+
+  it "raises when transport returns 401" do
+    transport = Hcode::MockHttpTransport.new
+    transport.response_status = 401
+    transport.response_body = "unauthorized"
+
+    provider = Hcode::Tools::MoonshotWebSearchProvider.new(
+      "https://example.com/search", "key", transport: transport)
+    error = expect_raises(Exception) do
+      provider.search("query")
+    end
+    (error.message || "").should contain("401")
+  end
+
+  it "surfaces IO::Error (network drop) from transport" do
+    transport = Hcode::MockHttpTransport.new
+    transport.request_error = IO::Error.new("Connection reset")
+
+    provider = Hcode::Tools::MoonshotWebSearchProvider.new(
+      "https://example.com/search", "key", transport: transport)
+    error = expect_raises(IO::Error) do
+      provider.search("query")
+    end
+    (error.message || "").should contain("Connection reset")
   end
 end

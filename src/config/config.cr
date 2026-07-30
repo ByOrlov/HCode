@@ -21,6 +21,7 @@ module Hcode
       property temperature : Float64? = nil
       property proxy : String? = nil
       property notifications : Notify::Config = Notify::Config.default
+      property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
 
       def initialize
       end
@@ -92,6 +93,11 @@ module Hcode
 
       def self.parse_toml(content : String) : Config
         config = Config.new
+
+        # Parse `[[hooks]]` array-of-tables first (the line-oriented parser
+        # below does not handle the `[[...]]` form). Each block collects its
+        # key=value pairs until the next `[[hooks]]` or `[section]`.
+        config.hooks = parse_hooks_array(content)
 
         current_section = ""
 
@@ -275,6 +281,64 @@ module Hcode
 
       private def self.parse_bool(val : String) : Bool
         val.downcase.in?("true", "1", "yes", "on")
+      end
+
+      # Parses all `[[hooks]]` array-of-table blocks from a TOML string.
+      # Each block becomes one `Hooks::HookDef`. The line-oriented main parser
+      # cannot handle `[[...]]`, so this is a dedicated scan.
+      private def self.parse_hooks_array(content : String) : Array(Hooks::HookDef)
+        hooks = [] of Hooks::HookDef
+        current = {} of String => String
+        in_hooks = false
+
+        content.each_line do |raw|
+          line = raw.strip
+          next if line.empty? || line.starts_with?('#')
+
+          if line =~ /^\[\[hooks\]\]$/
+            if in_hooks && !current.empty?
+              hooks << build_hook_def(current)
+            end
+            current = {} of String => String
+            in_hooks = true
+            next
+          end
+
+          if line =~ /^\[/ # any other section ends the hooks block
+            if in_hooks && !current.empty?
+              hooks << build_hook_def(current)
+            end
+            current = {} of String => String
+            in_hooks = false
+            next
+          end
+
+          next unless in_hooks
+
+          if line =~ /^(\w+)\s*=\s*(.+)$/
+            key = $1
+            val = $2.strip
+            if val.starts_with?('"') || val.starts_with?('\'')
+              val = val.strip('"').strip('\'')
+            end
+            current[key] = val
+          end
+        end
+
+        if in_hooks && !current.empty?
+          hooks << build_hook_def(current)
+        end
+
+        hooks
+      end
+
+      private def self.build_hook_def(fields : Hash(String, String)) : Hooks::HookDef
+        Hooks::HookDef.new(
+          event: fields["event"]? || "",
+          command: fields["command"]? || "",
+          matcher: fields["matcher"]? || "",
+          timeout: (fields["timeout"]? || "30").to_i? || 30,
+        )
       end
     end
   end

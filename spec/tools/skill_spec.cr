@@ -173,3 +173,138 @@ describe Hcode::Tools::Skill do
     text.should contain(%(trigger="nested-skill"))
   end
 end
+
+describe Hcode::Tools::Parser do
+  it "parses frontmatter + body" do
+    text = <<-MD
+      ---
+      name: commit
+      description: Create a git commit
+      when-to-use: after staging changes
+      ---
+      Run git status, then commit with a message.
+      MD
+
+    skill = Hcode::Tools::Parser.parse(text, "/proj/.agents/skills/commit/SKILL.md", "commit", "project")
+    skill.name.should eq("commit")
+    skill.description.should eq("Create a git commit")
+    skill.when_to_use.should eq("after staging changes")
+    skill.content.should contain("Run git status")
+    skill.source.should eq("project")
+  end
+
+  it "falls back to directory name when name missing" do
+    text = <<-MD
+      ---
+      description: no name field
+      ---
+      Body text.
+      MD
+
+    skill = Hcode::Tools::Parser.parse(text, "/x/foo/SKILL.md", "foo", "project")
+    skill.name.should eq("foo")
+  end
+
+  it "parses arguments array" do
+    text = <<-MD
+      ---
+      name: deploy
+      arguments: ["env", "tag"]
+      ---
+      Deploy to $1.
+      MD
+
+    skill = Hcode::Tools::Parser.parse(text, "/x/deploy/SKILL.md", "deploy", "project")
+    skill.metadata.arguments.should eq(["env", "tag"])
+  end
+end
+
+describe Hcode::Tools::InMemorySkillCatalog do
+  it "model_listing lists invocable skills" do
+    cat = Hcode::Tools::InMemorySkillCatalog.new([
+      Hcode::Tools::SkillDefinition.new(
+        name: "commit",
+        content: "git status",
+        metadata: Hcode::Tools::SkillMetadata.new(description: "Create commit"),
+        path: "/skills/commit/SKILL.md",
+      ),
+    ])
+    listing = cat.model_listing
+    listing.should contain("commit")
+    listing.should contain("Create commit")
+    listing.should contain("Path: /skills/commit/SKILL.md")
+  end
+
+  it "model_listing skips disabled skills" do
+    cat = Hcode::Tools::InMemorySkillCatalog.new([
+      Hcode::Tools::SkillDefinition.new(
+        name: "hidden",
+        content: "x",
+        metadata: Hcode::Tools::SkillMetadata.new(
+          description: "nope",
+          disable_model_invocation: true,
+        ),
+      ),
+    ])
+    cat.model_listing.should eq("")
+  end
+
+  it "model_listing is empty when no skills" do
+    cat = Hcode::Tools::InMemorySkillCatalog.new
+    cat.model_listing.should eq("")
+  end
+end
+
+describe Hcode::Tools::SkillDiscovery do
+  it "discovers directory skills from a project root" do
+    tmp = Dir.tempdir
+    work = File.join(tmp, "hcode_skill_#{Random::Secure.hex(6)}")
+    skill_dir = File.join(work, ".agents", "skills", "lint")
+    Dir.mkdir_p(skill_dir)
+    begin
+      File.write(File.join(skill_dir, "SKILL.md"), <<-MD
+        ---
+        name: lint
+        description: Run linters
+        ---
+        Run the project linter.
+        MD
+      )
+
+      skills = Hcode::Tools::SkillDiscovery.discover("/nonexistent/home", work)
+      skill = skills.find(&.name.==("lint"))
+      skill.should_not be_nil
+      skill.not_nil!.description.should eq("Run linters")
+      skill.not_nil!.source.should eq("project")
+    ensure
+      FileUtils.rm_r(work) if Dir.exists?(work)
+    end
+  end
+
+  it "discovers user-level skills from home" do
+    tmp = Dir.tempdir
+    home = File.join(tmp, "hcode_home_#{Random::Secure.hex(6)}")
+    skill_dir = File.join(home, "skills", "fmt")
+    Dir.mkdir_p(skill_dir)
+    begin
+      File.write(File.join(skill_dir, "SKILL.md"), <<-MD
+        ---
+        name: fmt
+        description: Format code
+        ---
+        Format all files.
+        MD
+      )
+
+      skills = Hcode::Tools::SkillDiscovery.discover(home, "/nonexistent/work")
+      skills.any?(&.name.==("fmt")).should be_true
+    ensure
+      FileUtils.rm_r(home) if Dir.exists?(home)
+    end
+  end
+
+  it "returns empty when no skill dirs exist" do
+    skills = Hcode::Tools::SkillDiscovery.discover("/nonexistent/home", "/nonexistent/work")
+    skills.should be_empty
+  end
+end

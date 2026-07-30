@@ -14,6 +14,7 @@ require "colorize"
 require "./version"
 require "./llm/types"
 require "./llm/token_counter"
+require "./llm/http_transport"
 require "./llm/provider"
 require "./llm/openai_chat_provider"
 require "./llm/moonshot_provider"
@@ -50,6 +51,8 @@ require "./context/memory"
 require "./context/budget"
 require "./context/undo"
 require "./context/overflow"
+require "./context/compaction"
+require "./loop/retry"
 require "./profiled_memory"
 require "./loop/events"
 require "./loop/abort"
@@ -66,6 +69,7 @@ require "./notify/player"
 require "./notify/webhook"
 require "./notify/dispatcher"
 require "./config/config"
+require "./hooks/engine"
 require "./prompt/template"
 require "./prompt/agents_md"
 require "./prompt/system_prompt"
@@ -89,6 +93,7 @@ require "./tui/question_dialog"
 require "./tui/undo_dialog"
 require "./tui/tasks_browser"
 require "./tui/app"
+require "./tui/diff"
 
 module Hcode
   # Headless print-mode palette, ported from the original Moonshot kimi-code
@@ -309,8 +314,18 @@ module Hcode
       configure_provider(provider, config, sid_for_cache)
 
       agent = Loop::Agent.new(provider, memory, tools, permission)
+      agent.hooks = Hooks::Engine.new(config.hooks, cwd: work_dir, session_id: store.meta_id?) unless config.hooks.empty?
 
-      system_prompt = Prompt::SystemPrompt.build(work_dir)
+      # Discover skills from disk (user home + project root) and register them
+      # in the global catalog so the Skill tool can resolve them.
+      discovered = Hcode::Tools::SkillDiscovery.discover(home, work_dir)
+      skill_catalog = Hcode::Tools::InMemorySkillCatalog.new(discovered)
+      Hcode::Tools::Skill.catalog = skill_catalog
+      Hcode::Tools::Skill.memory = memory
+
+      system_prompt = Prompt::SystemPrompt.build(work_dir,
+        additional_dirs: [] of String,
+        skills_listing: skill_catalog.model_listing)
 
       task_service = Hcode::Tools::InMemoryTaskService.new
       Hcode::Tools::Task.service = task_service
@@ -617,6 +632,17 @@ module Hcode
       app.work_dir = work_dir
 
       lifecycle = Session::Lifecycle.new(home)
+
+      # `/add-dir` rebuilds the system prompt so the new directory appears in
+      # the workspace tree and the agent knows about it. `system_prompt` is the
+      # method argument captured by the `app.run` block below; reassigning it
+      # here updates what every subsequent turn sees.
+      app.on_additional_dirs_change = ->(dirs : Array(String)) do
+        catalog = Hcode::Tools::Skill.catalog
+        listing = catalog.is_a?(Hcode::Tools::InMemorySkillCatalog) ? catalog.model_listing : ""
+        system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing)
+        nil
+      end
 
       permission.approval_callback = ->(tool_name : String, args : String, danger : String?) do
         app.request_approval(tool_name, args, danger)

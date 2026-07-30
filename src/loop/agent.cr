@@ -1,4 +1,5 @@
 require "./tool_batch"
+require "./retry"
 
 module Hcode
   module Loop
@@ -12,6 +13,7 @@ module Hcode
       getter permission : Permission::Manager
       getter dedup : DedupTracker = DedupTracker.new
       property abort_controller : AbortController = AbortController.new
+      property hooks : Hooks::Engine?
 
       @overflow_recovery : Context::Overflow::Recovery = Context::Overflow::Recovery.new
       @max_steps : Int32 = 100
@@ -39,6 +41,17 @@ module Hcode
         sys_prompt = system_prompt
         cancelled = false
         return_value : TurnResult? = nil
+
+        # UserPromptSubmit hook: a block decision replaces the prompt with
+        # an injected system message so the model sees why it was rejected.
+        if engine = @hooks
+          if block = engine.trigger_block("UserPromptSubmit", prompt)
+            @context.add_injection("[Prompt blocked by hook: #{block.reason}]")
+            on_event.call(Event.info("Prompt blocked by UserPromptSubmit hook: #{block.reason}"))
+            on_event.call(Event.turn_end(false))
+            return TurnResult.new("blocked", 0, total_usage)
+          end
+        end
 
         begin
           loop do
@@ -82,6 +95,15 @@ module Hcode
             if step_result.tool_use?
               tool_results = run_tool_batch(step_result.tool_calls, on_event)
             else
+              # Stop hook: a block decision prevents the turn from ending and
+              # injects the reason so the model continues with that context.
+              if engine = @hooks
+                if block = engine.trigger_block("Stop")
+                  @context.add_injection("[Stop blocked by hook: #{block.reason}]")
+                  on_event.call(Event.info("Stop blocked by Stop hook: #{block.reason}"))
+                  next
+                end
+              end
               return_value = TurnResult.new(step_result.stop_reason, steps, total_usage)
               break
             end
@@ -122,8 +144,8 @@ module Hcode
       end
 
       private def execute_step(system_prompt : String?, on_event : Event ->) : StepResult
+        retry_policy = RetryPolicy.new
         retry_count = 0
-        max_retries = 3
 
         loop do
           # Keep the provider's completion-budget clamp in sync with the real
@@ -190,18 +212,19 @@ module Hcode
               end
             end
 
-            # Non-retryable client errors (auth, quota, bad request, ...) fail
-            # fast — backing off cannot fix them.
-            if ex.is_a?(LLM::ApiError) && !ex.retryable?
+            # Non-retryable errors (auth, quota, bad request, user cancel)
+            # fail fast — backing off cannot fix them.
+            unless retry_policy.retryable?(ex)
               raise ex
             end
+
             retry_count += 1
-            if retry_count <= max_retries
-              delay = {2 ** retry_count, 30}.min
+            delay = retry_policy.delay_for(retry_count)
+            if delay
               on_event.call(Event.info("Retrying in #{delay}s... (#{ex.message})"))
               sleep delay.seconds
             else
-              raise "LLM call failed after #{max_retries} retries: #{ex.message}"
+              raise "LLM call failed after #{retry_policy.max_retries} retries: #{ex.message}"
             end
           end
         end
@@ -221,6 +244,7 @@ module Hcode
           dedup: @dedup,
           abort_controller: @abort_controller,
           context: @context,
+          hooks: @hooks,
         ).run(tool_calls, &on_event)
       end
 
@@ -245,45 +269,23 @@ module Hcode
       end
 
       private def trigger_compaction(system_prompt : String, on_event : Event ->) : String
-        old_messages = @context.history
-        tokens_before = @context.token_count
-
-        kept_count = Math.min(6, old_messages.size)
-        kept = old_messages[-kept_count..] || [] of Context::ContextMessage
-
-        summary_prompt = "Summarize the following conversation so far, preserving key context: "
-        summary_messages = [
-          LLM::Message.user(summary_prompt + old_messages.map(&.message.content.to_s).join("\n")),
-        ]
-
         on_event.call(Event.compaction_started)
-        summary = ""
-        cancelled = false
-        begin
-          # Compaction summarises a near-full context, so the live window is
-          # almost exhausted. Reset the budget clamp so the summary request is
-          # not starved into a tiny output cap by the large used-context value.
-          @provider.used_context_tokens = 0
-          summary_result = @provider.chat(summary_messages, nil, nil) do |part|
-          end
-          summary = summary_result.text
-        rescue ex : UserCancellationError
-          cancelled = true
-          summary = "[Compaction cancelled — keeping full history]"
-          kept = old_messages
-        rescue
-          summary = "[Compaction failed — keeping full history]"
-          kept = old_messages
+
+        compactor = Context::Compaction.new(@provider, @context)
+        result = compactor.compact do |part|
+          # Streaming parts of the summary are not surfaced to the TUI; only
+          # the final result events carry the outcome.
         end
 
-        @context.apply_compaction(summary, kept)
-        tokens_after = @context.token_count
-
-        if cancelled
+        case result.status
+        in Context::CompactionStatus::Cancelled
           on_event.call(Event.compaction_cancelled)
-        else
-          on_event.call(Event.compaction_completed(tokens_before, tokens_after, summary))
-          on_event.call(Event.info("Context compacted (#{old_messages.size} → #{kept.size} messages)"))
+        in Context::CompactionStatus::Completed
+          on_event.call(Event.compaction_completed(result.tokens_before, result.tokens_after, result.summary))
+          on_event.call(Event.info("Context compacted (#{result.messages_before} → #{result.messages_after} messages)"))
+        in Context::CompactionStatus::Failed
+          on_event.call(Event.compaction_cancelled)
+          on_event.call(Event.info("Compaction failed — keeping full history"))
         end
 
         system_prompt
