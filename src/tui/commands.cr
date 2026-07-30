@@ -2,62 +2,74 @@ module Hcode
   module TUI
     struct CommandInfo
       property name : String
-      property description : String
       property usage : String
+      # Translation key into the `commands.*` namespace, e.g. "help" resolves
+      # via `Hcode.t("commands.help")`. Empty falls back to `@description`.
+      property description_key : String
+      @description : String
 
-      def initialize(@name : String, @description : String, @usage : String = "")
+      def initialize(@name : String, description : String, @usage : String = "", @description_key : String = "")
+        @description = description
+      end
+
+      # Resolves the localized description lazily so a locale switch at
+      # runtime is reflected on the next render without rebuilding COMMANDS.
+      def description : String
+        return @description if @description_key.empty?
+        Hcode.t("commands.#{@description_key}")
       end
     end
 
     class CommandRegistry
       COMMANDS = [
-        CommandInfo.new("/help", "Show available commands"),
-        CommandInfo.new("/exit", "Exit the application"),
-        CommandInfo.new("/quit", "Exit the application"),
-        CommandInfo.new("/new", "Start a new session"),
-        CommandInfo.new("/sessions", "List and resume a session"),
-        CommandInfo.new("/resume", "Resume a session (alias for /sessions)"),
-        CommandInfo.new("/fork", "Fork the current session"),
-        CommandInfo.new("/archive", "Archive the current session"),
-        CommandInfo.new("/restore", "Restore an archived session"),
-        CommandInfo.new("/rename", "Rename the current session", "<title>"),
-        CommandInfo.new("/title", "Set session title (alias for /rename)", "<title>"),
-        CommandInfo.new("/clear", "Clear conversation history"),
-        CommandInfo.new("/compact", "Summarize context to free space"),
-        CommandInfo.new("/model", "Switch model"),
-        CommandInfo.new("/provider", "Switch LLM provider"),
-        CommandInfo.new("/status", "Show session status"),
-        CommandInfo.new("/undo", "Undo last turn"),
-        CommandInfo.new("/yolo", "Set permission mode to yolo"),
-        CommandInfo.new("/auto", "Set permission mode to auto"),
-        CommandInfo.new("/manual", "Set permission mode to manual"),
-        CommandInfo.new("/export-md", "Export session to markdown file", "[<path>]"),
-        CommandInfo.new("/add-dir", "Add working directory", "<path>"),
-        CommandInfo.new("/theme", "Switch theme", "dark|light"),
-        CommandInfo.new("/version", "Show version information"),
-        CommandInfo.new("/usage", "Show token usage and context"),
-        CommandInfo.new("/queue", "Show or clear the queued messages", "[clear]"),
-        CommandInfo.new("/todos", "Show or clear the agent todo list", "[clear]"),
-        CommandInfo.new("/editor", "Open $EDITOR to compose a message"),
-        CommandInfo.new("/copy", "Copy last assistant message to clipboard"),
-        CommandInfo.new("/permission", "Switch permission mode", "manual|auto|yolo"),
-        CommandInfo.new("/effort", "Show thinking effort", "low|medium|high"),
-        CommandInfo.new("/plan", "Toggle plan mode"),
-        CommandInfo.new("/debug", "Dump full session transcript to stdout"),
-        CommandInfo.new("/feedback", "Send feedback to the team", "<message>"),
-        CommandInfo.new("/reload", "Reload config.toml and session state"),
-        CommandInfo.new("/web", "Print session URL for the Web UI"),
-        CommandInfo.new("/settings", "Show current configuration"),
-        CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md"),
-        CommandInfo.new("/export-debug-zip", "Export session debug bundle (.tar.gz)"),
-        CommandInfo.new("/experiments", "Show experimental feature flags"),
-        CommandInfo.new("/mcp", "Show MCP server status"),
-        CommandInfo.new("/plugins", "Show plugin status"),
-        CommandInfo.new("/login", "Show how to configure credentials"),
-        CommandInfo.new("/logout", "Clear credentials from config"),
-        CommandInfo.new("/tasks", "Browse background tasks"),
-        CommandInfo.new("/memory", "Show memory profile of live collections"),
-        CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]"),
+        CommandInfo.new("/help", "Show available commands", description_key: "help"),
+        CommandInfo.new("/exit", "Exit the application", description_key: "exit"),
+        CommandInfo.new("/quit", "Exit the application", description_key: "quit"),
+        CommandInfo.new("/new", "Start a new session", description_key: "new"),
+        CommandInfo.new("/sessions", "List and resume a session", description_key: "sessions"),
+        CommandInfo.new("/resume", "Resume a session (alias for /sessions)", description_key: "resume"),
+        CommandInfo.new("/fork", "Fork the current session", description_key: "fork"),
+        CommandInfo.new("/archive", "Archive the current session", description_key: "archive"),
+        CommandInfo.new("/restore", "Restore an archived session", description_key: "restore"),
+        CommandInfo.new("/rename", "Rename the current session", "<title>", "rename"),
+        CommandInfo.new("/title", "Set session title (alias for /rename)", "<title>", "title"),
+        CommandInfo.new("/clear", "Clear conversation history", description_key: "clear"),
+        CommandInfo.new("/compact", "Summarize context to free space", description_key: "compact"),
+        CommandInfo.new("/model", "Switch model", description_key: "model"),
+        CommandInfo.new("/provider", "Switch LLM provider", description_key: "provider"),
+        CommandInfo.new("/status", "Show session status", description_key: "status"),
+        CommandInfo.new("/undo", "Undo last turn", description_key: "undo"),
+        CommandInfo.new("/yolo", "Set permission mode to yolo", description_key: "yolo"),
+        CommandInfo.new("/auto", "Set permission mode to auto", description_key: "auto"),
+        CommandInfo.new("/manual", "Set permission mode to manual", description_key: "manual"),
+        CommandInfo.new("/export-md", "Export session to markdown file", "[<path>]", "export_md"),
+        CommandInfo.new("/add-dir", "Add working directory", "<path>", "add_dir"),
+        CommandInfo.new("/theme", "Switch theme", "dark|light", "theme"),
+        CommandInfo.new("/version", "Show version information", description_key: "version"),
+        CommandInfo.new("/usage", "Show token usage and context", description_key: "usage"),
+        CommandInfo.new("/queue", "Show or clear the queued messages", "[clear]", "queue"),
+        CommandInfo.new("/todos", "Show or clear the agent todo list", "[clear]", "todos"),
+        CommandInfo.new("/editor", "Open $EDITOR to compose a message", description_key: "editor"),
+        CommandInfo.new("/copy", "Copy last assistant message to clipboard", description_key: "copy"),
+        CommandInfo.new("/permission", "Switch permission mode", "manual|auto|yolo", "permission"),
+        CommandInfo.new("/effort", "Show thinking effort", "low|medium|high", "effort"),
+        CommandInfo.new("/plan", "Toggle plan mode", description_key: "plan"),
+        CommandInfo.new("/debug", "Dump full session transcript to stdout", description_key: "debug"),
+        CommandInfo.new("/feedback", "Send feedback to the team", "<message>", "feedback"),
+        CommandInfo.new("/reload", "Reload config.toml and session state", description_key: "reload"),
+        CommandInfo.new("/web", "Print session URL for the Web UI", description_key: "web"),
+        CommandInfo.new("/settings", "Show current configuration", description_key: "settings"),
+        CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md", description_key: "init"),
+        CommandInfo.new("/export-debug-zip", "Export session debug bundle (.tar.gz)", description_key: "export_debug_zip"),
+        CommandInfo.new("/experiments", "Show experimental feature flags", description_key: "experiments"),
+        CommandInfo.new("/mcp", "Show MCP server status", description_key: "mcp"),
+        CommandInfo.new("/plugins", "Show plugin status", description_key: "plugins"),
+        CommandInfo.new("/login", "Show how to configure credentials", description_key: "login"),
+        CommandInfo.new("/logout", "Clear credentials from config", description_key: "logout"),
+        CommandInfo.new("/tasks", "Browse background tasks", description_key: "tasks"),
+        CommandInfo.new("/memory", "Show memory profile of live collections", description_key: "memory"),
+        CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]", "goal"),
+        CommandInfo.new("/language", "Switch interface language", "[en|ru]", "language"),
       ]
 
       def self.names : Array(String)

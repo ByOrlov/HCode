@@ -22,15 +22,15 @@ module Hcode
       end
 
       DEFAULT_SHORTCUTS = [
-        Shortcut.new("Enter", "Submit (queues while agent runs)"),
-        Shortcut.new("Shift+Enter", "Insert newline"),
-        Shortcut.new("Ctrl+C", "Interrupt stream / clear input"),
-        Shortcut.new("Ctrl+D", "Exit (on empty input)"),
-        Shortcut.new("Ctrl+S", "Steer — inject into running turn"),
-        Shortcut.new("Ctrl+G", "Edit in external editor ($VISUAL / $EDITOR)"),
-        Shortcut.new("Ctrl+E", "Expand pasted block"),
-        Shortcut.new("Esc", "Close dialogs / interrupt streaming"),
-        Shortcut.new("Up/Down", "Browse input history / scroll"),
+        Shortcut.new("Enter", Hcode.t("shortcuts.submit")),
+        Shortcut.new("Shift+Enter", Hcode.t("shortcuts.newline")),
+        Shortcut.new("Ctrl+C", Hcode.t("shortcuts.interrupt")),
+        Shortcut.new("Ctrl+D", Hcode.t("shortcuts.exit")),
+        Shortcut.new("Ctrl+S", Hcode.t("shortcuts.steer")),
+        Shortcut.new("Ctrl+G", Hcode.t("shortcuts.external_editor")),
+        Shortcut.new("Ctrl+E", Hcode.t("shortcuts.expand")),
+        Shortcut.new("Esc", Hcode.t("shortcuts.close")),
+        Shortcut.new("Up/Down", Hcode.t("shortcuts.history")),
       ]
 
       property? visible : Bool = false
@@ -117,18 +117,18 @@ module Hcode
         rule = "#{accent}#{CharWidth.truncate_to_width("─" * cols, cols)}#{r}"
 
         lines << rule
-        lines << truncate("#{primary}#{ANSI.bold} help #{r}#{muted}· Esc / Enter / q to cancel · ↑↓ scroll#{r}", cols)
-        lines << truncate("  #{dim}Sure, HCode is ready to help! Just send a message to get started.#{r}", cols)
+        lines << truncate("#{primary}#{ANSI.bold} #{Hcode.t("help.title")} #{r}#{muted}#{Hcode.t("help.subtitle")}#{r}", cols)
+        lines << truncate("  #{dim}#{Hcode.t("help.intro")}#{r}", cols)
         lines << ""
 
-        lines << truncate("  #{ANSI.bold}Keyboard shortcuts#{r}", cols)
+        lines << truncate("  #{ANSI.bold}#{Hcode.t("help.shortcuts_heading")}#{r}", cols)
         kbd_w = pad_width(@shortcuts.map(&.keys))
         @shortcuts.each do |s|
           lines << truncate("    #{warn}#{s.keys.ljust(kbd_w)}#{r}  #{dim}#{s.description}#{r}", cols)
         end
         lines << ""
 
-        lines << truncate("  #{ANSI.bold}Slash commands#{r}", cols)
+        lines << truncate("  #{ANSI.bold}#{Hcode.t("help.commands_heading")}#{r}", cols)
         sorted = @commands.to_a.sort { |a, b| a.name <=> b.name }
         cmd_w = pad_width(sorted.map(&.name))
         sorted.each do |cmd|

@@ -1,8 +1,8 @@
 module Hcode
   module Setup
     class SetupRequired < Exception
-      def initialize(message = "No provider configured. Run `hcode` once in a TTY to set up, or set HCODE_PROVIDER + the appropriate API key / endpoint env vars.")
-        super(message)
+      def initialize(message : String? = nil)
+        super(message || Hcode.t("setup.required_message"))
       end
     end
 
@@ -68,17 +68,17 @@ module Hcode
       def placeholder : String
         case step
         when Step::Welcome
-          "Use ↑/↓ to pick a provider, then Enter"
+          Hcode.t("setup.pick_provider")
         when Step::Credentials
           if hint = current_choice.try(&.key_hint).presence
-            "Enter API key  (#{hint})"
+            Hcode.t("setup.enter_api_key_hint", hint: hint)
           else
-            "Enter API key..."
+            Hcode.t("setup.enter_api_key")
           end
         when Step::Endpoint
-          "Endpoint [#{default_endpoint}] — press Enter to use default"
+          Hcode.t("setup.enter_endpoint", value: default_endpoint)
         when Step::Model
-          "Model [#{default_model}] — press Enter to use default"
+          Hcode.t("setup.enter_model", value: default_model)
         else
           ""
         end

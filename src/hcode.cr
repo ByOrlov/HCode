@@ -70,6 +70,7 @@ require "./notify/player"
 require "./notify/webhook"
 require "./notify/dispatcher"
 require "./config/config"
+require "./i18n/i18n"
 require "./hooks/engine"
 require "./prompt/template"
 require "./prompt/agents_md"
@@ -212,6 +213,8 @@ module Hcode
 
       config = Config::Config.load
 
+      Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
+
       config.model = model if model
       if pm = permission_mode
         config.permission_mode = pm
@@ -229,13 +232,13 @@ module Hcode
         if STDIN.tty? && !hi_mode && prompt.nil?
           run_setup_wizard(config)
         else
-          STDERR.puts "Error: No provider configured."
+          STDERR.puts Hcode.t("errors.no_provider")
           STDERR.puts ""
-          STDERR.puts "Run `hcode` once in a terminal to set up interactively, or set:"
-          STDERR.puts "  export HCODE_PROVIDER=ollama    # or: moonshot, zai, lmstudio"
-          STDERR.puts "  export MOONSHOT_API_KEY=YOUR_KEY  # needed for moonshot/zai"
+          STDERR.puts Hcode.t("errors.setup_hint")
+          STDERR.puts Hcode.t("errors.setup_hint_provider")
+          STDERR.puts Hcode.t("errors.setup_hint_key")
           STDERR.puts ""
-          STDERR.puts "See `hcode --help` for details."
+          STDERR.puts Hcode.t("errors.setup_hint_help")
           exit(2)
         end
       end
@@ -298,7 +301,7 @@ module Hcode
                 entry = lifecycle.index.find_most_recent(ws_id) ||
                         lifecycle.index.find_most_recent
                 unless entry
-                  STDERR.puts "No previous session found to continue."
+                  STDERR.puts Hcode.t("errors.no_previous_session")
                   exit(1)
                 end
                 Hcode::Session::Store.new(entry.path)
@@ -349,7 +352,7 @@ module Hcode
     private def self.build_provider(config, oauth) : LLM::Provider
       build_named_provider(config.provider_name, config, oauth)
     rescue ex : ProviderConfigError
-      STDERR.puts "Error: #{ex.message}"
+      STDERR.puts Hcode.t("errors.generic", message: ex.message.to_s)
       exit(1)
     end
 
@@ -436,10 +439,10 @@ module Hcode
     # result. No tools, no system prompt, no agent loop — just a raw
     # chat call to verify the key, endpoint, model, and balance.
     private def self.run_hi(provider : LLM::Provider) : Nil
-      puts "Provider: #{provider.name}"
-      puts "Model:    #{provider.model_name}"
-      puts "Prompt:   \"hi\""
-      puts "────────────────────────────────────────"
+      puts Hcode.t("info.provider_label", name: provider.name)
+      puts Hcode.t("info.model_label", name: provider.model_name)
+      puts Hcode.t("info.prompt_label")
+      puts Hcode.t("info.separator")
 
       messages = [LLM::Message.user("hi")]
       text = IO::Memory.new
@@ -456,17 +459,17 @@ module Hcode
 
         puts ""
         puts ""
-        puts "● OK — replied in #{result.usage.total_tokens} tokens"
+        puts Hcode.t("info.ok_replied", tokens: result.usage.total_tokens)
           .colorize.fore(C_SUCCESS)
         exit(0)
       rescue ex : LLM::ApiError
         STDERR.puts ""
-        STDERR.puts "✗ HTTP #{ex.status_code}: #{ex.message}"
+        STDERR.puts Hcode.t("info.http_error", code: ex.status_code, message: ex.message.to_s)
           .colorize.fore(C_ERROR)
         exit(1)
       rescue ex
         STDERR.puts ""
-        STDERR.puts "✗ #{ex.message}".colorize.fore(C_ERROR)
+        STDERR.puts Hcode.t("info.error_prefix", message: ex.message.to_s).colorize.fore(C_ERROR)
         exit(1)
       end
     end
@@ -577,27 +580,27 @@ module Hcode
           when .info?
             puts "[#{event.text}]".colorize.yellow
           when .error?
-            STDERR.puts "Error: #{event.text}".colorize.red
+            STDERR.puts Hcode.t("errors.generic", message: event.text).colorize.red
           end
         end
 
         puts
-        puts "● Done (#{result.steps} steps, " \
+        puts "#{Hcode.t("info.done", steps: result.steps)}" \
              "#{result.usage.total_tokens} tokens)".colorize.fore(C_SUCCESS)
         puts
-        status_tracker.transition!(Notify::AgentStatus::Done, "Turn complete")
+        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex : Loop::UserCancellationError
-        agent.context.add_user("Interrupted by user")
-        puts "\nInterrupted by user.".colorize.yellow
-        status_tracker.transition!(Notify::AgentStatus::Done, "Cancelled")
+        agent.context.add_user(Hcode.t("status.interrupted"))
+        puts Hcode.t("info.interrupted_by_user").colorize.yellow
+        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.cancelled"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex : Loop::NetworkFailureError
         puts "\n#{ex.message}".colorize.yellow
-        status_tracker.transition!(Notify::AgentStatus::Done, "Network failure")
+        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.network_failure"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex
-        STDERR.puts "Fatal: #{ex.message}".colorize.red
+        STDERR.puts Hcode.t("errors.fatal", message: ex.message.to_s).colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
         exit(1)
       end
@@ -786,10 +789,10 @@ module Hcode
           app.model = provider.model_name
           true
         rescue ex : ProviderConfigError
-          app.add_message("error", "Failed to switch provider: #{ex.message}")
+          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
           false
         rescue ex
-          app.add_message("error", "Failed to switch provider: #{ex.message}")
+          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
           false
         end
       end
@@ -814,10 +817,10 @@ module Hcode
           config.save
           true
         rescue ex : ProviderConfigError
-          app.add_message("error", "Failed to switch model: #{ex.message}")
+          app.add_message("error", Hcode.t("errors.model_switch_failed", message: ex.message.to_s))
           false
         rescue ex
-          app.add_message("error", "Failed to switch model: #{ex.message}")
+          app.add_message("error", Hcode.t("errors.model_switch_failed", message: ex.message.to_s))
           false
         end
       end
@@ -853,7 +856,7 @@ module Hcode
           agent.swap_provider!(provider)
           app.model = provider.model_name
         rescue ex : ProviderConfigError
-          app.add_message("error", "Failed to switch provider: #{ex.message}")
+          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
         end
         nil
       end
@@ -895,7 +898,7 @@ module Hcode
         preview = snapshot.preview
         # Surface the output inline as a system message so the user can read
         # it without leaving the transcript.
-        app.add_message("system", "Output of #{task_id}:\n#{preview}")
+        app.add_message("system", "#{Hcode.t("info.output_of", task_id: task_id)}\n#{preview}")
         nil
       end
       # `/logout` clears the configured API keys and re-saves config.toml.
@@ -911,8 +914,8 @@ module Hcode
           begin
             cred_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
             creds = Auth::OAuth.login(credentials_path: cred_path) do |auth|
-              app.on_event(Loop::Event.info("Open this URL to authorize: #{auth.verification_uri_complete}"))
-              app.on_event(Loop::Event.info("User code: #{auth.user_code}"))
+              app.on_event(Loop::Event.info(Hcode.t("info.open_auth_url", url: auth.verification_uri_complete)))
+              app.on_event(Loop::Event.info(Hcode.t("info.user_code", code: auth.user_code)))
             end
             # Rebuild the provider with fresh credentials so the next turn uses
             # them without a restart.
@@ -924,11 +927,11 @@ module Hcode
               temperature: config.temperature,
             )
             agent.swap_provider!(provider)
-            app.on_event(Loop::Event.info("Login successful. Credentials saved to #{cred_path}"))
+            app.on_event(Loop::Event.info(Hcode.t("info.login_success", path: cred_path)))
           rescue ex : Auth::OAuth::OAuthError
-            app.on_event(Loop::Event.error("Login failed: #{ex.message}"))
+            app.on_event(Loop::Event.error(Hcode.t("errors.login_failed", message: ex.message.to_s)))
           rescue ex
-            app.on_event(Loop::Event.error("Login error: #{ex.message}"))
+            app.on_event(Loop::Event.error(Hcode.t("errors.login_error", message: ex.message.to_s)))
           end
         end
       end
@@ -946,6 +949,15 @@ module Hcode
                      else                         effort.downcase
                      end
         agent.provider.thinking_effort = normalized
+        nil
+      end
+
+      app.on_get_language = -> : String do
+        config.language || Hcode::I18n.resolve_locale
+      end
+      app.on_language_change = ->(lang : String) do
+        config.language = lang
+        config.save
         nil
       end
 

@@ -86,4 +86,10 @@ require "../src/notify/terminal"
 require "../src/notify/player"
 require "../src/notify/webhook"
 require "../src/notify/dispatcher"
+require "../src/config/config"
+require "../src/i18n/i18n"
 require "../src/hooks/engine"
+
+# Initialize i18n so specs that exercise translated strings resolve keys
+# instead of getting the raw key back.
+Hcode::I18n.init("en")

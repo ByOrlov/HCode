@@ -323,6 +323,8 @@ module Hcode
       property on_persist_queued : (String, String -> Nil)?
       # Steer: inject `text` into the running turn (Agent#steer).
       property on_steer : (String -> Nil)?
+      property on_language_change : (String -> Nil)? = nil
+      property on_get_language : (-> String)? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,
@@ -370,15 +372,15 @@ module Hcode
         @wizard = Setup::Wizard.new
         @show_welcome = false
         @messages << Message.new("system",
-          "Welcome to HCode. Choose your provider to get started.")
-        @status = "Setup: select provider"
+          Hcode.t("ui.setup_welcome"))
+        @status = Hcode.t("ui.setup_status")
         open_setup_provider_selector
         @dirty = true
       end
 
       private def open_setup_provider_selector : Nil
         items = Setup::Wizard.choices.map(&.label)
-        @provider_list.show("Select provider", items)
+        @provider_list.show(Hcode.t("ui.select_provider"), items)
         @provider_list.selected = 0
         @input.drain_pending_enters
         @dirty = true
@@ -751,7 +753,7 @@ module Hcode
         end
       end
 
-      def show_interrupted(message : String = "Interrupted by user") : Nil
+      def show_interrupted(message : String = Hcode.t("status.interrupted")) : Nil
         finalize_streaming_thinking
         # Flush any in-flight streaming text into a permanent assistant message
         # so it doesn't disappear when we reset the streaming buffer.
@@ -934,7 +936,7 @@ module Hcode
           @defer_user_messages = false
           @spinner.stop
           @status = ""
-          @status_tracker.try(&.transition!(Notify::AgentStatus::Done, "Turn complete"))
+          @status_tracker.try(&.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete")))
           @status_tracker.try(&.transition!(Notify::AgentStatus::Idle))
 
           # A cancelled turn ends the dispatch chain: drop queued messages
@@ -960,7 +962,7 @@ module Hcode
         @approval_pending = ApprovalRequest.new(tool_name, args, danger)
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
-                                          "Approval required", tool_name))
+                                          Hcode.t("ui.approval_required"), tool_name))
         select
         when choice = @approval_channel.receive
           @approval_pending = nil
@@ -1543,7 +1545,7 @@ module Hcode
           else
             @on_new_session.try(&.call)
             @messages.clear
-            @messages << Message.new("system", "New session started.")
+            @messages << Message.new("system", Hcode.t("ui.new_session_started"))
           end
         when "/sessions", "/resume"
           if @agent_busy
@@ -1571,13 +1573,13 @@ module Hcode
             @messages << Message.new("error", "Cannot archive while a turn is running.")
           elsif cb = @on_archive
             cb.call
-            @messages << Message.new("system", "Session archived. Use /restore to bring it back.")
+            @messages << Message.new("system", Hcode.t("ui.session_archived"))
           else
             @messages << Message.new("error", "Session archive is not wired up.")
           end
         when "/rename", "/title"
           if args.empty?
-            @messages << Message.new("system", "Usage: /rename <new title>")
+            @messages << Message.new("system", Hcode.t("ui.usage_rename"))
           elsif cb = @on_rename
             cb.call(args)
             @messages << Message.new("system", "Session title set to: #{args}")
@@ -1590,7 +1592,7 @@ module Hcode
           else
             @on_clear.try(&.call)
             @messages.clear
-            @messages << Message.new("system", "Conversation cleared.")
+            @messages << Message.new("system", Hcode.t("ui.conversation_cleared"))
           end
         when "/compact"
           if @agent_busy
@@ -1605,20 +1607,20 @@ module Hcode
           end
         when "/status"
           stats = String.build do |s|
-            s << "Model: #{@model}\n"
-            s << "Permission: #{@permission_mode}\n"
+            s << "#{Hcode.t("ui.status_model")}: #{@model}\n"
+            s << "#{Hcode.t("ui.permission_label")}: #{@permission_mode}\n"
             if @max_context_tokens > 0
-              s << "Context: #{build_context_status.sub(/^context: /, "")}\n"
+              s << "#{Hcode.t("ui.context_label")}: #{build_context_status.split(": ", 2)[1]? || ""}\n"
             else
-              s << "Context: #{@context_percent.round(1)}%\n"
+              s << "#{Hcode.t("ui.context_label")}: #{@context_percent.round(1)}%\n"
             end
-            s << "Messages: #{@messages.size}\n"
-            s << "Queue: #{@queue.size}\n"
+            s << "#{Hcode.t("ui.messages_label")}: #{@messages.size}\n"
+            s << "#{Hcode.t("ui.queue_label")}: #{@queue.size}\n"
           end
           @messages << Message.new("system", stats.strip)
         when "/undo"
           if @agent_busy
-            @messages << Message.new("error", "Cannot undo while a turn is running. Wait or interrupt first.")
+            @messages << Message.new("error", Hcode.t("ui.cannot_undo_busy"))
           elsif args.strip.empty?
             open_undo_selector
           else
@@ -1629,9 +1631,9 @@ module Hcode
         when "/queue"
           if args.strip == "clear"
             @queue.clear
-            @messages << Message.new("system", "Queue cleared.")
+            @messages << Message.new("system", Hcode.t("ui.queue_cleared"))
           elsif @queue.empty?
-            @messages << Message.new("system", "Queue is empty.")
+            @messages << Message.new("system", Hcode.t("ui.queue_empty"))
           else
             preview = @queue.map_with_index { |qm, i| "  #{i + 1}. #{truncate_preview(qm.text)}" }.join("\n")
             @messages << Message.new("system", "Queue (#{@queue.size}):\n#{preview}\n— #{queue_hint}")
@@ -1652,10 +1654,10 @@ module Hcode
         when "/export-md"
           path = args.empty? ? "session-#{Time.utc.to_unix}.md" : args
           @on_export.try(&.call(path))
-          @messages << Message.new("system", "Exported to #{path}")
+          @messages << Message.new("system", Hcode.t("ui.exported_to", path: path))
         when "/add-dir"
           if args.empty?
-            @messages << Message.new("system", "Usage: /add-dir <path>")
+            @messages << Message.new("system", Hcode.t("ui.usage_add_dir"))
           else
             path = File.expand_path(args.strip, @work_dir)
             unless Dir.exists?(path)
@@ -1667,7 +1669,7 @@ module Hcode
                 @additional_dirs << path
                 on_additional_dirs_change.try(&.call(@additional_dirs.dup))
                 @messages << Message.new("system",
-                  "Added directory: #{path}\n#{@additional_dirs.size} additional dir(s) total.")
+                  Hcode.t("ui.added_directory", path: path, count: @additional_dirs.size))
               end
             end
           end
@@ -1676,12 +1678,12 @@ module Hcode
             open_theme_selector
           elsif args == "dark"
             @theme = Theme.dark
-            @messages << Message.new("system", "Theme: dark")
+            @messages << Message.new("system", Hcode.t("ui.theme_set", name: "dark"))
           elsif args == "light"
             @theme = Theme.light
-            @messages << Message.new("system", "Theme: light")
+            @messages << Message.new("system", Hcode.t("ui.theme_set", name: "light"))
           else
-            @messages << Message.new("error", "Unknown theme: #{args}. Available: dark, light")
+            @messages << Message.new("error", Hcode.t("ui.theme_unknown", name: args))
           end
         when "/version"
           version = Hcode::VERSION
@@ -1698,9 +1700,9 @@ module Hcode
           last_assistant = @messages.reverse.find { |m| m.role == "assistant" }
           if last_assistant
             copy_to_clipboard(last_assistant.content)
-            @messages << Message.new("system", "Copied last assistant message to clipboard.")
+            @messages << Message.new("system", Hcode.t("ui.copied"))
           else
-            @messages << Message.new("error", "No assistant message to copy.")
+            @messages << Message.new("error", Hcode.t("ui.no_assistant_to_copy"))
           end
         when "/permission"
           case args.strip.downcase
@@ -1709,7 +1711,7 @@ module Hcode
           when ""
             open_permission_selector
           else
-            @messages << Message.new("error", "Unknown mode: #{args}. Available: manual, auto, yolo")
+            @messages << Message.new("error", Hcode.t("ui.mode_unknown", name: args))
           end
         when "/effort"
           if args.empty?
@@ -1717,24 +1719,24 @@ module Hcode
           elsif cb = @on_set_effort
             normalized = args.strip.downcase
             cb.call(normalized)
-            @messages << Message.new("system", "Thinking effort set to: #{normalized}")
+            @messages << Message.new("system", Hcode.t("ui.effort_set", name: normalized))
           else
-            @messages << Message.new("system", "Thinking effort selection is not wired up.")
+            @messages << Message.new("system", Hcode.t("ui.effort_not_wired"))
           end
         when "/plan"
           if @on_plan_mode.try(&.call(!@plan_mode))
             @plan_mode = !@plan_mode
-            @messages << Message.new("system", "Plan mode: #{@plan_mode ? "on" : "off"}")
+            @messages << Message.new("system", Hcode.t("ui.plan_mode_state", state: @plan_mode ? Hcode.t("ui.plan_mode_on") : Hcode.t("ui.plan_mode_off")))
           else
-            @messages << Message.new("error", "Plan mode is not wired up.")
+            @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
           end
         when "/todos"
           todos = current_todos
           if todos.nil? || todos.empty?
-            @messages << Message.new("system", "No todos.")
+            @messages << Message.new("system", Hcode.t("ui.no_todos"))
           elsif args.strip.downcase == "clear"
             @on_clear_todos.try(&.call)
-            @messages << Message.new("system", "Todo list cleared (visible to the agent next step).")
+            @messages << Message.new("system", Hcode.t("ui.todos_cleared"))
           else
             body = todos.map_with_index do |(title, status), i|
               marker = case status
@@ -1754,7 +1756,7 @@ module Hcode
           end
         when "/feedback"
           if args.strip.empty?
-            @messages << Message.new("system", "Usage: /feedback <message>")
+            @messages << Message.new("system", Hcode.t("ui.usage_feedback"))
           elsif cb = @on_feedback
             cb.call(args.strip)
             @messages << Message.new("system", "Feedback sent. Thank you!")
@@ -1777,12 +1779,12 @@ module Hcode
           @messages << Message.new("system", "Open in Web UI: #{url}")
         when "/settings"
           settings = String.build do |s|
-            s << "Provider: #{@provider_name}\n"
-            s << "Model: #{@model}\n"
-            s << "Permission: #{@permission_mode}\n"
-            s << "Theme: #{@theme.name}\n"
+            s << "#{Hcode.t("info.provider_label", name: @provider_name)}\n"
+            s << "#{Hcode.t("ui.status_model")}: #{@model}\n"
+            s << "#{Hcode.t("ui.permission_label")}: #{@permission_mode}\n"
+            s << "#{Hcode.t("ui.settings_theme")}: #{@theme.name}\n"
             effort = @on_get_effort.try(&.call) || "off"
-            s << "Thinking effort: #{effort}\n"
+            s << "#{Hcode.t("ui.settings_effort")}: #{effort}\n"
             s << "Home: #{@home}\n"
             s << "Work dir: #{@work_dir}\n"
             s << "Git branch: #{@git_branch.empty? ? "(none)" : @git_branch}\n"
@@ -1885,8 +1887,10 @@ module Hcode
           @messages << Message.new("system", ProfiledMemory.format_report)
         when "/goal"
           handle_goal_command(args)
+        when "/language"
+          handle_language_command(args)
         else
-          @messages << Message.new("error", "Unknown command: #{cmd}. Type /help for available commands.")
+          @messages << Message.new("error", Hcode.t("ui.unknown_command", cmd: cmd))
         end
 
         @show_command_hints = false
@@ -1907,46 +1911,68 @@ module Hcode
           if snapshot
             @messages << Message.new("system", format_goal_snapshot(snapshot))
           else
-            @messages << Message.new("system", "No active goal.")
+            @messages << Message.new("system", Hcode.t("ui.no_active_goal"))
           end
         when "pause"
           begin
             snapshot = service.not_nil!.pause_goal
-            @messages << Message.new("system", "Goal paused.\n#{format_goal_snapshot(snapshot)}")
+            @messages << Message.new("system", "#{Hcode.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
-            @messages << Message.new("error", "Cannot pause: #{ex.message}")
+            @messages << Message.new("error", Hcode.t("ui.cannot_pause", message: ex.message.to_s))
           end
         when "resume"
           begin
             snapshot = service.not_nil!.resume_goal
-            @messages << Message.new("system", "Goal resumed.\n#{format_goal_snapshot(snapshot)}")
+            @messages << Message.new("system", "#{Hcode.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
-            @messages << Message.new("error", "Cannot resume: #{ex.message}")
+            @messages << Message.new("error", Hcode.t("ui.cannot_resume", message: ex.message.to_s))
           end
         when "cancel"
           begin
             snapshot = service.not_nil!.cancel_goal
-            @messages << Message.new("system", "Goal cancelled.\n#{format_goal_snapshot(snapshot)}")
+            @messages << Message.new("system", "#{Hcode.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
-            @messages << Message.new("error", "Cannot cancel: #{ex.message}")
+            @messages << Message.new("error", Hcode.t("ui.cannot_cancel", message: ex.message.to_s))
           end
         else
-          @messages << Message.new("error", "Usage: /goal [status|pause|resume|cancel]")
+          @messages << Message.new("error", Hcode.t("ui.usage_goal"))
         end
       end
 
       private def format_goal_snapshot(s : Hcode::Tools::GoalSnapshot) : String
         String.build do |str|
-          str << "Goal: #{s.objective}\n"
-          str << "Status: #{s.status}\n"
-          str << "ID: #{s.goal_id}\n"
+          str << "#{Hcode.t("ui.goal_label")}: #{s.objective}\n"
+          str << "#{Hcode.t("ui.goal_status")}: #{s.status}\n"
+          str << "#{Hcode.t("ui.goal_id")}: #{s.goal_id}\n"
           if c = s.completion_criterion
-            str << "Completion: #{c}\n"
+            str << "#{Hcode.t("ui.goal_completion")}: #{c}\n"
           end
           if r = s.terminal_reason
-            str << "Reason: #{r}\n"
+            str << "#{Hcode.t("ui.goal_reason")}: #{r}\n"
           end
         end.strip
+      end
+
+      private def handle_language_command(args : String) : Nil
+        supported = Hcode::I18n.available_locales
+        lang = args.strip.downcase
+        if lang.empty?
+          current = @on_get_language.try(&.call) || Hcode::I18n.resolve_locale
+          @messages << Message.new("system",
+            "#{Hcode.t("ui.current_language", name: current)}\n" \
+            "#{Hcode.t("ui.available_languages", list: supported.join(", "))}\n" \
+            "#{Hcode.t("ui.usage_language", list: supported.join("|"))}")
+          return
+        end
+        unless supported.includes?(lang)
+          @messages << Message.new("error",
+            Hcode.t("language.unknown", name: lang) + "\n" +
+            Hcode.t("language.available", list: supported.join(", ")))
+          return
+        end
+        @on_language_change.try(&.call(lang))
+        Hcode::I18n.activate(lang)
+        @messages << Message.new("system", Hcode.t("language.changed", name: lang))
       end
 
       private def open_tasks_browser : Nil
@@ -2049,7 +2075,7 @@ module Hcode
 
       private def open_provider_selector : Nil
         items = LLM::KNOWN_PROVIDERS.map(&.name)
-        @provider_list.show("Select provider", items)
+        @provider_list.show(Hcode.t("ui.select_provider"), items)
         @provider_list.selected = items.index(@provider_name) || 0
         # Discard a queued Enter that was batched with the /provider submit,
         # otherwise it would close the selector on the very next read_key.
@@ -2155,7 +2181,7 @@ module Hcode
       TEXT
 
       private def open_permission_selector : Nil
-        @permission_list.show("Select permission mode", PERMISSION_MODES)
+        @permission_list.show(Hcode.t("ui.select_permission"), PERMISSION_MODES)
         @permission_list.selected = PERMISSION_MODES.index(@permission_mode) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -2185,7 +2211,7 @@ module Hcode
 
       private def open_effort_selector : Nil
         current = @on_get_effort.try(&.call) || "off"
-        @effort_list.show("Select thinking effort", EFFORT_LEVELS)
+        @effort_list.show(Hcode.t("ui.select_effort"), EFFORT_LEVELS)
         @effort_list.selected = EFFORT_LEVELS.index(current) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -2203,9 +2229,9 @@ module Hcode
           if cb = @on_set_effort
             normalized = effort == "off" ? nil : effort
             cb.call(effort)
-            @messages << Message.new("system", "Thinking effort set to: #{effort}")
+            @messages << Message.new("system", Hcode.t("ui.effort_set", name: effort))
           else
-            @messages << Message.new("system", "Thinking effort selection is not wired up.")
+            @messages << Message.new("system", Hcode.t("ui.effort_not_wired"))
           end
         when .escape?
           @effort_list.hide
@@ -2214,7 +2240,7 @@ module Hcode
       end
 
       private def open_theme_selector : Nil
-        @theme_list.show("Select theme", THEMES)
+        @theme_list.show(Hcode.t("ui.select_theme"), THEMES)
         @theme_list.selected = THEMES.index(@theme.name) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -2230,7 +2256,7 @@ module Hcode
           @theme_list.hide
           @dirty = true
           @theme = name == "light" ? Theme.light : Theme.dark
-          @messages << Message.new("system", "Theme: #{name}")
+          @messages << Message.new("system", Hcode.t("ui.theme_set", name: name))
         when .escape?
           @theme_list.hide
           @dirty = true
@@ -2240,7 +2266,7 @@ module Hcode
       private def open_session_selector(mode : Symbol) : Nil
         @session_picker_mode = mode
         include_archived = mode == :restore
-        title = include_archived ? "Restore a session (archived)" : "Resume a session"
+        title = include_archived ? Hcode.t("ui.restore_session") : Hcode.t("ui.resume_session")
 
         entries = Session::Index.new(@home).list(include_archived: include_archived)
         if entries.empty?
@@ -2532,7 +2558,7 @@ module Hcode
         new_lines << render_footer(cols)
 
         if @exit_confirm
-          new_lines << "#{ANSI.color(@theme.colors.warning, nil)} Press #{@exit_key} to exit#{ANSI.reset}"
+          new_lines << "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
         end
 
         # Defensive barrier mirroring pi-tui `doRender`: truncate every line to
@@ -3184,8 +3210,8 @@ module Hcode
         # Logo lines beyond this list render on their own (logo only), so
         # adding rows to `logo_lines` is automatically reflected in the box.
         side_texts = [
-          {"#{ANSI.bold}Welcome to HCode!#{r}", tc},
-          {"Send /help for help information.", mc},
+          {"#{ANSI.bold}#{Hcode.t("ui.welcome")}#{r}", tc},
+          {Hcode.t("ui.send_help"), mc},
           {"", tc},
         ] of Tuple(String, String)
 
@@ -3205,10 +3231,10 @@ module Hcode
         lines << "#{bc}│#{r}#{" " * (box_w - 2)}#{bc}│#{r}"
 
         info = [
-          {"Directory", @work_dir},
-          {"Session", @session_id.empty? ? "new" : @session_id},
-          {"Model", @model},
-          {"Version", Hcode::VERSION},
+          {Hcode.t("ui.status_directory"), @work_dir},
+          {Hcode.t("ui.status_session"), @session_id.empty? ? Hcode.t("ui.status_new") : @session_id},
+          {Hcode.t("ui.status_model"), @model},
+          {Hcode.t("ui.status_version"), Hcode::VERSION},
         ]
 
         info.each do |label, value|
@@ -3257,7 +3283,7 @@ module Hcode
           placeholder_text = if @setup_mode && (w = @wizard) && !w.done?
                                w.placeholder
                              else
-                               "Send a message..."
+                               Hcode.t("ui.send_a_message")
                              end
           body = "#{dc}#{placeholder_text}#{r}"
           lines << build_editor_row(box_w, bc, r, prompt, body)
@@ -3443,12 +3469,13 @@ module Hcode
       # percent. The percent is recomputed from the raw counts so it does
       # not lag a step behind `@context_percent`.
       private def build_context_status : String
+        label = Hcode.t("ui.context_label").downcase
         if @max_context_tokens > 0 && @context_tokens > 0
           pct = (@context_tokens.to_f64 / @max_context_tokens * 100).ceil.to_i
           pct = 100 if pct > 100
-          "context: #{pct}% (#{LLM::TokenCounter.format_count(@context_tokens)}/#{LLM::TokenCounter.format_count(@max_context_tokens)})"
+          "#{label}: #{pct}% (#{LLM::TokenCounter.format_count(@context_tokens)}/#{LLM::TokenCounter.format_count(@max_context_tokens)})"
         else
-          "context: #{@context_percent.round(0).to_i}%"
+          "#{label}: #{@context_percent.round(0).to_i}%"
         end
       end
 
@@ -3530,16 +3557,17 @@ module Hcode
       # Rotating keyboard / workflow hint shown in the footer when idle.
       # Picked by wall-clock seconds so it cycles without per-render state.
       TIPS = [
-        "Ctrl+S steer · Ctrl+G editor",
-        "↑↓ scroll · /debug for full output",
-        "Enter queues while agent runs",
-        "/help for all commands",
-        "/usage for tokens · /queue clear",
-        "Ctrl+C twice to exit",
+        "tips.ctrl_steer",
+        "tips.scroll_debug",
+        "tips.enter_queues",
+        "tips.help_commands",
+        "tips.usage_queue",
+        "tips.ctrl_exit",
       ]
 
       private def current_tip : String
-        TIPS[(Time.utc.to_unix // 5) % TIPS.size]
+        key = TIPS[(Time.utc.to_unix // 5) % TIPS.size]
+        Hcode.t(key)
       end
 
       private def thinking_status : String
@@ -3976,12 +4004,12 @@ module Hcode
           end
 
         if name == "Bash"
-          label = has_result ? "Ran a command" : "Running a command"
+          label = has_result ? Hcode.t("tools.ran_command") : Hcode.t("tools.running_command")
           tone = is_error ? @theme.colors.error : @theme.colors.primary
           return "#{bullet}#{ANSI.color(tone, nil)}#{ANSI.bold}#{label}#{ANSI.reset}"
         end
 
-        verb = has_result ? "Used" : "Using"
+        verb = has_result ? Hcode.t("tools.used") : Hcode.t("tools.using")
         key_arg = extract_key_argument(name, args)
         tool_label = "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}#{name}#{ANSI.reset}"
         arg_str = key_arg ? "#{ANSI.color(@theme.colors.dim, nil)} (#{key_arg})#{ANSI.reset}" : ""
@@ -3990,7 +4018,7 @@ module Hcode
         if name == "Read" && has_result && !is_error
           if result = tool_result
             lines_count = count_non_empty_lines(result)
-            chip_str = "#{ANSI.color(@theme.colors.dim, nil)} · #{lines_count} #{lines_count == 1 ? "line" : "lines"}#{ANSI.reset}"
+            chip_str = "#{ANSI.color(@theme.colors.dim, nil)} · #{lines_count} #{lines_count == 1 ? Hcode.t("tools.line") : Hcode.t("tools.lines")}#{ANSI.reset}"
           end
         end
 

@@ -20,6 +20,7 @@ module Hcode
       property max_context_tokens : Int32 = 262144
       property temperature : Float64? = nil
       property proxy : String? = nil
+      property language : String? = nil
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
 
@@ -78,6 +79,9 @@ module Hcode
         if provider = ENV["HCODE_PROVIDER"]?
           config.provider_name = provider
         end
+        if lang = ENV["HCODE_LANG"]?
+          config.language = lang
+        end
         if proxy = ENV["HTTP_PROXY"]? || ENV["HTTPS_PROXY"]? || ENV["ALL_PROXY"]?
           config.proxy = proxy
         end
@@ -133,6 +137,7 @@ module Hcode
             when {"agent", "max_steps"}      then config.max_steps = val.to_i? || 100
             when {"agent", "max_context_tokens"} then config.max_context_tokens = val.to_i? || 262144
             when {"agent", "temperature"}    then config.temperature = val.to_f64?
+            when {"ui", "language"}          then config.language = val
             # [notifications]
             when {"notifications", "enabled"}   then config.notifications.enabled = parse_bool(val)
             when {"notifications", "condition"} then config.notifications.condition = val
@@ -220,6 +225,11 @@ module Hcode
           s << "max_context_tokens = #{@max_context_tokens}\n"
           if temp = @temperature
             s << "temperature = #{temp}\n"
+          end
+          s << '\n'
+          s << "[ui]\n"
+          if lang = @language
+            s << "language = \"#{lang}\"\n"
           end
           s << '\n'
           s << "[notifications]\n"
