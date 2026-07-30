@@ -134,6 +134,13 @@ module Hcode
           end
         end
       end
+
+      # Serialize this part to the OpenAI Chat Completions content-part wire
+      # shape. Mirrors kosong's `convertContentPart`
+      # (`providers/openai-common.ts`): text/image_url/audio_url/video_url map
+      # 1:1; think parts are never sent here (they are lifted to the
+      # message-level `reasoning_content` field by `Message#to_wire_json`).
+      abstract def to_wire_json(json : JSON::Builder) : Nil
     end
 
     class TextContent < ContentPart
@@ -145,6 +152,13 @@ module Hcode
 
       def profiled_bytes : Int64
         @text.profiled_bytes + @type.profiled_bytes
+      end
+
+      def to_wire_json(json : JSON::Builder) : Nil
+        json.object do
+          json.field "type", "text"
+          json.field "text", @text
+        end
       end
     end
 
@@ -159,6 +173,11 @@ module Hcode
 
       def profiled_bytes : Int64
         @think.profiled_bytes + @type.profiled_bytes + (@encrypted.try(&.profiled_bytes) || 0_i64)
+      end
+
+      # Never called: ThinkContent is stripped before wire serialization.
+      def to_wire_json(json : JSON::Builder) : Nil
+        raise "ThinkContent must not reach the wire (handled at message level)"
       end
     end
 
@@ -217,6 +236,20 @@ module Hcode
       def profiled_bytes : Int64
         @image_url.profiled_bytes + @type.profiled_bytes
       end
+
+      def to_wire_json(json : JSON::Builder) : Nil
+        json.object do
+          json.field "type", "image_url"
+          json.field "image_url" do
+            json.object do
+              json.field "url", @image_url.url
+              if id = @image_url.id
+                json.field "id", id
+              end
+            end
+          end
+        end
+      end
     end
 
     class AudioContent < ContentPart
@@ -229,6 +262,20 @@ module Hcode
       def profiled_bytes : Int64
         @audio_url.profiled_bytes + @type.profiled_bytes
       end
+
+      def to_wire_json(json : JSON::Builder) : Nil
+        json.object do
+          json.field "type", "audio_url"
+          json.field "audio_url" do
+            json.object do
+              json.field "url", @audio_url.url
+              if id = @audio_url.id
+                json.field "id", id
+              end
+            end
+          end
+        end
+      end
     end
 
     class VideoContent < ContentPart
@@ -240,6 +287,20 @@ module Hcode
 
       def profiled_bytes : Int64
         @video_url.profiled_bytes + @type.profiled_bytes
+      end
+
+      def to_wire_json(json : JSON::Builder) : Nil
+        json.object do
+          json.field "type", "video_url"
+          json.field "video_url" do
+            json.object do
+              json.field "url", @video_url.url
+              if id = @video_url.id
+                json.field "id", id
+              end
+            end
+          end
+        end
       end
     end
 
@@ -275,6 +336,10 @@ module Hcode
         new("user", content)
       end
 
+      def self.user(parts : Array(ContentPart)) : Message
+        new("user", parts)
+      end
+
       def self.assistant(content : String? = nil, tool_calls : Array(ToolCall)? = nil) : Message
         new("assistant", content || "", tool_calls)
       end
@@ -308,6 +373,69 @@ module Hcode
         total += @tool_calls.try(&.sum(&.profiled_bytes)) || 0_i64
         total += @tool_call_id.try(&.profiled_bytes) || 0_i64
         total
+      end
+
+      # Serialize this message to the OpenAI Chat Completions wire shape,
+      # mirroring kosong's `convertMessage` (`providers/openai-legacy.ts` and
+      # `providers/kimi.ts`). ThinkContent is stripped from `content` and its
+      # concatenated text is emitted as a top-level `reasoning_content` field;
+      # servers that don't understand the field ignore it, reasoners that do
+      # round-trip the thinking. A single text-only part serializes `content`
+      # as a plain string (the pre-multimodal shape); otherwise it is an array
+      # of typed parts. An assistant message whose only content is empty text
+      # alongside tool_calls omits `content` entirely.
+      def to_wire_json(json : JSON::Builder) : Nil
+        reasoning_content = String.build do |io|
+          @content.each do |part|
+            io << part.think if part.is_a?(ThinkContent)
+          end
+        end
+        non_think_parts = @content.reject(&.is_a?(ThinkContent))
+        has_reasoning = !reasoning_content.empty?
+
+        json.object do
+          json.field "role", @role
+
+          has_tool_calls = @tool_calls && !@tool_calls.not_nil!.empty?
+          empty_text_only = non_think_parts.all? do |p|
+            p.is_a?(TextContent) && p.text.strip.empty?
+          end
+          omit_content = @role == "assistant" && has_tool_calls && empty_text_only &&
+                         !non_think_parts.empty?
+
+          unless omit_content
+            if non_think_parts.size == 1 && (first = non_think_parts[0]).is_a?(TextContent)
+              json.field "content", first.text
+            elsif non_think_parts.size > 0
+              json.field "content" do
+                json.array do
+                  non_think_parts.each(&.to_wire_json(json))
+                end
+              end
+            end
+          end
+
+          if tcs = @tool_calls
+            unless tcs.empty?
+              json.field "tool_calls" do
+                json.array do
+                  tcs.each(&.to_json(json))
+                end
+              end
+            end
+          end
+
+          if id = @tool_call_id
+            json.field "tool_call_id", id
+          end
+
+          # Round-trip thinking content back to the server. Default to the de
+          # facto `reasoning_content` field (DeepSeek / Qwen / Kimi). Servers
+          # that don't understand the field ignore it.
+          if has_reasoning
+            json.field "reasoning_content", reasoning_content
+          end
+        end
       end
     end
 
@@ -395,7 +523,9 @@ module Hcode
           json.object do
             json.field "model", @model
             json.field "messages" do
-              @messages.to_json(json)
+              json.array do
+                @messages.each(&.to_wire_json(json))
+              end
             end
             if t = @tools
               json.field "tools" do

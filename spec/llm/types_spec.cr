@@ -123,6 +123,62 @@ describe Hcode::LLM::StreamChunk do
   end
 end
 
+describe "Message wire serialization" do
+  it "serializes a single text part as a plain string content" do
+    msg = Hcode::LLM::Message.user("hello")
+    json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
+    json["role"].should eq("user")
+    json["content"].as_s.should eq("hello")
+    json.as_h.has_key?("reasoning_content").should be_false
+    json.as_h.has_key?("tool_calls").should be_false
+  end
+
+  it "lifts ThinkContent to top-level reasoning_content and strips it from content" do
+    parts = [
+      Hcode::LLM::ThinkContent.new("reasoning here"),
+      Hcode::LLM::TextContent.new("final answer"),
+    ] of Hcode::LLM::ContentPart
+    msg = Hcode::LLM::Message.assistant_parts(parts)
+    json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
+
+    # content must NOT contain a think part — only the text part
+    json["content"].as_s.should eq("final answer")
+    json["reasoning_content"].as_s.should eq("reasoning here")
+    json.as_h.has_key?("tool_calls").should be_false
+  end
+
+  it "omits content when an assistant tool-call message has only empty text" do
+    tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new("Bash", "{}"))
+    msg = Hcode::LLM::Message.assistant("", [tc])
+    json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
+    json["role"].should eq("assistant")
+    json.as_h.has_key?("content").should be_false
+    json["tool_calls"].as_a.size.should eq(1)
+  end
+
+  it "round-trips tool_call_id on tool messages" do
+    msg = Hcode::LLM::Message.tool("result text", "call_42")
+    json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
+    json["role"].should eq("tool")
+    json["content"].as_s.should eq("result text")
+    json["tool_call_id"].should eq("call_42")
+  end
+
+  it "serializes multiple non-text parts as a content array" do
+    img = Hcode::LLM::ImageContent.new(Hcode::LLM::ImageRef.new("data:image/png;base64,abc"))
+    parts = [
+      Hcode::LLM::TextContent.new("see image"),
+      img,
+    ] of Hcode::LLM::ContentPart
+    msg = Hcode::LLM::Message.user(parts)
+    json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
+    json["content"].as_a.size.should eq(2)
+    json["content"][0]["type"].should eq("text")
+    json["content"][1]["type"].should eq("image_url")
+    json["content"][1]["image_url"]["url"].should eq("data:image/png;base64,abc")
+  end
+end
+
 describe Hcode::LLM::ChatRequest do
   it "emits only the base fields when nothing extra is configured" do
     req = Hcode::LLM::ChatRequest.new("m", [Hcode::LLM::Message.user("hi")])
