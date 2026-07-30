@@ -255,4 +255,133 @@ describe Hcode::Loop::Agent do
     retry_infos.size.should eq(3)
     retry_infos.all? { |t| t.includes?("Retrying") }.should be_true
   end
+
+  # End-to-end plan-mode flow: enter → blocked Write → exit. Verifies the
+  # wiring between Permission guard, the Agent's plan reminder injection, and
+  # the plan-mode service lifecycle — the piece that was missing before this
+  # change (EnterPlanMode/ExitPlanMode existed but were dead code).
+  it "enforces plan mode: Write is blocked and a reminder is injected" do
+    dir = File.join(Dir.tempdir, "hcode-plan-flow-#{Random::Secure.hex(8)}")
+    Dir.mkdir_p(dir)
+    plan_path = File.join(dir, "plan.md")
+
+    # Mock provider that records every message list it receives, so the test
+    # can assert the plan-mode reminder was present on some step even though
+    # `prune_injections` removes it on the next step.
+    captured_messages = [] of Array(Hcode::LLM::Message)
+    recording_provider = Hcode::LLM::MockProvider.new([
+      # Step 1: enter plan mode.
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::ToolCallPart.new("c1", "EnterPlanMode", %({}))] of Hcode::LLM::MessagePart,
+        stop_reason: "tool_use",
+      ),
+      # Step 2: attempt a Write (should be blocked by the guard).
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::ToolCallPart.new(
+          "c2", "Write", %({"path":"/tmp/hcode-plan-block.txt","content":"x"})
+        )] of Hcode::LLM::MessagePart,
+        stop_reason: "tool_use",
+      ),
+      # Step 3: write the plan to the plan file (allowed).
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::ToolCallPart.new(
+          "c3", "Write", %({"path":#{plan_path.inspect},"content":"## Plan\\n\\nDo it."})
+        )] of Hcode::LLM::MessagePart,
+        stop_reason: "tool_use",
+      ),
+      # Step 4: exit plan mode (auto-approved).
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::ToolCallPart.new("c4", "ExitPlanMode", %({}))] of Hcode::LLM::MessagePart,
+        stop_reason: "tool_use",
+      ),
+      # Step 5: done.
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("finished")] of Hcode::LLM::MessagePart,
+        stop_reason: "end_turn",
+        text: "finished",
+      ),
+    ])
+
+    service = Hcode::Tools::AgentPlanService.new(dir, "main", plan_path)
+    Hcode::Tools::PlanMode.plan_service = service
+    Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: true)
+    Hcode::Tools::PlanMode.plan_review_service = nil
+
+    begin
+      # Build a provider subclass that records messages before delegating.
+      provider = RecordingProvider.new(recording_provider, captured_messages)
+
+      memory = Hcode::Context::Memory.new
+      memory.max_context_tokens = 131_072
+      tools = Hcode::Tools::Registry.new
+      tools.register(Hcode::Tools::EnterPlanMode.new)
+      tools.register(Hcode::Tools::ExitPlanMode.new)
+      tools.register(Hcode::Tools::Write.new(dir))
+      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+      agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+
+      events = [] of Hcode::Loop::Event
+      agent.run_turn("plan something", nil) { |e| events << e }
+
+      tool_results = events.select(&.type.tool_result?).map(&.text)
+      # The second tool call (Write to a non-plan path) must be blocked by the
+      # plan-mode guard — the guard emits an Info event with its message and
+      # the tool batch reports "Permission denied".
+      blocked_result = tool_results.select(&.includes?("Permission denied for Write"))
+      blocked_result.should_not be_empty
+      guard_infos = events.select(&.type.info?).map(&.text)
+      guard_infos.any?(&.includes?("Plan mode is active")).should be_true
+
+      # The plan file was writable (step 3 succeeded) and ExitPlanMode reported
+      # auto-approval (step 4).
+      exit_result = tool_results.find(&.includes?("Exited plan mode"))
+      exit_result.should_not be_nil
+      exit_result.not_nil!.includes?("auto-approved").should be_true
+
+      # The forbidden file was never created.
+      File.exists?("/tmp/hcode-plan-block.txt").should be_false
+
+      # Plan-mode reminder was injected into the messages sent to the LLM on at
+      # least one step while plan mode was active.
+      reminders = captured_messages.flatten.select(&.content.to_s.includes?("Plan mode is active"))
+      reminders.should_not be_empty
+
+      # Plan mode is off after exit.
+      service.status.should be_nil
+    ensure
+      Hcode::Tools::PlanMode.plan_service = nil
+      Hcode::Tools::PlanMode.permission_mode = nil
+      FileUtils.rm_rf(dir)
+      File.delete("/tmp/hcode-plan-block.txt") rescue nil
+    end
+  end
+end
+
+# Mock provider wrapper that records every message list handed to `chat`,
+# then delegates to the underlying MockProvider's script. Used by the plan-mode
+# integration test to assert the plan-mode reminder injection reached the LLM.
+private class RecordingProvider < Hcode::LLM::Provider
+  @step : Int32 = 0
+
+  def initialize(@inner : Hcode::LLM::MockProvider, @captured : Array(Array(Hcode::LLM::Message)))
+  end
+
+  def name : String
+    "recording"
+  end
+
+  def model_name : String
+    "test"
+  end
+
+  def fetch_models : Array(String)
+    [] of String
+  end
+
+  def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
+           system_prompt : String? = nil, aborted? : -> Bool = -> { false },
+           &block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+    @captured << messages.map(&.dup)
+    @inner.chat(messages, tools, system_prompt, aborted?) { |p| block.call(p) }
+  end
 end

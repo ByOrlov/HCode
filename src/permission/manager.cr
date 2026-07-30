@@ -59,6 +59,15 @@ module Hcode
       end
 
       def check(tool_name : String, args : String, on_event : Loop::Event ->) : Bool
+        # Plan-mode read-only guard: while plan mode is active, mutating tools
+        # are blocked (except writes to the current plan file). Evaluated first,
+        # before user rules and permission modes — mirrors JS
+        # `plan-mode-guard-deny.ts`.
+        if plan_block = Tools::PlanMode.guard_check(tool_name, args)
+          on_event.call(Loop::Event.info(plan_block))
+          return false
+        end
+
         # User-configured rules take precedence over the mode default.
         # A deny rule always blocks, even in yolo. An allow rule bypasses
         # the prompt. An ask rule forces the prompt.

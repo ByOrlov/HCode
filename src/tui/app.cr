@@ -211,6 +211,7 @@ module Hcode
       @effort_list : SelectList
       @theme_list : SelectList
       @question_dialog : QuestionDialog
+      @plan_review_dialog : PlanReviewDialog
       @undo_dialog : UndoDialog
       @tasks_browser : TasksBrowser
       @help_panel : HelpPanel
@@ -327,6 +328,7 @@ module Hcode
         @effort_list = SelectList.new([] of String, @theme)
         @theme_list = SelectList.new([] of String, @theme)
         @question_dialog = QuestionDialog.new(@theme)
+        @plan_review_dialog = PlanReviewDialog.new(@theme)
         @undo_dialog = UndoDialog.new(@theme)
         @tasks_browser = TasksBrowser.new(@theme)
         @help_panel = HelpPanel.new(@theme)
@@ -851,6 +853,21 @@ module Hcode
         received.receive
       end
 
+      # Surface a finalized plan for interactive approval. Mirrors
+      # `request_questions`: shows the PlanReviewDialog and blocks until the
+      # user decides. Returns the review result (never nil — dismissal is
+      # encoded as `PlanReviewDecision::Dismissed`).
+      def request_plan_review(plan : String, path : String?,
+                              options : Array(Tools::PlanOption)?) : Tools::PlanReviewResult
+        received = Channel(Tools::PlanReviewResult).new(1)
+        @plan_review_dialog.show(plan, path, options, ->(result : Tools::PlanReviewResult) do
+          received.send(result)
+          nil
+        end)
+        @dirty = true
+        received.receive
+      end
+
       private def handle_key(key : KeyEvent) : Nil
         if @exit_confirm
           case key.key
@@ -910,6 +927,12 @@ module Hcode
 
         if @question_dialog.visible?
           @question_dialog.handle_input(key)
+          @dirty = true
+          return
+        end
+
+        if @plan_review_dialog.visible?
+          @plan_review_dialog.handle_input(key)
           @dirty = true
           return
         end
@@ -2252,6 +2275,10 @@ module Hcode
 
         if @question_dialog.visible?
           new_lines.concat(@question_dialog.render(cols))
+        end
+
+        if @plan_review_dialog.visible?
+          new_lines.concat(@plan_review_dialog.render(cols))
         end
 
         if @undo_dialog.visible?

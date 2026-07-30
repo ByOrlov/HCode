@@ -4,9 +4,8 @@ module Hcode
     #
     # Контракты перенесены 1:1 из
     # `packages/agent-core-v2/src/agent/plan/tools/enter-plan-mode.ts`
-    # и `exit-plan-mode.ts`.
-    #
-    # См. детальный план портирования в `md-tools/plan-mode.md`.
+    # и `exit-plan-mode.ts`. Plan-mode guard, review service и runtime wiring
+    # описаны в `plans/WIRE-PLAN-MODE.md`.
     class EnterPlanMode < Tool
       DESCRIPTION = <<-TEXT
         Use this tool proactively when you're about to start a non-trivial implementation task.
@@ -194,13 +193,45 @@ module Hcode
         resolved = resolve_plan(status)
         return resolved if resolved.is_error
 
-        service.exit
-
         mode = PlanMode.permission_mode
         if mode && mode.auto?
-          ToolResult.success(format_auto_approved(resolved.content, status.path))
-        else
-          ToolResult.success(format_user_approved(resolved.content, status.path))
+          service.exit
+          return ToolResult.success(format_auto_approved(resolved.content, status.path))
+        end
+
+        # Interactive review (manual / yolo). Falls back to auto-approve when no
+        # review service is registered (e.g. headless / scripted runs).
+        reviewer = PlanMode.plan_review_service
+        if reviewer.nil?
+          service.exit
+          return ToolResult.success(format_user_approved(resolved.content, status.path))
+        end
+
+        result = reviewer.request(resolved.content, status.path, options)
+        handle_review_result(result, service, resolved.content, status.path, options)
+      end
+
+      # Branches mirror the JS `exitPlanModeApprovalResult` outcomes.
+      private def handle_review_result(result : PlanReviewResult?, service : PlanService,
+                                       plan : String, path : String?,
+                                       options : Array(PlanOption)?) : ToolResult
+        case result.try(&.decision) || PlanReviewDecision::Dismissed
+        in .approve?
+          service.exit
+          res = result.not_nil!
+          sel = options.try { |opts| opts.find { |o| o.label == res.selected_label } }
+          prefix = sel ? "Selected approach: #{sel.label}\nExecute ONLY the selected approach. Do not execute any unselected alternatives.\n\n" : ""
+          ToolResult.success(prefix + format_user_approved(plan, path))
+        in .revise?
+          fb = result.not_nil!.feedback
+          msg = fb.empty? ? "User requested revisions. Plan mode remains active." :
+            "User rejected the plan. Feedback:\n\n#{fb}"
+          ToolResult.success(msg)
+        in .reject_and_exit?
+          service.exit
+          ToolResult.error("Plan rejected by user. Plan mode deactivated.")
+        in .dismissed?
+          ToolResult.success("Plan approval dismissed. Plan mode remains active.")
         end
       end
 
@@ -327,10 +358,76 @@ module Hcode
       end
     end
 
+    # Outcome of an interactive plan review (Approve / Revise / Reject & Exit /
+    # Dismissed). Mirrors the JS `ApprovalResponse.decision` branches in
+    # `exit-plan-mode-review-ask.ts`.
+    enum PlanReviewDecision
+      Approve
+      Revise
+      RejectAndExit
+      Dismissed
+    end
+
+    struct PlanReviewResult
+      getter decision : PlanReviewDecision
+      getter selected_label : String?
+      getter feedback : String
+
+      def initialize(@decision : PlanReviewDecision,
+                     @selected_label : String? = nil,
+                     @feedback : String = "")
+      end
+    end
+
+    # Service the ExitPlanMode tool calls to surface a finalized plan to the
+    # user for interactive approval. The host (TUI) registers an implementation
+    # that blocks until the user decides; headless / scripted runs leave it nil
+    # and ExitPlanMode falls back to auto-approve.
+    abstract class PlanReviewService
+      abstract def request(plan : String, path : String?,
+                           options : Array(PlanOption)?) : PlanReviewResult?
+    end
+
     # Контейнер глобального состояния plan mode: service + permission mode.
     module PlanMode
       class_property plan_service : PlanService? = nil
       class_property permission_mode : PermissionModeRef? = nil
+      class_property plan_review_service : PlanReviewService? = nil
+
+      # Plan-mode read-only enforcement. Returns a deny message when the tool
+      # must be blocked while plan mode is active, or nil to allow it. Mirrors
+      # JS `plan-mode-guard-deny.ts`: Write/Edit may only target the current
+      # plan file; TaskStop / CronCreate / CronDelete are blocked outright.
+      def self.guard_check(tool_name : String, args : String) : String?
+        svc = plan_service
+        return nil unless svc && (status = svc.status)
+        plan_path = status.path
+
+        if tool_name == "Write" || tool_name == "Edit"
+          target = extract_path(tool_name, args)
+          if target && plan_path &&
+             File.expand_path(target) == File.expand_path(plan_path)
+            return nil
+          end
+          return "Plan mode is active. You may only write to the current plan file: #{plan_path || "(no plan file selected yet)"}. Call ExitPlanMode to exit plan mode before editing other files."
+        end
+
+        if PlanMode::MUTATING_TOOLS.includes?(tool_name)
+          return "#{tool_name} is not available in plan mode. Call ExitPlanMode first."
+        end
+
+        nil
+      end
+
+      MUTATING_TOOLS = Set{"TaskStop", "CronCreate", "CronDelete"}
+
+      private def self.extract_path(tool_name : String, args : String) : String?
+        return nil if args.empty?
+        parsed = JSON.parse(args)
+        (parsed["path"]? || parsed["filePath"]?).try(&.to_s)
+      rescue JSON::ParseException
+        nil
+      end
     end
 
     # Lightweight permission-mode reference — ввёл, чтобы не тянуть тяжёлый

@@ -238,4 +238,94 @@ describe Hcode::Permission::Manager do
       end
     end
   end
+
+  # Plan-mode guard integration — verifies Permission::Manager.check enforces
+  # the plan-mode read-only invariant before any other rule/mode logic.
+  describe "plan-mode guard" do
+    it "blocks Write while plan mode is active, even in yolo" do
+      dir = File.join(Dir.tempdir, "guard-spec-#{Random::Secure.hex(8)}")
+      Dir.mkdir_p(dir)
+      plan_path = File.join(dir, "plan.md")
+      service = Hcode::Tools::AgentPlanService.new(dir, "main", plan_path)
+      Hcode::Tools::PlanMode.plan_service = service
+      service.enter
+
+      begin
+        manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+        events = [] of Hcode::Loop::Event
+        args = %({"path":"/tmp/other.txt","content":"x"})
+        manager.check("Write", args, ->(e : Hcode::Loop::Event) { events << e }).should be_false
+        events.any?(&.text.try(&.includes?("Plan mode is active"))).should be_true
+      ensure
+        Hcode::Tools::PlanMode.plan_service = nil
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    it "allows Write to the plan file while plan mode is active" do
+      dir = File.join(Dir.tempdir, "guard-spec-#{Random::Secure.hex(8)}")
+      Dir.mkdir_p(dir)
+      plan_path = File.join(dir, "plan.md")
+      service = Hcode::Tools::AgentPlanService.new(dir, "main", plan_path)
+      Hcode::Tools::PlanMode.plan_service = service
+      service.enter
+
+      begin
+        manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+        events = [] of Hcode::Loop::Event
+        args = %({"path":#{plan_path.inspect},"content":"plan body"})
+        manager.check("Write", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      ensure
+        Hcode::Tools::PlanMode.plan_service = nil
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    it "blocks TaskStop / CronCreate / CronDelete in plan mode" do
+      dir = File.join(Dir.tempdir, "guard-spec-#{Random::Secure.hex(8)}")
+      Dir.mkdir_p(dir)
+      plan_path = File.join(dir, "plan.md")
+      service = Hcode::Tools::AgentPlanService.new(dir, "main", plan_path)
+      Hcode::Tools::PlanMode.plan_service = service
+      service.enter
+
+      begin
+        manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+        events = [] of Hcode::Loop::Event
+        ["TaskStop", "CronCreate", "CronDelete"].each do |tool|
+          manager.check(tool, "{}", ->(e : Hcode::Loop::Event) { events << e }).should be_false
+        end
+      ensure
+        Hcode::Tools::PlanMode.plan_service = nil
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    it "does not block read-only tools in plan mode" do
+      dir = File.join(Dir.tempdir, "guard-spec-#{Random::Secure.hex(8)}")
+      Dir.mkdir_p(dir)
+      plan_path = File.join(dir, "plan.md")
+      service = Hcode::Tools::AgentPlanService.new(dir, "main", plan_path)
+      Hcode::Tools::PlanMode.plan_service = service
+      service.enter
+
+      begin
+        manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+        events = [] of Hcode::Loop::Event
+        manager.check("Read", %({"path":"/tmp/x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check("Grep", %({"pattern":"x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check("Glob", %({"pattern":"*"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      ensure
+        Hcode::Tools::PlanMode.plan_service = nil
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    it "does nothing when plan mode is inactive" do
+      Hcode::Tools::PlanMode.plan_service = nil
+      manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+      events = [] of Hcode::Loop::Event
+      manager.check("Write", %({"path":"/tmp/x","content":"y"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+    end
+  end
 end

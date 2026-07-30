@@ -73,6 +73,7 @@ module Hcode
 
             @context.prune_injections
             inject_step_reminders(steps)
+            inject_plan_reminder
 
             step_result = execute_step(sys_prompt, on_event)
 
@@ -267,6 +268,52 @@ module Hcode
         end
 
         @context.add_injection(reminder)
+      end
+
+      # Plan-mode reminder: while plan mode is active, inject a `<system-reminder>`
+      # each step restating the read-only invariant and the workflow. Mirrors the
+      # JS `PlanModeInjector.getInjection` full/sparse reminder.
+      private def inject_plan_reminder : Nil
+        svc = Tools::PlanMode.plan_service
+        return unless svc && (status = svc.status)
+        plan_path = status.path
+        body = plan_mode_active_reminder(plan_path)
+        reminder = "<system-reminder>\n#{body}\n</system-reminder>"
+        @context.add_injection(reminder)
+      end
+
+      private def plan_mode_active_reminder(plan_path : String?) : String
+        if plan_path.nil?
+          return <<-TEXT
+          Plan mode is active. You MUST NOT make any edits or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.
+
+          Workflow:
+            1. Understand — explore the codebase with Glob, Grep, Read.
+            2. Design — converge on the best approach; consider trade-offs but aim for a single recommendation.
+            3. Review — re-read key files to verify understanding.
+            4. Wait for the host to provide a plan file path, write the plan there, then call ExitPlanMode.
+
+          AskUserQuestion is for clarifying missing requirements or user preferences that affect the plan. Never ask about plan approval via text or AskUserQuestion. Your turn must end with either AskUserQuestion (to clarify requirements) or ExitPlanMode (to request plan approval). Do NOT end your turn any other way.
+          TEXT
+        end
+
+        <<-TEXT
+        Plan mode is active. You MUST NOT make any edits (with the exception of the current plan file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
+
+        Workflow:
+          1. Understand — explore the codebase with Glob, Grep, Read.
+          2. Design — converge on the best approach; consider trade-offs but aim for a single recommendation.
+          3. Review — re-read key files to verify understanding.
+          4. Write Plan — modify the plan file with Write or Edit. Use Write if the plan file does not exist yet.
+          5. Exit — call ExitPlanMode for user approval.
+
+        ## Handling multiple approaches
+        Keep it focused: at most 2-3 meaningfully different approaches. When you do include multiple approaches in the plan, you MUST pass them as the `options` parameter when calling ExitPlanMode, so the user can select which approach to execute at approval time.
+
+        AskUserQuestion is for clarifying missing requirements or user preferences that affect the plan. Never ask about plan approval via text or AskUserQuestion. Your turn must end with either AskUserQuestion (to clarify requirements or preferences) or ExitPlanMode (to request plan approval). Do NOT end your turn any other way.
+
+        Plan file: #{plan_path}
+        TEXT
       end
 
       private def trigger_compaction(system_prompt : String, on_event : Event ->) : String

@@ -8,11 +8,13 @@ private def with_plan_service(&)
   service = Hcode::Tools::AgentPlanService.new(dir, "agent-test", File.join(dir, "plan.md"))
   Hcode::Tools::PlanMode.plan_service = service
   Hcode::Tools::PlanMode.permission_mode = nil
+  Hcode::Tools::PlanMode.plan_review_service = nil
   begin
     yield service, dir
   ensure
     Hcode::Tools::PlanMode.plan_service = nil
     Hcode::Tools::PlanMode.permission_mode = nil
+    Hcode::Tools::PlanMode.plan_review_service = nil
     FileUtils.rm_rf(dir)
   end
 end
@@ -135,6 +137,119 @@ describe Hcode::Tools::ExitPlanMode do
     end
   end
 
+  # ── Interactive review branches (manual / yolo with a PlanReviewService) ──
+
+  it "approves via the review service and exits plan mode" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "The plan.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::Approve)
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({})))
+      result.is_error.should be_false
+      result.content.should contain("Exited plan mode")
+      result.content.should contain("## Approved Plan:")
+      result.content.should contain("The plan.")
+      service.status.should be_nil
+    end
+  end
+
+  it "approves with a selected option and prefixes the chosen approach" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "Multi-approach plan.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::Approve,
+          selected_label: "Approach A")
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({
+        "options": [{"label": "Approach A", "description": "first"}, {"label": "Approach B"}]
+      })))
+      result.is_error.should be_false
+      result.content.should contain("Selected approach: Approach A")
+      result.content.should contain("Execute ONLY the selected approach")
+      result.content.should contain("## Approved Plan:")
+    end
+  end
+
+  it "revise keeps plan mode active and surfaces feedback" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "Draft.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::Revise,
+          feedback: "Add more detail to step 2")
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({})))
+      result.is_error.should be_false
+      result.content.should contain("User rejected the plan. Feedback:")
+      result.content.should contain("Add more detail to step 2")
+      # Plan mode stays active.
+      service.status.should_not be_nil
+    end
+  end
+
+  it "revise without feedback keeps plan mode active" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "Draft.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::Revise)
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({})))
+      result.is_error.should be_false
+      result.content.should contain("User requested revisions. Plan mode remains active.")
+      service.status.should_not be_nil
+    end
+  end
+
+  it "reject & exit deactivates plan mode with an error" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "Bad plan.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::RejectAndExit)
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({})))
+      result.is_error.should be_true
+      result.content.should contain("Plan rejected by user. Plan mode deactivated.")
+      service.status.should be_nil
+    end
+  end
+
+  it "dismissed (Esc) keeps plan mode active" do
+    with_plan_service do |service, dir|
+      File.write(File.join(dir, "plan.md"), "Plan.")
+      service.enter
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      Hcode::Tools::PlanMode.plan_review_service =
+        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          Hcode::Tools::PlanReviewDecision::Dismissed)
+
+      tool = Hcode::Tools::ExitPlanMode.new
+      result = tool.execute(JSON.parse(%({})))
+      result.is_error.should be_false
+      result.content.should contain("Plan approval dismissed. Plan mode remains active.")
+      service.status.should_not be_nil
+    end
+  end
+
   it "rejects duplicate option labels" do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "x")
@@ -224,6 +339,24 @@ module Hcode::Tools::PlanServiceSpecHelper
 
     def exit(id : String? = nil) : Nil
       @active = false
+    end
+  end
+
+  # Scripted PlanReviewService: returns a fixed result, ignoring its inputs.
+  # Lets the ExitPlanMode review branches be tested without a TUI.
+  class MockReviewService < Hcode::Tools::PlanReviewService
+    def initialize(@result : Hcode::Tools::PlanReviewResult)
+    end
+
+    def self.new(decision : Hcode::Tools::PlanReviewDecision,
+                 selected_label : String? = nil,
+                 feedback : String = "")
+      new(Hcode::Tools::PlanReviewResult.new(decision, selected_label, feedback))
+    end
+
+    def request(plan : String, path : String?,
+               options : Array(Hcode::Tools::PlanOption)?) : Hcode::Tools::PlanReviewResult?
+      @result
     end
   end
 end

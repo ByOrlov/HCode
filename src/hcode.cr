@@ -91,6 +91,7 @@ require "./tui/select_list"
 require "./tui/commands"
 require "./tui/help_panel"
 require "./tui/question_dialog"
+require "./tui/plan_review_dialog"
 require "./tui/undo_dialog"
 require "./tui/tasks_browser"
 require "./tui/app"
@@ -663,6 +664,29 @@ module Hcode
       # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
       Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
 
+      # Plan-mode wiring: instantiate the per-session plan service, expose its
+      # permission mode, and bridge ExitPlanMode's interactive review to the
+      # TUI's PlanReviewDialog. `/plan` toggles the mode through on_plan_mode.
+      plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+      Hcode::Tools::PlanMode.plan_service = plan_service
+      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(
+        auto: permission.mode.auto?)
+      Hcode::Tools::PlanMode.plan_review_service = AppPlanReviewService.new(app)
+      app.on_plan_mode = ->(next_on : Bool) do
+        svc = Hcode::Tools::PlanMode.plan_service
+        false if svc.nil?
+        begin
+          if next_on
+            svc.try(&.enter)
+          else
+            svc.try(&.cancel)
+          end
+          true
+        rescue
+          false
+        end
+      end
+
       # TaskService was already created and assigned in `run` so the headless
       # path shares the same instance; reuse it here for the profilers and the
       # /tasks browser.
@@ -710,6 +734,7 @@ module Hcode
         store.state_path = new_store.state_path
         store.ensure_wire
         app.session_id = store.read_state.try(&.id) || ""
+        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
         nil
       }
       app.on_resume_session = ->(path : String) do
@@ -721,6 +746,7 @@ module Hcode
         store.state_path = resumed.state_path
         app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
         app.load_transcript_from(agent.context)
+        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
         nil
       end
       app.on_fork = ->{
@@ -1205,6 +1231,20 @@ module Hcode
       # Block this turn fiber until the user answers. The agent loop's abort
       # signal is handled separately by the tool layer; here we just wait.
       result_chan.receive
+    end
+  end
+
+  # Bridge ExitPlanMode tool → TUI PlanReviewDialog. When the tool calls
+  # `PlanReviewService#request` in manual / yolo permission mode, this pushes
+  # the finalized plan into the App's review dialog and blocks until the user
+  # decides (Approve / Revise / Reject & Exit / Cancel).
+  class AppPlanReviewService < Tools::PlanReviewService
+    def initialize(@app : TUI::App)
+    end
+
+    def request(plan : String, path : String?,
+               options : Array(Tools::PlanOption)?) : Tools::PlanReviewResult?
+      @app.request_plan_review(plan, path, options)
     end
   end
 end
