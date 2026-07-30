@@ -55,6 +55,9 @@ require "./loop/events"
 require "./loop/abort"
 require "./loop/dedup"
 require "./loop/agent"
+require "./loop/subagent_registry"
+require "./loop/subagent_agent_runner"
+require "./loop/subagent_swarm_runner"
 require "./permission/manager"
 require "./notify/config"
 require "./notify/status"
@@ -309,6 +312,10 @@ module Hcode
 
       system_prompt = Prompt::SystemPrompt.build(work_dir)
 
+      task_service = Hcode::Tools::InMemoryTaskService.new
+      Hcode::Tools::Task.service = task_service
+      wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
+
       if prompt
         run_headless(prompt, agent, system_prompt, store, config)
       else
@@ -441,6 +448,36 @@ module Hcode
         STDERR.puts "✗ #{ex.message}".colorize.fore(C_ERROR)
         exit(1)
       end
+    end
+
+    private def self.wire_subagent_runners(agent : Loop::Agent,
+                                           task_service : Tools::InMemoryTaskService,
+                                           system_prompt : String,
+                                           work_dir : String,
+                                           config : Config::Config) : Nil
+      registry = Loop::SubagentRegistry.new
+      permission_mode = Permission::Mode.parse(config.permission_mode)
+
+      agent_runner = Loop::SubagentAgentRunner.new(
+        registry: registry,
+        parent_agent: agent,
+        task_service: task_service,
+        system_prompt: system_prompt,
+        work_dir: work_dir,
+        permission_mode: permission_mode,
+      )
+      swarm_runner = Loop::SubagentSwarmRunner.new(
+        registry: registry,
+        parent_agent: agent,
+        system_prompt: system_prompt,
+        work_dir: work_dir,
+        permission_mode: permission_mode,
+      )
+      Tools::Agent.runner = agent_runner
+      Tools::AgentSwarm.runner = swarm_runner
+      # TaskList/TaskOutput/TaskStop are registered for the main agent, so
+      # background subagent execution is available.
+      Tools::Agent.background_enabled = true
     end
 
     private def self.run_headless(prompt, agent, system_prompt, store, config)
@@ -591,10 +628,10 @@ module Hcode
       # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
       Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
 
-      # Wire the TaskList tool to an in-memory task service so background
-      # tasks are tracked and the /tasks browser can list them.
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      Hcode::Tools::Task.service = task_service
+      # TaskService was already created and assigned in `run` so the headless
+      # path shares the same instance; reuse it here for the profilers and the
+      # /tasks browser.
+      task_service = Hcode::Tools::Task.service.as(Hcode::Tools::InMemoryTaskService)
 
       register_profilers(agent, app, permission, task_service, system_prompt)
 

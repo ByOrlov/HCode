@@ -1,0 +1,129 @@
+require "./subagent_registry"
+require "./abort"
+require "../tools/agent_swarm"
+require "../tools/task"
+
+module Hcode
+  module Loop
+    # `Tools::SwarmRunner` implementation. The `AgentSwarm` tool already fans
+    # specs out into parallel fibers and collects results in order; this class
+    # only owns the single-spec run: spawn (or resume) one child agent, drive a
+    # turn, return the `SwarmRunResult`. Concurrency, ordering, and XML render
+    # all live in the tool.
+    class SubagentSwarmRunner
+      include Tools::SwarmRunner
+
+      PARENT_AGENT_ID = "main"
+
+      def initialize(@registry : SubagentRegistry,
+                     @parent_agent : Loop::Agent,
+                     @system_prompt : String,
+                     @work_dir : String,
+                     @permission_mode : Permission::Mode)
+      end
+
+      def call(spec : Tools::AgentSwarmSpec,
+               ctx : Tools::SwarmRunContext) : Tools::SwarmRunResult
+        if spec.is_a?(Tools::ResumeSpec)
+          run_resume(spec.as(Tools::ResumeSpec), ctx)
+        else
+          run_spawn(spec, ctx)
+        end
+      end
+
+      def resume_item?(agent_id : String) : String?
+        @registry.swarm_item(agent_id)
+      end
+
+      def timeout_ms : Int32?
+        env = ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?
+        return nil unless env
+        v = env.to_i?
+        (v && v >= 1) ? v : nil
+      end
+
+      # ----------------------------------------------------------------
+
+      private def run_spawn(spec : Tools::AgentSwarmSpec,
+                            ctx : Tools::SwarmRunContext) : Tools::SwarmRunResult
+        entry = @registry.create(
+          parent_agent: @parent_agent,
+          profile_name: ctx.profile_name,
+          work_dir: @work_dir,
+          system_prompt: @system_prompt,
+          permission_mode: @permission_mode,
+          max_context_tokens: @parent_agent.context.max_context_tokens,
+          parent_agent_id: PARENT_AGENT_ID,
+          swarm_item: spec.item,
+        )
+
+        drive(entry, spec, ctx)
+      end
+
+      private def run_resume(spec : Tools::ResumeSpec,
+                             ctx : Tools::SwarmRunContext) : Tools::SwarmRunResult
+        entry = @registry.get(spec.agent_id)
+        unless entry
+          return Tools::SwarmRunResult.new(
+            spec: spec, agent_id: spec.agent_id,
+            status: Tools::SwarmStatus::Failed,
+            error: "Agent instance \"#{spec.agent_id}\" does not exist",
+          )
+        end
+        entry = entry.not_nil!
+
+        if entry.running?
+          return Tools::SwarmRunResult.new(
+            spec: spec, agent_id: spec.agent_id,
+            status: Tools::SwarmStatus::Failed,
+            error: "Agent instance \"#{spec.agent_id}\" is already running",
+          )
+        end
+
+        drive(entry, spec, ctx)
+      end
+
+      private def drive(entry : SubagentEntry,
+                        spec : Tools::AgentSwarmSpec,
+                        ctx : Tools::SwarmRunContext) : Tools::SwarmRunResult
+        entry.running = true
+        begin
+          result = entry.agent.run_turn(spec.prompt, @system_prompt) { |_| }
+          summary = latest_assistant_text(entry.context)
+          Tools::SwarmRunResult.new(
+            spec: spec,
+            agent_id: entry.agent_id,
+            status: Tools::SwarmStatus::Completed,
+            state: "started",
+            result: summary,
+          )
+        rescue ex : Loop::UserCancellationError
+          Tools::SwarmRunResult.new(
+            spec: spec,
+            agent_id: entry.agent_id,
+            status: Tools::SwarmStatus::Aborted,
+            error: ex.reason,
+          )
+        rescue ex
+          Tools::SwarmRunResult.new(
+            spec: spec,
+            agent_id: entry.agent_id,
+            status: Tools::SwarmStatus::Failed,
+            error: ex.message || ex.to_s,
+          )
+        ensure
+          entry.running = false
+        end
+      end
+
+      private def latest_assistant_text(context : Context::Memory) : String
+        context.history.reverse_each do |cm|
+          next unless cm.message.role == "assistant"
+          text = cm.message.content.to_s
+          return text unless text.empty?
+        end
+        ""
+      end
+    end
+  end
+end
