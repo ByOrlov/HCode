@@ -204,7 +204,7 @@ module Hcode
 
         if response.status_code != 200
           raise ApiError.new(response.status_code,
-            "Models API error #{response.status_code}: #{response.body}",
+            ApiError.extract_message("Models API error #{response.status_code}", response.body),
             ApiError.retryable_status?(response.status_code))
         end
 
@@ -476,8 +476,9 @@ module Hcode
               if response.status_code != 200
                 error_body = response.body_io.gets_to_end
                 status = response.status_code
-                raise ApiError.new(status, "Chat API error #{status}: #{error_body}",
-                                   ApiError.retryable_status?(status))
+                raise ApiError.new(status,
+                  ApiError.extract_message("Chat API error #{status}", error_body),
+                  ApiError.retryable_status?(status))
               end
 
               response.body_io.each_line do |line|

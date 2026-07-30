@@ -437,6 +437,37 @@ module Hcode
       def self.retryable_status?(status_code : Int32) : Bool
         status_code == 408 || status_code == 429 || status_code >= 500
       end
+
+      # Builds a human-readable error message from a raw HTTP response body.
+      #
+      # Backends usually wrap the message in `{"error":{"message":...,"type":...}}`
+      # (OpenAI/Moonshot/Z.AI), but some return a bare `{"error":"..."}` or
+      # `{"message":"..."}` / `{"detail":"..."}`. This strips the JSON envelope
+      # and returns `<prefix>: <clean message>`. When the body is not JSON or
+      # has no recognized field, the original body is returned unchanged so the
+      # caller never loses information.
+      def self.extract_message(prefix : String, body : String) : String
+        return prefix if body.empty?
+        clean = parse_error_message(body)
+        clean ? "#{prefix}: #{clean}" : "#{prefix}: #{body}"
+      end
+
+      private def self.parse_error_message(body : String) : String?
+        return nil unless body.starts_with?('{')
+
+        json = JSON.parse(body) rescue nil
+        return nil unless json
+
+        if err = json["error"]?
+          if h = err.as_h?
+            return h["message"]?.try(&.as_s?)
+          elsif s = err.as_s?
+            return s
+          end
+        end
+        json["message"]?.try(&.as_s?) ||
+          json["detail"]?.try(&.as_s?)
+      end
     end
 
     # Raised when an in-flight request is aborted by the user. Lets the

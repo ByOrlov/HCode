@@ -178,6 +178,48 @@ describe Hcode::LLM::ApiError do
     err.retryable?.should be_false
     err.message.not_nil!.should contain("quota exceeded")
   end
+
+  describe ".extract_message" do
+    it "pulls the message out of an OpenAI-style error envelope" do
+      body = %({"error":{"message":"membership not active","type":"invalid_request_error"}})
+      Hcode::LLM::ApiError.extract_message("Chat API error 402", body)
+        .should eq("Chat API error 402: membership not active")
+    end
+
+    it "handles a string-valued error field" do
+      body = %({"error":"rate limited"})
+      Hcode::LLM::ApiError.extract_message("x", body).should eq("x: rate limited")
+    end
+
+    it "handles a top-level message field" do
+      body = %({"message":"nope"})
+      Hcode::LLM::ApiError.extract_message("x", body).should eq("x: nope")
+    end
+
+    it "handles a top-level detail field" do
+      body = %({"detail":"forbidden"})
+      Hcode::LLM::ApiError.extract_message("x", body).should eq("x: forbidden")
+    end
+
+    it "falls back to the full raw body when it is not JSON" do
+      Hcode::LLM::ApiError.extract_message("x", "plain text").should eq("x: plain text")
+    end
+
+    it "returns the full original body when JSON has no recognized field" do
+      body = %({"foo":"bar"}).to_s
+      Hcode::LLM::ApiError.extract_message("x", body).should eq("x: #{body}")
+    end
+
+    it "returns the full long body verbatim when it cannot be parsed" do
+      long = "x" * 500
+      result = Hcode::LLM::ApiError.extract_message("x", long)
+      result.should eq("x: #{long}")
+    end
+
+    it "returns only the prefix for an empty body" do
+      Hcode::LLM::ApiError.extract_message("x", "").should eq("x")
+    end
+  end
 end
 
 describe Hcode::LLM::Provider do
