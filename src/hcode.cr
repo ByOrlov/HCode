@@ -527,7 +527,7 @@ module Hcode
       pending_calls = {} of String => {String, String}
 
       begin
-        result = agent.run_turn(prompt, system_prompt) do |event|
+        result = agent.run_goal_turn(prompt, system_prompt) do |event|
           case event.type
           when .step_begin?
             assistant_buf.clear
@@ -1063,7 +1063,7 @@ module Hcode
         pending_tool_names = {} of String => String
 
         begin
-          result = agent.run_turn(prompt_text, system_prompt) do |event|
+          result = agent.run_goal_turn(prompt_text, system_prompt) do |event|
             case event.type
             when .text_delta?
               app.on_event(Loop::Event.text_delta(event.text))

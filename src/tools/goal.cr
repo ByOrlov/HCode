@@ -107,6 +107,8 @@ module Hcode
       getter turns_used : Int32
       getter tokens_used : Int32
       getter wall_clock_ms : Int64
+      getter budget_limits : GoalBudgetLimits
+      getter wall_clock_resumed_at : Int64?
       getter budget : GoalBudgetReport
       getter terminal_reason : String?
 
@@ -117,8 +119,41 @@ module Hcode
                      @tokens_used : Int32 = 0,
                      @wall_clock_ms : Int64 = 0,
                      @completion_criterion : String? = nil,
-                     @budget : GoalBudgetReport = GoalBudgetReport.new,
+                     @budget_limits : GoalBudgetLimits = GoalBudgetLimits.empty,
+                     @wall_clock_resumed_at : Int64? = nil,
                      @terminal_reason : String? = nil)
+        @budget = compute_budget_report
+      end
+
+      # Live wall-clock: accumulated total + in-flight active interval.
+      def live_wall_clock_ms(now : Int64 = Time.utc.to_unix_ms) : Int64
+        if status.active? && (anchor = @wall_clock_resumed_at)
+          @wall_clock_ms + Math.max(0_i64, now - anchor)
+        else
+          @wall_clock_ms
+        end
+      end
+
+      private def compute_budget_report(now : Int64 = Time.utc.to_unix_ms) : GoalBudgetReport
+        limits = @budget_limits
+        wc = live_wall_clock_ms(now)
+
+        token_reached = !(tb = limits.token_budget).nil? && @tokens_used >= tb
+        turn_reached = !(tb2 = limits.turn_budget).nil? && @turns_used >= tb2
+        wc_reached = !(wcb = limits.wall_clock_budget_ms).nil? && wc >= wcb
+
+        GoalBudgetReport.new(
+          token_budget: limits.token_budget,
+          turn_budget: limits.turn_budget,
+          wall_clock_budget_ms: limits.wall_clock_budget_ms,
+          remaining_tokens: (tb3 = limits.token_budget).nil? ? nil : Math.max(0, tb3 - @tokens_used),
+          remaining_turns: (tb4 = limits.turn_budget).nil? ? nil : Math.max(0, tb4 - @turns_used),
+          remaining_wall_clock_ms: (wcb2 = limits.wall_clock_budget_ms).nil? ? nil : Math.max(0_i64, wcb2 - wc),
+          token_budget_reached: token_reached,
+          turn_budget_reached: turn_reached,
+          wall_clock_budget_reached: wc_reached,
+          over_budget: token_reached || turn_reached || wc_reached,
+        )
       end
     end
 
@@ -134,21 +169,21 @@ module Hcode
       end
     end
 
-    abstract struct GoalReasonInput
+    struct GoalReasonInput
       property reason : String?
 
       def initialize(@reason : String? = nil)
       end
     end
 
-    struct ResumeGoalInput < GoalReasonInput
+    struct ResumeGoalInput
+      property reason : String?
       property? continue_if_paused : Bool = false
       property? continue_if_blocked : Bool = false
 
-      def initialize(reason : String? = nil,
+      def initialize(@reason : String? = nil,
                      @continue_if_paused : Bool = false,
                      @continue_if_blocked : Bool = false)
-        super(reason)
       end
     end
 
@@ -169,9 +204,17 @@ module Hcode
       abstract def set_budget_limits(input : BudgetInput, actor : String = "model") : GoalSnapshot
       abstract def mark_complete(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot?
       abstract def mark_blocked(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot?
+
+      # Драйвер: учёт хода (no-op вне active). Возвращает обновлённый snapshot
+      # или nil, если цель отсутствует или не active.
+      abstract def increment_turn : GoalSnapshot?
+      abstract def record_token_usage(delta : Int32) : GoalSnapshot?
+      abstract def pause_on_interrupt(reason : String = "Paused after interruption") : GoalSnapshot?
+      abstract def pause_active_goal(reason : String = "Paused after runtime stop", actor : String = "runtime") : GoalSnapshot?
     end
 
-    # Простейшая in-memory реализация GoalService.
+    # In-memory реализация GoalService. Хранит текущую цель как GoalSnapshot
+    # с актуальными budget_limits и wall-clock интервалами.
     class AgentGoalService < GoalService
       @goal : GoalSnapshot?
 
@@ -184,7 +227,6 @@ module Hcode
       end
 
       def is_goal_tool_target?(turn_id : Int32?, goal_id : String?) : Bool
-        # Нет тул-таргет инфраструктуры — всегда true.
         true
       end
 
@@ -208,6 +250,7 @@ module Hcode
           objective: objective,
           status: GoalStatus::Active,
           completion_criterion: completion,
+          wall_clock_resumed_at: Time.utc.to_unix_ms,
         )
         @goal = snapshot
         snapshot
@@ -217,7 +260,8 @@ module Hcode
         current = @goal
         raise GoalError.new("goal.no_active_goal") if current.nil?
         raise GoalError.new("goal.not_active") unless current.status.active?
-        @goal = with_status(current, GoalStatus::Paused)
+        reason = input.try(&.reason)
+        @goal = transition(current, GoalStatus::Paused, terminal_reason: reason)
         @goal.not_nil!
       end
 
@@ -227,25 +271,29 @@ module Hcode
         unless current.status.paused? || current.status.blocked?
           raise GoalError.new("goal.not_paused_or_blocked")
         end
-        @goal = with_status(current, GoalStatus::Active)
+        @goal = transition(current, GoalStatus::Active, terminal_reason: nil)
         @goal.not_nil!
       end
 
       def cancel_goal(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot
         current = @goal
         raise GoalError.new("goal.no_current_goal") if current.nil?
-        reason = input.try(&.reason)
-        @goal = with_status(current, GoalStatus::Complete, terminal_reason: reason || "cancelled")
-        @goal.not_nil!
+        reason = input.try(&.reason) || "cancelled"
+        cancelled = transition(current, GoalStatus::Complete, terminal_reason: reason)
+        @goal = nil
+        cancelled
       end
 
       def set_budget_limits(input : BudgetInput, actor : String = "model") : GoalSnapshot
         current = @goal
         raise GoalError.new("goal.no_current_goal") if current.nil?
-        # Для простоты: пересоздаём snapshot с обновлёнными лимитами (без persist).
-        # Используется только для отчёта.
-        @goal = current
-        current
+        merged = GoalBudgetLimits.new(
+          token_budget: input.budget_limits.token_budget || current.budget_limits.token_budget,
+          turn_budget: input.budget_limits.turn_budget || current.budget_limits.turn_budget,
+          wall_clock_budget_ms: input.budget_limits.wall_clock_budget_ms || current.budget_limits.wall_clock_budget_ms,
+        )
+        @goal = rebuild(current, budget_limits: merged)
+        @goal.not_nil!
       end
 
       def mark_complete(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot?
@@ -253,8 +301,9 @@ module Hcode
         return nil if current.nil?
         return nil unless current.status.active?
         reason = input.try(&.reason)
-        @goal = with_status(current, GoalStatus::Complete, terminal_reason: reason)
-        @goal
+        completed = transition(current, GoalStatus::Complete, terminal_reason: reason)
+        @goal = nil
+        completed
       end
 
       def mark_blocked(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot?
@@ -262,7 +311,38 @@ module Hcode
         return nil if current.nil?
         return nil unless current.status.active?
         reason = input.try(&.reason)
-        @goal = with_status(current, GoalStatus::Blocked, terminal_reason: reason)
+        @goal = transition(current, GoalStatus::Blocked, terminal_reason: reason)
+        @goal
+      end
+
+      # --- Драйвер: учёт хода (no-op вне active) --------------------------
+
+      def increment_turn : GoalSnapshot?
+        current = @goal
+        return nil if current.nil?
+        return nil unless current.status.active?
+        @goal = rebuild(current, turns_used: current.turns_used + 1)
+        @goal
+      end
+
+      def record_token_usage(delta : Int32) : GoalSnapshot?
+        current = @goal
+        return nil if current.nil?
+        return nil unless current.status.active?
+        d = delta < 0 ? 0 : delta
+        @goal = rebuild(current, tokens_used: current.tokens_used + d)
+        @goal
+      end
+
+      def pause_on_interrupt(reason : String = "Paused after interruption") : GoalSnapshot?
+        pause_active_goal(reason, "user")
+      end
+
+      def pause_active_goal(reason : String = "Paused after runtime stop", actor : String = "runtime") : GoalSnapshot?
+        current = @goal
+        return nil if current.nil?
+        return nil unless current.status.active?
+        @goal = transition(current, GoalStatus::Paused, terminal_reason: reason)
         @goal
       end
 
@@ -275,19 +355,52 @@ module Hcode
         trimmed[0, Math.min(trimmed.size, Goal::MAX_COMPLETION_CRITERION_LENGTH)]
       end
 
-      private def with_status(snapshot : GoalSnapshot,
-                              status : GoalStatus,
-                              terminal_reason : String? = nil) : GoalSnapshot
+      # Transition to a new status, folding the live wall-clock interval into
+      # the accumulated total when leaving `active`, and anchoring a fresh
+      # interval when entering it.
+      private def transition(snapshot : GoalSnapshot, status : GoalStatus,
+                             terminal_reason : String? = nil) : GoalSnapshot
+        now = Time.utc.to_unix_ms
+        wc = snapshot.wall_clock_ms
+        resumed = snapshot.wall_clock_resumed_at
+
+        if snapshot.status.active? && (anchor = resumed)
+          wc += Math.max(0_i64, now - anchor)
+          resumed = nil
+        end
+        resumed = now if status.active?
+
         GoalSnapshot.new(
           goal_id: snapshot.goal_id,
           objective: snapshot.objective,
           status: status,
           turns_used: snapshot.turns_used,
           tokens_used: snapshot.tokens_used,
+          wall_clock_ms: wc,
+          completion_criterion: snapshot.completion_criterion,
+          budget_limits: snapshot.budget_limits,
+          wall_clock_resumed_at: resumed,
+          terminal_reason: terminal_reason,
+        )
+      end
+
+      # Rebuild snapshot with field overrides (keeps everything else,
+      # recomputes budget report).
+      private def rebuild(snapshot : GoalSnapshot, *,
+                          turns_used : Int32? = nil,
+                          tokens_used : Int32? = nil,
+                          budget_limits : GoalBudgetLimits? = nil) : GoalSnapshot
+        GoalSnapshot.new(
+          goal_id: snapshot.goal_id,
+          objective: snapshot.objective,
+          status: snapshot.status,
+          turns_used: turns_used || snapshot.turns_used,
+          tokens_used: tokens_used || snapshot.tokens_used,
           wall_clock_ms: snapshot.wall_clock_ms,
           completion_criterion: snapshot.completion_criterion,
-          budget: snapshot.budget,
-          terminal_reason: terminal_reason,
+          budget_limits: budget_limits || snapshot.budget_limits,
+          wall_clock_resumed_at: snapshot.wall_clock_resumed_at,
+          terminal_reason: snapshot.terminal_reason,
         )
       end
     end
@@ -416,7 +529,7 @@ module Hcode
           io << "    \"status\": \"" << snapshot.status.to_wire << "\",\n"
           io << "    \"turnsUsed\": " << snapshot.turns_used << ",\n"
           io << "    \"tokensUsed\": " << snapshot.tokens_used << ",\n"
-          io << "    \"wallClockMs\": " << snapshot.wall_clock_ms << ",\n"
+          io << "    \"wallClockMs\": " << snapshot.live_wall_clock_ms << ",\n"
           io << "    \"budget\": " << budget_json(snapshot.budget) << ",\n"
           if tr = snapshot.terminal_reason
             io << "    \"terminalReason\": " << tr.to_json << "\n"

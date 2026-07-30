@@ -300,4 +300,101 @@ describe Hcode::Tools::AgentGoalService do
     ))
     replaced.objective.should eq("second")
   end
+
+  describe "budget persistence and accounting" do
+    it "set_budget_limits persists limits into the snapshot" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+
+      service.set_budget_limits(
+        Hcode::Tools::BudgetInput.new(
+          Hcode::Tools::GoalBudgetLimits.new(turn_budget: 5, token_budget: 1000)
+        )
+      )
+      goal = service.get_goal.not_nil!
+      goal.budget_limits.turn_budget.should eq(5)
+      goal.budget_limits.token_budget.should eq(1000)
+      goal.budget.turn_budget.should eq(5)
+      goal.budget.token_budget.should eq(1000)
+    end
+
+    it "marks over_budget when usage exceeds limits" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      service.set_budget_limits(
+        Hcode::Tools::BudgetInput.new(
+          Hcode::Tools::GoalBudgetLimits.new(turn_budget: 2)
+        )
+      )
+
+      service.increment_turn
+      service.increment_turn
+      goal = service.get_goal.not_nil!
+      goal.budget.over_budget?.should be_true
+      goal.budget.turn_budget_reached?.should be_true
+    end
+
+    it "increment_turn is a no-op outside active" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      service.pause_goal
+      result = service.increment_turn
+      result.should be_nil
+      service.get_goal.not_nil!.turns_used.should eq(0)
+    end
+
+    it "record_token_usage accumulates and clamps negative deltas" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      service.record_token_usage(100)
+      service.record_token_usage(-50) # clamps to 0
+      service.get_goal.not_nil!.tokens_used.should eq(100)
+    end
+
+    it "mark_complete clears the record" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      completed = service.mark_complete
+      completed.should_not be_nil
+      completed.not_nil!.status.complete?.should be_true
+      service.get_goal.should be_nil
+    end
+
+    it "mark_blocked keeps the record (resumable)" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      blocked = service.mark_blocked
+      blocked.should_not be_nil
+      blocked.not_nil!.status.blocked?.should be_true
+      service.get_goal.should_not be_nil
+    end
+
+    it "pause_on_interrupt pauses an active goal" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      paused = service.pause_on_interrupt("Paused after interruption")
+      paused.should_not be_nil
+      paused.not_nil!.status.paused?.should be_true
+      paused.not_nil!.terminal_reason.should eq("Paused after interruption")
+    end
+
+    it "pause_on_interrupt is a no-op for a non-active goal" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      service.pause_goal
+      service.pause_on_interrupt.should be_nil
+    end
+
+    it "wall-clock accumulates across pause/resume intervals" do
+      service = Hcode::Tools::AgentGoalService.new
+      service.create_goal(Hcode::Tools::CreateGoalInput.new(objective: "ship"), "model")
+      before = service.get_goal.not_nil!.live_wall_clock_ms
+      service.pause_goal
+      service.resume_goal
+      after = service.get_goal.not_nil!.live_wall_clock_ms
+      # After a pause+resume cycle, the accumulated wall_clock_ms should be
+      # at least as large as before (the pause interval was folded in).
+      after.should be >= before
+    end
+  end
 end
