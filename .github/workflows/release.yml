@@ -105,7 +105,7 @@ jobs:
         if: matrix.target == 'x86_64-linux'
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.14.0
+          crystal: 1.21.0
 
       - name: Build (linux x86_64)
         if: matrix.target == 'x86_64-linux'
@@ -119,12 +119,10 @@ jobs:
         if: matrix.qemu == true
         uses: docker/setup-qemu-action@v3
 
-      # The official crystallang images are amd64-only. 84codes publishes
-      # multi-arch images (amd64 + arm64) for every Crystal release (incl.
-      # 1.14.0), with crystal + shards + build deps preinstalled, so we build
-      # natively under QEMU in the arm64 variant of that image.
-      # (The previous apt-repo route via distro.crystal-lang.org is dead —
-      # that host no longer resolves.)
+      # No multi-arch Crystal Docker image exists for 1.21.0 (84codes tops
+      # out at 1.20.3, and the old apt repo at distro.crystal-lang.org is dead).
+      # Crystal publishes a prebuilt linux-aarch64 tarball since 1.21.0, so we
+      # extract it in an arm64 ubuntu container and build natively under QEMU.
       - name: Build (linux aarch64 via Docker)
         if: matrix.target == 'aarch64-linux'
         run: |
@@ -132,8 +130,13 @@ jobs:
             -v "$PWD":/work -w /work \
             --platform linux/arm64 \
             -e HCODE_VERSION="$HCODE_VERSION" \
-            84codes/crystal:1.14.0-ubuntu-22.04 bash -lc '
+            ubuntu:22.04 bash -lc '
               set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq ca-certificates curl git pkg-config
+              curl -fsSL https://github.com/crystal-lang/crystal/releases/download/1.21.0/crystal-1.21.0-1-linux-aarch64.tar.gz | tar xzf - -C /opt
+              export PATH="/opt/crystal-1.21.0-1/bin:$PATH"
               shards install
               crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
               file hcode
@@ -144,7 +147,7 @@ jobs:
         if: matrix.target == 'x86_64-darwin'
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.14.0
+          crystal: 1.21.0
 
       - name: Build (darwin x86_64)
         if: matrix.target == 'x86_64-darwin'
@@ -158,7 +161,7 @@ jobs:
         if: matrix.target == 'aarch64-darwin'
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.14.0
+          crystal: 1.21.0
 
       - name: Build (darwin aarch64)
         if: matrix.target == 'aarch64-darwin'
@@ -172,7 +175,7 @@ jobs:
         if: matrix.target == 'x86_64-windows'
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.14.0
+          crystal: 1.21.0
 
       - name: Build (windows x86_64)
         if: matrix.target == 'x86_64-windows'
