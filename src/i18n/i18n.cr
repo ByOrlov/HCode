@@ -1,44 +1,79 @@
 require "i18n"
 
-# Embed locale YAML files at compile time. The `embed` macro runs a
-# compiler-time helper that reads every `.yml` under `locales/` and bakes
-# the translations into the binary as a preloaded hash. Must live at the
-# top level (outside `Hcode::I18n`) because the macro expands to
-# `I18n::Loader::YAML.new(...)` and would otherwise resolve `I18n` to
-# `Hcode::I18n`. The path must be a string literal (computed at compile
-# time via a macro), not a runtime `File.join` call.
-HCODE_EMBEDDED_I18N_LOADER = ::I18n::Loader::YAML.embed({{ __DIR__ + "/locales" }})
+# Embed each locale YAML as a compile-time string literal (via `read_file`).
+# These live in the binary's read-only data segment — zero heap cost. At
+# runtime only the active locale + "en" are parsed into the I18n catalog;
+# the rest stay dormant in rodata until a language switch needs them.
+#
+# This replaces `I18n::Loader::YAML.embed`, which materialised all 10 locales
+# as a single nested Hash in heap at startup (~1 MB). With lazy per-locale
+# parsing, startup loads only 2 locales (~200 KB).
+HCODE_LOCALE_YAML_EN = {{ read_file("#{__DIR__}/locales/en.yml") }}
+HCODE_LOCALE_YAML_RU = {{ read_file("#{__DIR__}/locales/ru.yml") }}
+HCODE_LOCALE_YAML_ES = {{ read_file("#{__DIR__}/locales/es.yml") }}
+HCODE_LOCALE_YAML_ZH = {{ read_file("#{__DIR__}/locales/zh.yml") }}
+HCODE_LOCALE_YAML_JA = {{ read_file("#{__DIR__}/locales/ja.yml") }}
+HCODE_LOCALE_YAML_PT = {{ read_file("#{__DIR__}/locales/pt.yml") }}
+HCODE_LOCALE_YAML_HI = {{ read_file("#{__DIR__}/locales/hi.yml") }}
+HCODE_LOCALE_YAML_FA = {{ read_file("#{__DIR__}/locales/fa.yml") }}
+HCODE_LOCALE_YAML_UK = {{ read_file("#{__DIR__}/locales/uk.yml") }}
+HCODE_LOCALE_YAML_BE = {{ read_file("#{__DIR__}/locales/be.yml") }}
+
+HCODE_LOCALE_YAML_STRINGS = {
+  "en" => HCODE_LOCALE_YAML_EN,
+  "ru" => HCODE_LOCALE_YAML_RU,
+  "es" => HCODE_LOCALE_YAML_ES,
+  "zh" => HCODE_LOCALE_YAML_ZH,
+  "ja" => HCODE_LOCALE_YAML_JA,
+  "pt" => HCODE_LOCALE_YAML_PT,
+  "hi" => HCODE_LOCALE_YAML_HI,
+  "fa" => HCODE_LOCALE_YAML_FA,
+  "uk" => HCODE_LOCALE_YAML_UK,
+  "be" => HCODE_LOCALE_YAML_BE,
+}
 
 module Hcode
   # `I18n` domain — interface translation layer.
   #
-  # Wraps the `crystal-i18n` shard: locale YAML files are embedded into the
-  # binary at compile time (so there are no external files to ship), the
-  # active locale is selected from config / env / system at startup, and the
-  # `#t` shortcut is exposed app-wide as `Hcode.t(...)`.
+  # Wraps the `crystal-i18n` shard: locale YAML is embedded into the binary at
+  # compile time (so there are no external files to ship), the active locale is
+  # selected from config / env / system at startup, and the `#t` shortcut is
+  # exposed app-wide as `Hcode.t(...)`.
+  #
+  # Only the active locale + "en" are parsed into the catalog at startup. A
+  # language switch (`/language`) lazy-loads the requested locale on first use.
   module I18n
     SUPPORTED_LOCALES = {"en", "ru", "es", "zh", "ja", "pt", "hi", "fa", "uk", "be"}
 
     @@initialized = false
+    @@loaded_locales = Set(String).new
 
-    # Initializes the I18n module with the embedded locale files and activates
-    # the given locale. Safe to call once; subsequent calls only switch the
-    # active locale.
+    # Initializes the I18n module and activates the given locale. Only the
+    # requested locale + "en" are parsed into the catalog — the other locales
+    # stay as dormant rodata strings until a language switch needs them.
     def self.init(locale : String = "en") : Nil
       unless @@initialized
-        ::I18n.config.loaders << HCODE_EMBEDDED_I18N_LOADER
+        loc = SUPPORTED_LOCALES.includes?(locale) ? locale : "en"
         ::I18n.config.default_locale = :en
+        add_locale_loader("en")
+        add_locale_loader(loc) unless loc == "en"
         ::I18n.init
         @@initialized = true
+        @@loaded_locales << "en"
+        @@loaded_locales << loc unless loc == "en"
       end
       activate(locale)
     end
 
     # Activates a locale by name (e.g. "en", "ru"). Falls back to :en when the
-    # requested locale is not supported.
+    # requested locale is not supported. If the locale wasn't loaded at startup,
+    # it is lazy-loaded here via a catalog re-init.
     def self.activate(locale : String) : Nil
       return unless @@initialized
       loc = SUPPORTED_LOCALES.includes?(locale) ? locale : "en"
+      unless @@loaded_locales.includes?(loc)
+        reinit_with_locale(loc)
+      end
       begin
         ::I18n.activate(loc)
       rescue ::I18n::Errors::InvalidLocale
@@ -82,6 +117,29 @@ module Hcode
         end
       end
       "en"
+    end
+
+    # ------------------------------------------------------------------
+    # Internal: locale loading
+    # ------------------------------------------------------------------
+
+    # Adds a loader for a single locale to `I18n.config.loaders` by parsing
+    # the embedded YAML string at runtime.
+    private def self.add_locale_loader(name : String) : Nil
+      yaml = HCODE_LOCALE_YAML_STRINGS[name]?
+      return unless yaml
+      translations = ::I18n::Loader::YAML.normalize_raw_translations([yaml])
+      ::I18n.config.loaders << ::I18n::Loader::YAML.new(translations)
+    end
+
+    # Re-initializes the catalog with "en" + the new locale. Called on first
+    # switch to a locale that wasn't loaded at startup.
+    private def self.reinit_with_locale(name : String) : Nil
+      ::I18n.config.loaders.clear
+      add_locale_loader("en")
+      add_locale_loader(name) unless name == "en"
+      ::I18n.init
+      @@loaded_locales = Set{"en", name}
     end
 
     private def self.parse_lang(raw : String) : String
