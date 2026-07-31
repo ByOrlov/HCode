@@ -34,15 +34,20 @@ module Hcode
       end
 
       def failed? : Bool
-        @phase == "Failed" || @phase == "Aborted"
+        # A failed member carries either the canonical "Failed"/"Aborted"
+        # phase or the raw error text (set by subagent_failed). Anything that
+        # isn't the running start phase and isn't Completed is a terminal
+        # failure — matching on exact strings would leave custom error text
+        # misclassified as still-running and lock the swarm grid forever.
+        !running? && !completed?
       end
 
       def done? : Bool
-        completed? || failed?
+        !running?
       end
 
       def running? : Bool
-        !done?
+        @phase == "Running" || @phase.empty?
       end
     end
 
@@ -1061,9 +1066,15 @@ module Hcode
         return unless idx
         msg = @messages[idx]
         changed = false
-        msg.swarm_members.each do |sm|
-          if sm.agent_id == event.agent_id
-            sm.ticks = event.subagent_ticks if event.subagent_ticks > sm.ticks
+        # SwarmMember is a struct, so each yields a copy; mutate via index and
+        # write the element back, otherwise the phase/ticks update is lost and
+        # members stay "Running" forever (keeps @swarm_active true → endless
+        # redraws that lock terminal scroll).
+        msg.swarm_members.each_with_index do |sm, i|
+          next unless sm.agent_id == event.agent_id
+          if event.subagent_ticks > sm.ticks
+            sm.ticks = event.subagent_ticks
+            msg.swarm_members[i] = sm
             changed = true
           end
         end
@@ -1075,8 +1086,12 @@ module Hcode
         idx = find_swarm_message(event.tool_call_id)
         return unless idx
         msg = @messages[idx]
-        msg.swarm_members.each do |sm|
-          sm.phase = phase if sm.agent_id == event.agent_id
+        # See handle_subagent_progress: SwarmMember is a struct, so each yields
+        # a copy. Mutate via index and write back, or the phase never updates.
+        msg.swarm_members.each_with_index do |sm, i|
+          next unless sm.agent_id == event.agent_id
+          sm.phase = phase
+          msg.swarm_members[i] = sm
         end
         @messages[idx] = msg
         recompute_swarm_active

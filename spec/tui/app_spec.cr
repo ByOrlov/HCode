@@ -637,3 +637,36 @@ describe Hcode::TUI::HelpPanel do
     end
   end
 end
+
+describe Hcode::TUI::App do
+  # SwarmMember is a struct. The terminal/progress handlers used to iterate it
+  # with `each`, which yields a copy — so `sm.phase = ...` / `sm.ticks = ...`
+  # mutated a throwaway clone and the array element stayed "Running" forever.
+  # That kept @swarm_active true, driving an endless redraw loop that locked
+  # terminal scroll even after every subagent had finished.
+  describe "subagent lifecycle phase updates" do
+    it "marks members Completed/Failed and clears swarm_active" do
+      app = Hcode::TUI::App.new
+      tc = "call_swarm_1"
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "AgentSwarm", "{}"))
+      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
+      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-b", 2, "item b"))
+
+      members = app.@messages.last.swarm_members
+      members.size.should eq(2)
+      members.all?(&.running?).should be_true
+      app.@swarm_active.should be_true
+
+      app.on_event(Hcode::Loop::Event.subagent_progress(tc, "agent-a", 5))
+      app.on_event(Hcode::Loop::Event.subagent_completed(tc, "agent-a"))
+      app.on_event(Hcode::Loop::Event.subagent_failed(tc, "agent-b", "boom"))
+
+      members = app.@messages.last.swarm_members
+      members[0].phase.should eq("Completed")
+      members[0].ticks.should eq(5)
+      members[1].phase.should eq("boom")
+      members.all?(&.done?).should be_true
+      app.@swarm_active.should be_false
+    end
+  end
+end
