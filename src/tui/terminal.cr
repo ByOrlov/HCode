@@ -20,8 +20,8 @@
 {% if flag?(:win32) %}
   @[Link("kernel32")]
   lib LibCConsole
-    STD_INPUT_HANDLE  = -10_i32
-    STD_OUTPUT_HANDLE = -11_i32
+    STD_INPUT_HANDLE  = 0xFFFFFFF6_u32 # (DWORD)-10
+    STD_OUTPUT_HANDLE = 0xFFFFFFF5_u32 # (DWORD)-11
 
     ENABLE_PROCESSED_INPUT             =  0x0001_u32
     ENABLE_LINE_INPUT                  =  0x0002_u32
@@ -49,7 +49,7 @@
       maximum_window_size : Coord
     end
 
-    fun getStdHandle = "GetStdHandle"(handle_id : Int32) : Void*
+    fun getStdHandle = "GetStdHandle"(handle_id : UInt32) : Void*
     fun getConsoleMode = "GetConsoleMode"(handle : Void*, mode : UInt32*) : Int32
     fun setConsoleMode = "SetConsoleMode"(handle : Void*, mode : UInt32) : Int32
     fun getConsoleScreenBufferInfo = "GetConsoleScreenBufferInfo"(handle : Void*, info : ConsoleScreenBufferInfo*) : Int32
