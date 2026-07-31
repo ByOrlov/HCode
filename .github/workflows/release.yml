@@ -105,6 +105,18 @@ jobs:
         with:
           crystal: 1.21.0
 
+      - name: Set up x86_64 libraries (macOS cross-compile)
+        if: matrix.cross_target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          sudo softwareupdate --install-rosetta --agree-to-license || true
+          NONINTERACTIVE=1 arch -x86_64 /bin/bash -c \
+            "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          /usr/local/bin/brew install libyaml pcre2 openssl@3
+          echo "CC=clang -arch x86_64" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=/usr/local/opt/openssl@3/lib/pkgconfig:/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=/usr/local/lib:/usr/local/opt/openssl@3/lib" >> "$GITHUB_ENV"
+
       - name: Build
         shell: bash
         run: |
