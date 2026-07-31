@@ -197,6 +197,7 @@ jobs:
         if: matrix.target == 'x86_64-windows'
         shell: msys2 {0}
         run: |
+          export PATH="/c/crystal/bin:$PATH"
           shards install
           crystal build src/hcode.cr -o hcode.exe --release --no-debug --warnings none
           ./hcode.exe --version
