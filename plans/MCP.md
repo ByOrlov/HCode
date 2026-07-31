@@ -1,5 +1,17 @@
 # MCP (Model Context Protocol) — план реализации для Crystal-версии
 
+> **Статус: все фазы реализованы и приведены в соответствие с JS-версией.**
+> Код в `src/mcp/`, тесты в `spec/mcp/mcp_spec.cr` (36 примеров), полный
+> suite зелёный (1058 примеров).
+>
+> | Фаза | Компоненты | Статус |
+> |---|---|---|
+> | 1 — stdio MVP | JSON-RPC, stdio-транспорт, handshake, proxy tools, config | ✅ |
+> | 2 — HTTP | Streamable HTTP + SSE, bearer token, proxy | ✅ |
+> | 3 — Медиа | image/audio/resource → base64 data URI | ✅ |
+> | 4 — OAuth | RFC 9728/8414 discovery, RFC 7591 DCR, PKCE, callback, tokens | ✅ |
+> | JS-parity | enabled/disabled tools, enabled flag, timeouts, unexpected close, needs-auth + synthetic auth tool, output budget/cap, multi-source config | ✅ |
+
 ## Контекст
 
 MCP — открытый протокол (JSON-RPC 2.0), стандартизирующий подключение внешних

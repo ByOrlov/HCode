@@ -366,6 +366,9 @@ module Hcode
       property on_steer : (String -> Nil)?
       property on_language_change : (String -> Nil)? = nil
       property on_get_language : (-> String)? = nil
+      # `/mcp`: returns the live MCP server status text, or nil when no client
+      # is wired (e.g. headless path).
+      property on_mcp_status : (-> String)? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,
@@ -380,6 +383,8 @@ module Hcode
         @markdown = Markdown.new(@theme)
         @provider_list = SelectList.new([] of String, @theme)
         @model_list = SelectList.new([] of String, @theme)
+        @model_list.searchable = true
+        @model_list.max_visible = 50
         @session_list = SelectList.new([] of String, @theme)
         @permission_list = SelectList.new([] of String, @theme)
         @effort_list = SelectList.new([] of String, @theme)
@@ -504,7 +509,7 @@ module Hcode
               @messages << Message.new("system", "Models unavailable.")
               restart_setup
             else
-              @model_list.show("Select model (#{name})", models)
+              @model_list.show(Hcode.t("ui.select_model", name: name), models)
               default = wizard.model || wizard.current_choice.try(&.default_model) || models.first?
               @model_list.selected = models.index(default) || 0
             end
@@ -522,9 +527,6 @@ module Hcode
       # commits the selection; Esc closes the selector and steps back.
       private def handle_setup_model_key(key : KeyEvent) : Nil
         case key.key
-        when .up?, .down?
-          @model_list.handle_input(key)
-          @dirty = true
         when .enter?
           wizard = @wizard
           return unless wizard
@@ -536,9 +538,16 @@ module Hcode
           wizard.step = Setup::Wizard::Step::Done
           advance_setup_step
         when .escape?
-          @model_list.hide
+          # Clear the search query first; only step back once it is empty.
+          unless @model_list.clear_query
+            @model_list.hide
+            back_setup_step
+          end
           @dirty = true
-          back_setup_step
+        else
+          # ↑/↓, Backspace, and typed characters drive the fuzzy filter.
+          @model_list.handle_input(key)
+          @dirty = true
         end
       end
 
@@ -1973,11 +1982,12 @@ module Hcode
           end
           @messages << Message.new("system", body.strip)
         when "/mcp"
-          # Mirrors TS `showMcpServers`. hcode.cr has no MCP client yet —
-          # surface that clearly rather than silently no-op'ing.
-          @messages << Message.new("system",
-            "MCP servers: not supported in this build.\n" \
-            "MCP client support is tracked as future work; use the TS version if you need it now.")
+          # Mirrors TS `showMcpServers`. When the manager is wired (interactive
+          # mode), surface live connection status; otherwise report that no MCP
+          # client is available in this run.
+          status = @on_mcp_status.try(&.call) ||
+                   "MCP servers: not available in this run (no client wired)."
+          @messages << Message.new("system", status)
         when "/plugins"
           # Mirrors TS `handlePluginsCommand`. hcode.cr has no plugin runtime.
           @messages << Message.new("system",
@@ -2507,7 +2517,7 @@ module Hcode
             if models.empty?
               @messages << Message.new("system", "No models available for current provider.")
             else
-              @model_list.show("Select model (#{@provider_name})", models)
+              @model_list.show(Hcode.t("ui.select_model", name: @provider_name), models)
               @model_list.selected = models.index(@model) || 0
             end
           rescue ex
@@ -2521,9 +2531,6 @@ module Hcode
 
       private def handle_model_key(key : KeyEvent) : Nil
         case key.key
-        when .up?, .down?
-          @model_list.handle_input(key)
-          @dirty = true
         when .enter?
           model = @model_list.current || @model
           @model_list.hide
@@ -2539,7 +2546,12 @@ module Hcode
             @messages << Message.new("error", "Model switching is not wired up.")
           end
         when .escape?
-          @model_list.hide
+          # A single Esc clears an active search first; a second Esc closes.
+          @model_list.clear_query || @model_list.hide
+          @dirty = true
+        else
+          # ↑/↓, Backspace, and typed characters drive the fuzzy filter.
+          @model_list.handle_input(key)
           @dirty = true
         end
       end
@@ -3407,6 +3419,24 @@ module Hcode
         lines = [] of String
         lines << "#{bc}╭#{dash}╮#{r}"
 
+        # When a searchable list (model picker) is open, the input box renders
+        # the active fuzzy query with the cursor at its end, instead of the
+        # regular editor content / "send a message" placeholder.
+        if search_picker_active?
+          query = current_search_query
+          prompt = "#{pc}#{ANSI.bold}>#{r} "
+          if query.empty?
+            body = "#{dc}#{search_placeholder}#{r}"
+            lines << build_editor_row(box_w, bc, r, prompt, body)
+            @editor_cursor_visual_row = 0
+            @editor_cursor_visual_col = 0
+          else
+            render_query_row(box_w, bc, pc, tc, r, prompt, query, lines)
+          end
+          lines << "#{bc}╰#{dash}╯#{r}"
+          return lines
+        end
+
         if @editor.empty?
           # No content: park the cursor on the single placeholder row.
           prompt = "#{pc}#{ANSI.bold}>#{r} "
@@ -3481,6 +3511,68 @@ module Hcode
 
         lines << "#{bc}╰#{dash}╯#{r}"
         lines
+      end
+
+      # True when the fuzzy-search model picker is open — the input box renders
+      # the live query instead of normal editor content.
+      private def search_picker_active? : Bool
+        @model_list.visible? && @model_list.searchable?
+      end
+
+      # The query string driving the currently open searchable picker.
+      private def current_search_query : String
+        @model_list.query
+      end
+
+      # Placeholder shown in the input box while the query is empty.
+      private def search_placeholder : String
+        Hcode.t("ui.search_model")
+      end
+
+      # Renders the fuzzy query as a single-line editor content row, with the
+      # cursor highlighted at the end (wrapping into multiple rows if it exceeds
+      # the box width). Reuses the editor's wrap + cursor styling so the look
+      # matches normal typing.
+      private def render_query_row(box_w : Int32, bc : String, pc : String,
+                                   tc : String, r : String, prompt : String,
+                                   query : String, lines : Array(String)) : Nil
+        inner_w = box_w - 5
+        inner_w = 1 if inner_w < 1
+        wrap_w = inner_w - 1
+        wrap_w = 1 if wrap_w < 1
+
+        chunks = wrap_editor_line(query, wrap_w)
+        cursor_col = query.size
+        visual_row = 0
+        found_cursor = false
+        chunks.each_with_index do |(chunk_text, chunk_start, chunk_end), ci|
+          first = ci == 0
+          row_prompt = first ? prompt : "  "
+          is_last_chunk = (ci == chunks.size - 1)
+          has_cursor = false
+          local = 0
+          if is_last_chunk
+            has_cursor = cursor_col >= chunk_start
+          else
+            has_cursor = cursor_col >= chunk_start && cursor_col < chunk_end
+          end
+          local = ({cursor_col - chunk_start, 0}.max)
+          local = {local, chunk_text.size}.min if has_cursor
+
+          if has_cursor
+            before = chunk_text[0...local]? || ""
+            char_at = chunk_text[local]? || " "
+            after = chunk_text[(local + 1)..]? || ""
+            body = "#{tc}#{before}#{r}#{ANSI.color(nil, @theme.colors.primary)}#{char_at}#{r}#{tc}#{after}#{r}"
+            @editor_cursor_visual_col = visible_len(before)
+            found_cursor = true
+          else
+            body = "#{tc}#{chunk_text}#{r}"
+          end
+          lines << build_editor_row(box_w, bc, r, row_prompt, body)
+          visual_row += 1 unless found_cursor
+        end
+        @editor_cursor_visual_row = found_cursor ? visual_row : 0
       end
 
       # Build one editor content row padded to exactly `box_w` columns:
@@ -3939,29 +4031,95 @@ module Hcode
       private def render_model_panel(cols : Int32) : Array(String)
         lines = [] of String
         lines << ""
-        lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  #{@model_list.title}#{ANSI.reset}"
+        searching = !@model_list.query.empty?
+        title = @model_list.title
+        lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  #{title}#{ANSI.reset}"
 
+        active_label = Hcode.t("ui.model_active")
         start, count = @model_list.visible_window
         if @model_list.scrolled_up?
           lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↑ #{start} more#{ANSI.reset}"
         end
         count.times do |rel|
           i = start + rel
-          item = CharWidth.truncate_to_width(@model_list.items[i], cols - 4)
-          marker = item == @model ? " (active)" : ""
-          if i == @model_list.selected
-            lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{marker}#{ANSI.reset}"
-          else
-            lines << "#{ANSI.color(@theme.colors.muted, nil)}    #{item}#{marker}#{ANSI.reset}"
-          end
+          item = @model_list.item_at(i).to_s
+          positions = @model_list.match_positions_at(i)
+          rendered = render_picker_item(item, positions, cols - 4,
+            i == @model_list.selected)
+          marker = item == @model ? " #{ANSI.color(@theme.colors.success, nil)}#{active_label}#{ANSI.reset}" : ""
+          lines << rendered + marker
         end
         if @model_list.scrolled_down?
-          remaining = @model_list.items.size - (start + count)
+          remaining = @model_list.filtered_size - (start + count)
           lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↓ #{remaining} more#{ANSI.reset}"
         end
 
-        lines << "#{ANSI.color(@theme.colors.dim, nil)}  [↑↓] navigate  [Enter] select  [Esc] cancel#{ANSI.reset}"
+        # Status line: how many models are visible in the viewport vs total.
+        # Shown always — both when searching and when browsing the full list.
+        shown = count
+        total = @model_list.filtered_size
+        if shown < total
+          status = Hcode.t("ui.models_shown_of", shown: shown, total: total)
+        else
+          status = Hcode.t("ui.models_shown_all")
+        end
+        lines << "#{ANSI.color(@theme.colors.dim, nil)}  #{status}#{ANSI.reset}"
+        lines << "#{ANSI.color(@theme.colors.dim, nil)}  #{model_picker_hint(searching)}#{ANSI.reset}"
         lines
+      end
+
+      # Builds the key-hint line from translated action words. The bracketed
+      # key symbols are universal; only the action text is localized.
+      private def model_picker_hint(searching : Bool) : String
+        nav = "[↑↓] #{Hcode.t("ui.picker_navigate")}"
+        pick = "[Enter] #{Hcode.t("ui.picker_select")}"
+        cancel = "[Esc] #{Hcode.t("ui.picker_cancel")}"
+        if searching
+          clear = "[⌫] #{Hcode.t("ui.picker_clear")}"
+          "#{nav}  #{clear}  #{pick}  #{cancel}"
+        else
+          search = "[#{Hcode.t("ui.picker_search")}]"
+          "#{nav}  #{search}  #{pick}  #{cancel}"
+        end
+      end
+
+      # Renders a single picker row with the pointer prefix and optional
+      # fuzzy-match highlighting. `selected` swaps the base color to accent and
+      # bolds the whole row; matched characters get a stronger emphasis either way.
+      private def render_picker_item(text : String, positions : Array(Int32)?,
+                                     max_width : Int32, selected : Bool) : String
+        base = selected ? @theme.colors.accent : @theme.colors.muted
+        pointer = selected ? "▶ " : "  "
+        truncated = CharWidth.truncate_to_width(text, max_width, "…")
+
+        # When there is nothing to highlight (no query, or the row was
+        # truncated so positions would misalign), emit a single styled run.
+        if positions.nil? || positions.empty?
+          prefix = "#{ANSI.color(base, nil)}#{selected ? ANSI.bold : ""}  #{pointer}"
+          return "#{prefix}#{truncated}#{ANSI.reset}"
+        end
+
+        # If truncation dropped characters the highlight indices no longer line
+        # up, so fall back to a single run for that row.
+        if truncated.size < text.size && !truncated.ends_with?(text[-1])
+          prefix = "#{ANSI.color(base, nil)}#{selected ? ANSI.bold : ""}  #{pointer}"
+          return "#{prefix}#{truncated}#{ANSI.reset}"
+        end
+
+        pos_set = Set(Int32).new(positions)
+        io = IO::Memory.new
+        io << "#{ANSI.color(base, nil)}  #{pointer}"
+        truncated.each_char_with_index do |c, ci|
+          if pos_set.includes?(ci)
+            io << ANSI.bold << ANSI.color(@theme.colors.success, nil) << c << ANSI.reset
+            io << ANSI.color(base, nil)
+          else
+            io << (selected ? ANSI.bold : "")
+            io << c
+          end
+        end
+        io << ANSI.reset
+        io.to_s
       end
 
       private def render_select_panel(list : SelectList, cols : Int32) : Array(String)

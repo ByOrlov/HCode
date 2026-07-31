@@ -1,3 +1,5 @@
+require "../mcp/config"
+
 module Hcode
   module Config
     class Config
@@ -23,6 +25,7 @@ module Hcode
       property language : String? = nil
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
+      property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
 
       def initialize
       end
@@ -102,6 +105,13 @@ module Hcode
         # below does not handle the `[[...]]` form). Each block collects its
         # key=value pairs until the next `[[hooks]]` or `[section]`.
         config.hooks = parse_hooks_array(content)
+
+        # MCP servers: parse the `[[mcp_servers]]` section via the real TOML
+        # parser (arrays + inline tables) and merge in every mcp.json source
+        # (user-global, project-root, project-local).
+        home = ENV["HOME"]? || "/tmp"
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
+        config.mcp_servers = Mcp::ConfigLoader.load(content, hcode_home, cwd: Dir.current)
 
         current_section = ""
 

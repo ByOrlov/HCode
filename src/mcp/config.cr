@@ -1,0 +1,241 @@
+require "json"
+require "toml"
+
+module Hcode
+  module Mcp
+    # One configured MCP server entry. Only the stdio transport is wired in
+    # MVP; `type`, `url` and `token_env` are parsed and stored so Phase 2
+    # (HTTP) can consume them without a config-format change.
+    struct McpServerConfig
+      property name : String
+      property type : String        # "stdio" | "http" | "sse"
+      property command : String     # stdio: executable
+      property args : Array(String) # stdio: argv
+      property env : Hash(String, String)
+      property cwd : String?        # stdio: working directory
+      property url : String?        # http/sse: endpoint
+      property headers : Hash(String, String) # http/sse: extra HTTP headers
+      # Indirect secret: bearer token looked up from `ENV[token_env]` at
+      # connection time, never committed to config. Mirrors JS
+      # `bearerTokenEnvVar`.
+      property token_env : String?
+      # OAuth fields (Phase 4). When `token_env` is unset and the server
+      # requires authentication, these drive the Authorization Code + PKCE
+      # flow. `oauth_client_id` is optional — when absent, Dynamic Client
+      # Registration (RFC 7591) is attempted.
+      property oauth_client_id : String?
+      property oauth_client_secret : String?
+      property oauth_scopes : Array(String)
+      # Common fields (mirrors JS McpServerCommonFields).
+      property? enabled : Bool = true
+      property enabled_tools : Array(String)? = nil
+      property disabled_tools : Array(String)? = nil
+      property startup_timeout_ms : Int32? = nil
+      property tool_timeout_ms : Int32? = nil
+
+      def initialize(@name : String, @command : String = "",
+                     @args : Array(String) = [] of String,
+                     @env : Hash(String, String) = {} of String => String,
+                     @type : String = "stdio", @url : String? = nil,
+                     @token_env : String? = nil,
+                     @oauth_client_id : String? = nil,
+                     @oauth_client_secret : String? = nil,
+                     @oauth_scopes : Array(String) = [] of String,
+                     @cwd : String? = nil,
+                     @headers : Hash(String, String) = {} of String => String,
+                     @enabled : Bool = true,
+                     @enabled_tools : Array(String)? = nil,
+                     @disabled_tools : Array(String)? = nil,
+                     @startup_timeout_ms : Int32? = nil,
+                     @tool_timeout_ms : Int32? = nil)
+      end
+
+      def stdio? : Bool
+        @type == "stdio" || @type.empty?
+      end
+
+      def remote? : Bool
+        @type == "http" || @type == "sse"
+      end
+
+      # True when OAuth fields are explicitly configured.
+      def oauth_configured? : Bool
+        !@oauth_client_id.nil? || !@oauth_scopes.empty?
+      end
+
+      # Effective startup timeout, falling back to the manager default.
+      def effective_startup_timeout(default : Time::Span) : Time::Span
+        (@startup_timeout_ms.try(&.milliseconds) || default)
+      end
+
+      # Effective per-tool-call timeout (nil = no explicit timeout).
+      def effective_tool_timeout : Time::Span?
+        @tool_timeout_ms.try(&.milliseconds)
+      end
+
+      # Compute the set of remote tool names that should be registered,
+      # applying the enabled/disabled filters.
+      def allowed_tool_names(all_names : Array(String)) : Set(String)
+        allowed = Set(String).new
+        enabled = @enabled_tools.try(&.to_set)
+        disabled = @disabled_tools.try(&.to_set)
+        all_names.each do |n|
+          next if enabled && !enabled.includes?(n)
+          next if disabled && disabled.includes?(n)
+          allowed << n
+        end
+        allowed
+      end
+    end
+
+    # Loader for the `[[mcp_servers]]` toml section and the optional
+    # `~/.hcode/mcp.json` file. The two sources are merged by server name;
+    # mcp.json wins on conflict so the JS-compatible file takes precedence.
+    module ConfigLoader
+      # Load from every source: the `[[mcp_servers]]` toml section in
+      # config.toml, plus three mcp.json files — user-global, project-root,
+      # and project-local — mirroring JS `loadMcpServers`. Later files
+      # override earlier ones with the same name.
+      def self.load(toml_content : String?, home_dir : String, cwd : String = Dir.current) : Array(McpServerConfig)
+        from_toml = parse_toml_section(toml_content)
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home_dir, ".hcode")
+
+        user_json = read_mcp_json_file(File.join(hcode_home, "mcp.json"))
+        project_root_json = read_mcp_json_file(project_root_mcp_json(cwd))
+        project_json = read_mcp_json_file(File.join(cwd, ".hcode", "mcp.json"))
+
+        # Merge by name: toml → user → project-root → project (later wins).
+        merged = {} of String => McpServerConfig
+        from_toml.each { |c| merged[c.name] = c }
+        user_json.each { |c| merged[c.name] = c }
+        project_root_json.each { |c| merged[c.name] = c }
+        project_json.each { |c| merged[c.name] = c }
+        merged.values
+      end
+
+      # Walk upward from `cwd` looking for a `.git` dir; fall back to `cwd`.
+      private def self.project_root_mcp_json(cwd : String) : String
+        current = cwd
+        loop do
+          return File.join(current, ".mcp.json") if Dir.exists?(File.join(current, ".git"))
+          parent = File.dirname(current)
+          return File.join(cwd, ".mcp.json") if parent == current
+          current = parent
+        end
+      end
+
+      def self.parse_toml_section(toml_content : String?) : Array(McpServerConfig)
+        return [] of McpServerConfig if toml_content.nil? || toml_content.empty?
+        root = TOML.parse(toml_content)
+        arr = root["mcp_servers"]?.try(&.as_a?) || [] of TOML::Any
+        arr.map { |entry| from_any(entry.as_h) }
+      rescue ex
+        # A malformed or partially-unparseable config file must not break the
+        # agent — MCP servers are optional.
+        [] of McpServerConfig
+      end
+
+      # Legacy: parse `mcp.json` from a directory (joins `<dir>/mcp.json`).
+      def self.parse_mcp_json(home_dir : String) : Array(McpServerConfig)
+        read_mcp_json_file(File.join(home_dir, "mcp.json"))
+      end
+
+      # Parse a specific mcp.json file by full path.
+      def self.read_mcp_json_file(path : String) : Array(McpServerConfig)
+        return [] of McpServerConfig unless File.exists?(path)
+        data = JSON.parse(File.read(path))
+        servers = data["mcpServers"]?.try(&.as_h?) || {} of String => JSON::Any
+        servers.map do |name, spec|
+          from_any_json(name, spec.as_h)
+        end
+      rescue ex
+        [] of McpServerConfig
+      end
+
+      def self.merge_by_name(toml_list : Array(McpServerConfig),
+                             json_list : Array(McpServerConfig)) : Array(McpServerConfig)
+        merged = {} of String => McpServerConfig
+        toml_list.each { |c| merged[c.name] = c }
+        json_list.each { |c| merged[c.name] = c }
+        merged.values
+      end
+
+      private def self.from_any(h : Hash(String, TOML::Any)) : McpServerConfig
+        name = h["name"]?.try(&.as_s?) || ""
+        cfg = McpServerConfig.new(name)
+        cfg.type = h["type"]?.try(&.as_s?) || "stdio"
+        cfg.command = h["command"]?.try(&.as_s?) || ""
+        cfg.args = (h["args"]?.try(&.as_a?) || [] of TOML::Any).map(&.to_s)
+        if env_any = h["env"]?.try(&.as_h?)
+          cfg.env = env_of(env_any)
+        end
+        cfg.cwd = h["cwd"]?.try(&.as_s?)
+        cfg.url = h["url"]?.try(&.as_s?)
+        if headers_any = h["headers"]?.try(&.as_h?)
+          cfg.headers = env_of(headers_any)
+        end
+        cfg.token_env = h["token_env"]?.try(&.as_s?) ||
+                        h["bearerTokenEnvVar"]?.try(&.as_s?)
+        cfg.oauth_client_id = h["oauth_client_id"]?.try(&.as_s?)
+        cfg.oauth_client_secret = h["oauth_client_secret"]?.try(&.as_s?)
+        if scopes_any = h["oauth_scopes"]?.try(&.as_a?)
+          cfg.oauth_scopes = scopes_any.map(&.to_s)
+        end
+        cfg.enabled = h["enabled"]?.try(&.as_bool?) != false
+        if et = h["enabledTools"]?.try(&.as_a?) || h["enabled_tools"]?.try(&.as_a?)
+          cfg.enabled_tools = et.map(&.to_s)
+        end
+        if dt = h["disabledTools"]?.try(&.as_a?) || h["disabled_tools"]?.try(&.as_a?)
+          cfg.disabled_tools = dt.map(&.to_s)
+        end
+        cfg.startup_timeout_ms = h["startupTimeoutMs"]?.try(&.as_i?) ||
+                                 h["startup_timeout_ms"]?.try(&.as_i?)
+        cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?) ||
+                              h["tool_timeout_ms"]?.try(&.as_i?)
+        cfg
+      end
+
+      private def self.from_any_json(name : String, h : Hash(String, JSON::Any)) : McpServerConfig
+        cfg = McpServerConfig.new(name)
+        cfg.type = h["transport"]?.try(&.to_s) || h["type"]?.try(&.to_s) || "stdio"
+        cfg.command = h["command"]?.try(&.to_s) || ""
+        cfg.args = (h["args"]?.try(&.as_a?) || [] of JSON::Any).map(&.to_s)
+        if env_any = h["env"]?.try(&.as_h?)
+          env = {} of String => String
+          env_any.each { |k, v| env[k] = v.to_s }
+          cfg.env = env
+        end
+        cfg.cwd = h["cwd"]?.try(&.as_s?)
+        cfg.url = h["url"]?.try(&.as_s)
+        if headers_any = h["headers"]?.try(&.as_h?)
+          hdr = {} of String => String
+          headers_any.each { |k, v| hdr[k] = v.to_s }
+          cfg.headers = hdr
+        end
+        cfg.token_env = h["bearerTokenEnvVar"]?.try(&.as_s?) ||
+                        h["token_env"]?.try(&.as_s)
+        cfg.oauth_client_id = h["oauth_client_id"]?.try(&.as_s?)
+        cfg.oauth_client_secret = h["oauth_client_secret"]?.try(&.as_s?)
+        if scopes_any = h["oauth_scopes"]?.try(&.as_a?)
+          cfg.oauth_scopes = scopes_any.map(&.to_s)
+        end
+        cfg.enabled = h["enabled"]?.try(&.as_bool?) != false
+        if et = h["enabledTools"]?.try(&.as_a?)
+          cfg.enabled_tools = et.map(&.to_s)
+        end
+        if dt = h["disabledTools"]?.try(&.as_a?)
+          cfg.disabled_tools = dt.map(&.to_s)
+        end
+        cfg.startup_timeout_ms = h["startupTimeoutMs"]?.try(&.as_i?)
+        cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?)
+        cfg
+      end
+
+      private def self.env_of(h : Hash(String, TOML::Any)) : Hash(String, String)
+        env = {} of String => String
+        h.each { |k, v| env[k] = v.to_s }
+        env
+      end
+    end
+  end
+end

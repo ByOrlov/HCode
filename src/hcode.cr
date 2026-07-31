@@ -51,6 +51,18 @@ require "./tools/task"
 require "./tools/cron"
 require "./tools/read_media"
 require "./tools/select_tools"
+require "./mcp/types"
+require "./mcp/tool_naming"
+require "./mcp/transport"
+require "./mcp/http_transport"
+require "./mcp/jsonrpc"
+require "./mcp/oauth"
+require "./mcp/config"
+require "./mcp/client"
+require "./mcp/proxy_tool"
+require "./mcp/output"
+require "./mcp/auth_tool"
+require "./mcp/manager"
 require "./context/memory"
 require "./context/budget"
 require "./context/undo"
@@ -92,6 +104,7 @@ require "./tui/text"
 require "./tui/spinner"
 require "./tui/editor"
 require "./tui/markdown"
+require "./tui/fuzzy"
 require "./tui/select_list"
 require "./tui/commands"
 require "./tui/help_panel"
@@ -288,6 +301,13 @@ module Hcode
 
       permission = Permission::Manager.new(Permission::Mode.parse(config.permission_mode))
 
+      # Connect configured MCP servers and register their tools. Supports stdio
+      # (child process) and HTTP (Streamable HTTP + SSE, OAuth) transports.
+      # Failures are isolated per server — a broken server is reported, not
+      # fatal. `shutdown` is wired into both exit paths below.
+      mcp_manager = Mcp::Manager.new(home)
+      mcp_manager.connect_all(config.mcp_servers, tools)
+
       home = ENV["HOME"]? || "/tmp"
       lifecycle = Hcode::Session::Lifecycle.new(home)
       store = if sid = session_id
@@ -345,9 +365,9 @@ module Hcode
       agent_runner, swarm_runner = wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
       if prompt
-        run_headless(prompt, agent, system_prompt, store, config, task_service)
+        run_headless(prompt, agent, system_prompt, store, config, task_service, mcp_manager)
       else
-        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner, task_service)
+        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner, task_service, mcp_manager)
       end
     end
 
@@ -509,7 +529,7 @@ module Hcode
       {agent_runner, swarm_runner}
     end
 
-    private def self.run_headless(prompt, agent, system_prompt, store, config, task_service)
+    private def self.run_headless(prompt, agent, system_prompt, store, config, task_service, mcp_manager)
       store.append_simple("turn.prompt", "prompt", prompt)
 
       Signal::INT.trap do
@@ -517,6 +537,7 @@ module Hcode
         agent.cancel
         # Kill any background processes spawned during this headless run.
         task_service.stop_all_on_exit("process interrupted")
+        mcp_manager.shutdown
       end
 
       # Headless dispatcher: useful for CI/automation webhooks. StatusTracker
@@ -614,6 +635,8 @@ module Hcode
         STDERR.puts Hcode.t("errors.fatal", message: ex.message.to_s).colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
         exit(1)
+      ensure
+        mcp_manager.shutdown
       end
     end
 
@@ -648,7 +671,8 @@ module Hcode
     private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil,
                                      agent_runner : Loop::SubagentAgentRunner? = nil,
                                      swarm_runner : Loop::SubagentSwarmRunner? = nil,
-                                     task_service : Tools::InMemoryTaskService? = nil)
+                                     task_service : Tools::InMemoryTaskService? = nil,
+                                     mcp_manager : Mcp::Manager = Mcp::Manager.new)
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
       app.model = agent.provider.model_name
@@ -749,8 +773,12 @@ module Hcode
       app.on_exit = ->{
         cron_service.stop
         ts.stop_all_on_exit("process exited")
+        mcp_manager.shutdown
         nil
       }
+
+      # `/mcp` panel: surface live connection status from the manager.
+      app.on_mcp_status = ->{ mcp_manager.status_text }
 
       register_profilers(agent, app, permission, ts, system_prompt)
 
