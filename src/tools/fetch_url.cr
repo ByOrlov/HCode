@@ -189,6 +189,11 @@ module Hcode
         end
 
         body = decompress_body(response.body, content_encoding)
+        # Scrub invalid UTF-8 before any regex — PCRE2 throws on isolated
+        # high bytes ("UTF-8 error: isolated byte with 0x80 bit set"),
+        # which real-world pages frequently contain after decompression
+        # or due to encoding mismatches.
+        body = body.scrub
 
         bytesize = body.bytesize
         if bytesize > FetchURL::DEFAULT_MAX_BYTES
@@ -269,6 +274,11 @@ module Hcode
       end
 
       def extract_main_content(body : String, content_type : String) : UrlFetchResult
+        # Scrub invalid UTF-8 before regex — PCRE2 throws on isolated
+        # high bytes ("UTF-8 error: isolated byte with 0x80 bit set"),
+        # which real-world pages frequently contain.
+        body = body.scrub
+
         if content_type.starts_with?("text/plain") || content_type.starts_with?("text/markdown")
           return UrlFetchResult.new(body, UrlFetchKind::Passthrough)
         end
@@ -315,16 +325,20 @@ module Hcode
         # Удалить все остальные теги.
         s = s.gsub(/<[^>]+>/, "")
 
-        # Декодировать базовые сущности.
+        # Декодировать HTML-сущности.
         s = s.gsub("&nbsp;", " ")
         s = s.gsub("&amp;", "&")
         s = s.gsub("&lt;", "<")
         s = s.gsub("&gt;", ">")
         s = s.gsub("&quot;", "\"")
-        s = s.gsub(/&#(\d+);/) { |_|
-          # numeric entity (basic decode)
-          ""
-        }
+        s = s.gsub(/&#(\d+);/) do |match, data|
+          code = data[1].to_i?
+          code && (1..0x10FFFF).includes?(code) ? code.chr : match
+        end
+        s = s.gsub(/&#[xX]([0-9a-fA-F]+);/) do |match, data|
+          code = data[1].to_i?(16)
+          code && (1..0x10FFFF).includes?(code) ? code.chr : match
+        end
 
         # Схлопнуть whitespace.
         s = s.gsub(/\r\n?/, "\n")

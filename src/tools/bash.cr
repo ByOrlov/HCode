@@ -167,7 +167,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
           when s = status_ch.receive
             status = s
           when timeout(2.seconds)
-            LibC.kill(process.pid, 9) rescue nil
+            process.terminate(graceful: false) rescue nil
             status = status_ch.receive
           end
         end
@@ -436,7 +436,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         spawn do
           sleep 5.seconds
           if process.exists?
-            LibC.kill(process.pid, 9) rescue nil
+            process.terminate(graceful: false) rescue nil
           end
         end
       end

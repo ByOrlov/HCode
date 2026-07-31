@@ -87,7 +87,7 @@ module Hcode
             when s = status_ch.receive
               s
             when timeout(SIGTERM_GRACE_S.seconds)
-              LibC.kill(process.pid, 9) rescue nil
+              process.terminate(graceful: false) rescue nil
               status_ch.receive
             end
           end

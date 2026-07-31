@@ -206,6 +206,32 @@ describe Hcode::Tools::FetchURL do
         fetcher.extract_main_content("<html><body><script>x</script></body></html>", "text/html")
       end
     end
+
+    it "decodes numeric HTML entities instead of dropping them" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      html = %(<html><body><p>It&#39;s a &#8220;test&#8221;</p></body></html>)
+      result = fetcher.extract_main_content(html, "text/html")
+      result.content.should contain("It's a")
+      result.content.should contain("“test”")
+      result.content.should_not contain("&#")
+    end
+
+    it "decodes hex HTML entities" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      html = %(<html><body><p>&#x27;hi&#x27;</p></body></html>)
+      result = fetcher.extract_main_content(html, "text/html")
+      result.content.should contain("'hi'")
+      result.content.should_not contain("&#x")
+    end
+
+    it "handles invalid UTF-8 bytes without regex crash" do
+      fetcher = Hcode::Tools::LocalFetcher.new
+      # Bytes[0x80, 0xFF] are invalid UTF-8 — PCRE2 throws "isolated byte
+      # with 0x80 bit set" unless scrubbed before regex.
+      html = String.new(Bytes[0x3C, 0x70, 0x3E, 0x68, 0x69, 0x80, 0xFF, 0x3C, 0x2F, 0x70, 0x3E])
+      result = fetcher.extract_main_content(html, "text/html")
+      result.content.should contain("hi")
+    end
   end
 
   describe "LocalFetcher with MockHttpTransport" do

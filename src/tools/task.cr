@@ -438,7 +438,7 @@ module Hcode
         spawn do
           sleep 5.seconds
           if process.exists?
-            LibC.kill(process.pid, 9) rescue nil
+            process.terminate(graceful: false) rescue nil
           end
         end
       end
