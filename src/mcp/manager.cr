@@ -289,6 +289,10 @@ module Hcode
       # ------------------------------------------------------------------
 
       private def resolve_http_token(config : McpServerConfig) : String?
+        # If an Authorization header is already present in the config headers,
+        # the transport will apply it directly — no token resolution needed.
+        return nil if config.headers.any? { |k, _| k.downcase == "authorization" }
+
         if env_name = config.token_env
           return ENV[env_name]?
         end

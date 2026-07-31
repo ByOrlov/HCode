@@ -74,43 +74,62 @@ module Hcode
     # --- Binary replacement -------------------------------------------------
 
     private def self.replace_binary(archive_bytes : String) : Nil
-      tmp_dir = nil.as(String?)
-      tmp_dir = Dir.tempdir + "/hcode-upgrade-#{Random::Secure.hex(4)}"
-      Dir.mkdir_p(tmp_dir)
-
-      archive_name = asset_name
-      archive_path = File.join(tmp_dir, archive_name)
-      File.write(archive_path, archive_bytes)
-
-      # Extract: tar handles both .tar.gz and .zip on modern systems.
-      bin_name = {{ flag?(:win32) ? "hcode.exe" : "hcode" }}
-      if archive_name.ends_with?(".zip")
-        # Windows: use built-in tar (Windows 10 1803+) which reads zip.
-        run_shell("tar -xf #{Process.quote(archive_path)} -C #{Process.quote(tmp_dir)}")
-      else
-        run_shell("tar -xzf #{Process.quote(archive_path)} -C #{Process.quote(tmp_dir)}")
-      end
-
-      new_bin = File.join(tmp_dir, bin_name)
-      unless File.exists?(new_bin)
-        raise "extracted binary not found at #{new_bin}"
-      end
-
       cur = current_executable
-      {% if flag?(:win32) %}
-        # Windows cannot overwrite a running .exe — move the old one aside.
-        old = cur + ".old"
-        File.delete(old) if File.exists?(old)
-        File.rename(cur, old)
-        File.rename(new_bin, cur)
-      {% else %}
-        # Unix: rename over the running binary (inode stays valid for the
-        # active process; new invocations pick up the new file).
-        File.chmod(new_bin, 0o755)
-        File.rename(new_bin, cur)
-      {% end %}
-    ensure
-      FileUtils.rm_rf(tmp_dir) if tmp_dir
+      tmp_dir = make_staging_dir(cur)
+
+      begin
+        archive_name = asset_name
+        archive_path = File.join(tmp_dir, archive_name)
+        File.write(archive_path, archive_bytes)
+
+        # Extract: tar handles both .tar.gz and .zip on modern systems.
+        bin_name = {{ flag?(:win32) ? "hcode.exe" : "hcode" }}
+        if archive_name.ends_with?(".zip")
+          # Windows: use built-in tar (Windows 10 1803+) which reads zip.
+          run_shell("tar -xf #{Process.quote(archive_path)} -C #{Process.quote(tmp_dir)}")
+        else
+          run_shell("tar -xzf #{Process.quote(archive_path)} -C #{Process.quote(tmp_dir)}")
+        end
+
+        new_bin = File.join(tmp_dir, bin_name)
+        unless File.exists?(new_bin)
+          raise "extracted binary not found at #{new_bin}"
+        end
+
+        {% if flag?(:win32) %}
+          # Windows cannot overwrite a running .exe — move the old one aside.
+          old = cur + ".old"
+          File.delete(old) if File.exists?(old)
+          File.rename(cur, old)
+          move_across_fs(new_bin, cur)
+        {% else %}
+          # Unix: rename over the running binary (inode stays valid for the
+          # active process; new invocations pick up the new file). Renaming
+          # is allowed; only opening the live binary for write is not.
+          File.chmod(new_bin, 0o755)
+          move_across_fs(new_bin, cur)
+        {% end %}
+      ensure
+        FileUtils.rm_rf(tmp_dir)
+      end
+    end
+
+    # Stages the upgrade next to the running binary so the final replace is an
+    # atomic rename within one filesystem. A cross-filesystem rename fails with
+    # EXDEV, and the copy fallback would open the running binary for write,
+    # which the kernel rejects with ETXTBSY ("Text file busy"). Falls back to
+    # the system temp dir only when the install dir is not writable (e.g. a
+    # read-only /usr/local/bin), where the rename-aside path in
+    # `move_across_fs` keeps the update working.
+    private def self.make_staging_dir(target : String) : String
+      dst_dir = File.dirname(target)
+      candidate = File.join(dst_dir, ".hcode-upgrade-#{Random::Secure.hex(4)}")
+      Dir.mkdir_p(candidate)
+      candidate
+    rescue ex : File::Error
+      candidate = File.join(Dir.tempdir, "hcode-upgrade-#{Random::Secure.hex(4)}")
+      Dir.mkdir_p(candidate)
+      candidate
     end
 
     def self.current_executable : String
@@ -126,6 +145,34 @@ module Hcode
     private def self.run_shell(cmd : String) : Nil
       status = Process.run(cmd, shell: true, output: Process::Redirect::Close, error: Process::Redirect::Inherit)
       raise "extraction command failed: #{cmd}" unless status.success?
+    end
+
+    # Moves src to dst, transparently crossing filesystem boundaries.
+    # File.rename fails with EXDEV when src and dst live on different mounts
+    # (e.g. staging dir vs /usr/local/bin). The naive copy fallback would open
+    # dst for write — but dst may be the running binary, which the kernel
+    # refuses with ETXTBSY. So before copying, we move dst aside via a same-fs
+    # rename (allowed even for a running executable), then copy, then delete
+    # the moved-aside file. Its inode stays alive for the current process.
+    private def self.move_across_fs(src : String, dst : String) : Nil
+      begin
+        File.rename(src, dst)
+      rescue ex : File::Error
+        raise ex unless ex.os_error == Errno::EXDEV
+
+        aside = nil.as(String?)
+        begin
+          if File.exists?(dst)
+            aside = File.join(File.dirname(dst), ".#{File.basename(dst)}.old-#{Random::Secure.hex(2)}")
+            File.rename(dst, aside.not_nil!)
+          end
+          File.copy(src, dst)
+          File.chmod(dst, 0o755)
+          File.delete(src)
+        ensure
+          File.delete(aside) if aside && File.exists?(aside)
+        end
+      end
     end
 
     # Real HTTP GET — follows redirects, returns the body as a string.

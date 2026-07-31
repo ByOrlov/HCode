@@ -111,7 +111,7 @@ module Hcode
         # (user-global, project-root, project-local).
         home = ENV["HOME"]? || "/tmp"
         hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        config.mcp_servers = Mcp::ConfigLoader.load(content, hcode_home, cwd: Dir.current)
+        config.mcp_servers = Mcp::ConfigLoader.load(content, home, cwd: Dir.current)
 
         current_section = ""
 

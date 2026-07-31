@@ -1,6 +1,18 @@
+# Resolve the build version: explicit HCODE_VERSION wins, then the most
+# recent git tag (`git describe --tags --abbrev=0`), then "0.0.0-dev".
+def hcode_build_version
+  return ENV["HCODE_VERSION"] if ENV.key?("HCODE_VERSION")
+  tag = `git describe --tags --abbrev=0 2>/dev/null`.strip
+  tag.empty? ? "0.0.0-dev" : tag
+end
+
+def build_hcode(output = "hcode")
+  sh "HCODE_VERSION=#{hcode_build_version} crystal build src/hcode.cr -o #{output} --warnings none --no-color"
+end
+
 desc "Build the hcode binary"
 task :build do
-  sh "crystal build src/hcode.cr -o hcode --warnings none --no-color"
+  build_hcode
 end
 
 desc "Build and run the TUI"
