@@ -135,7 +135,8 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y -qq ca-certificates curl git pkg-config build-essential \
-                libgmp-dev libevent-dev libssl-dev libxml2-dev libyaml-dev libpcre3-dev
+                libgmp-dev libevent-dev libssl-dev libxml2-dev libyaml-dev \
+                libpcre3-dev libpcre2-dev zlib1g-dev
               curl -fsSL https://github.com/crystal-lang/crystal/releases/download/1.21.0/crystal-1.21.0-1-linux-aarch64.tar.gz | tar xzf - -C /opt
               export PATH="/opt/crystal-1.21.0-1/bin:$PATH"
               shards install
