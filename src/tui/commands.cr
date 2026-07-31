@@ -62,7 +62,7 @@ module Hcode
         CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md", description_key: "init"),
         CommandInfo.new("/export-debug-zip", "Export session debug bundle (.tar.gz)", description_key: "export_debug_zip"),
         CommandInfo.new("/experiments", "Show experimental feature flags", description_key: "experiments"),
-        CommandInfo.new("/mcp", "Show MCP server status", description_key: "mcp"),
+        CommandInfo.new("/mcp", "Show MCP server status", "[status|update [server]|configure]", "mcp"),
         CommandInfo.new("/plugins", "Show plugin status", description_key: "plugins"),
         CommandInfo.new("/login", "Show how to configure credentials", description_key: "login"),
         CommandInfo.new("/logout", "Clear credentials from config", description_key: "logout"),

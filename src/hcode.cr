@@ -60,6 +60,8 @@ require "./mcp/oauth"
 require "./mcp/config"
 require "./mcp/client"
 require "./mcp/proxy_tool"
+require "./mcp/lazy_proxy_tool"
+require "./mcp/tool_cache"
 require "./mcp/output"
 require "./mcp/auth_tool"
 require "./mcp/manager"
@@ -308,7 +310,7 @@ module Hcode
       # Interactive runs connect in the background so a slow server never
       # blocks the TUI; headless runs block so tools are ready for the prompt.
       mcp_manager = Mcp::Manager.new(home)
-      mcp_manager.connect_all(config.mcp_servers, tools,
+      mcp_manager.register_from_cache(config.mcp_servers, tools,
         active_provider: config.provider_name, blocking: prompt ? true : false)
 
       home = ENV["HOME"]? || "/tmp"
@@ -782,6 +784,12 @@ module Hcode
 
       # `/mcp` panel: surface live connection status from the manager.
       app.on_mcp_status = ->{ mcp_manager.status_text }
+
+      # `/mcp update [server]`: force reconnect + refresh cache.
+      app.on_mcp_update = ->(server : String?) do
+        mcp_manager.update_cache(server)
+        nil
+      end
 
       register_profilers(agent, app, permission, ts, system_prompt)
 

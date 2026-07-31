@@ -98,7 +98,7 @@ hi:
     init: "कोडबेस का विश्लेषण करें और AGENTS.md जनरेट करें"
     export_debug_zip: "सत्र डिबग बंडल निर्यात करें (.tar.gz)"
     experiments: "प्रायोगिक फ़ीचर फ़्लैग दिखाएँ"
-    mcp: "MCP सर्वर स्थिति दिखाएँ"
+    mcp: "MCP server status, update, configure"
     plugins: "प्लगइन स्थिति दिखाएँ"
     login: "क्रेडेंशियल विन्यस्त करने का तरीका दिखाएँ"
     logout: "विन्यास से क्रेडेंशियल साफ़ करें"

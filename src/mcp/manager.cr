@@ -3,6 +3,8 @@ require "../tools/registry"
 require "./client"
 require "./config"
 require "./proxy_tool"
+require "./lazy_proxy_tool"
+require "./tool_cache"
 require "./tool_naming"
 require "./http_transport"
 require "./oauth"
@@ -65,6 +67,7 @@ module Hcode
       property on_auth_request : ((String, String) -> Nil)?
       @home_dir : String
       @entries : Hash(String, InternalEntry) = {} of String => InternalEntry
+      @connecting : Hash(String, Bool) = {} of String => Bool
       @registry : Tools::Registry?
       @mutex = Mutex.new
       @all_configs : Array(McpServerConfig) = [] of McpServerConfig
@@ -94,6 +97,99 @@ module Hcode
         done = Channel(Nil).new(applicable.size)
         applicable.each { |cfg| spawn_connect(cfg, done) }
         applicable.size.times { done.receive } if blocking
+      end
+
+      # Register cached tool definitions as lazy proxy tools without
+      # connecting any server. Servers with no cache (first run) fall back
+      # to an eager background connect. This is the primary startup path —
+      # it returns immediately when all servers have a warm cache, avoiding
+      # OpenSSL init and TLS handshakes (~3 MB heap).
+      def register_from_cache(configs : Array(McpServerConfig), registry : Tools::Registry,
+                              *, active_provider : String? = nil, blocking : Bool = false) : Nil
+        @all_configs = configs
+        @registry = registry
+        @active_provider = active_provider
+        applicable = configs.select { |c| c.matches_provider?(active_provider) }
+        return if applicable.empty?
+
+        uncached = [] of McpServerConfig
+        done = Channel(Nil).new(applicable.size)
+
+        applicable.each do |cfg|
+          cached_defs = active_provider.try { |p| ToolCache.load?(p, cfg.name) }
+          if cached_defs && !cached_defs.empty?
+            # Warm cache: register lazy tools immediately, no connection.
+            entry = InternalEntry.new(cfg.name, cfg)
+            entry.status = ServerStatus::Pending
+            allowed = cfg.allowed_tool_names(cached_defs.map(&.name))
+            cached_defs.select { |d| allowed.includes?(d.name) }.each do |d|
+              proxy = ToolNaming.proxy_name(cfg.name, d.name)
+              entry.tools << McpLazyProxyTool.new(proxy, cfg.name, d.name,
+                d.description, d.input_schema, self,
+                tool_timeout: cfg.effective_tool_timeout)
+            end
+            @mutex.synchronize { @entries[cfg.name] = entry }
+            register_entry_tools(entry)
+            rebuild_reports
+            done.send(nil)
+          else
+            # No cache or stale: connect in background to discover + cache tools.
+            uncached << cfg
+            spawn_connect(cfg, done)
+          end
+        end
+
+        done.receive if blocking && uncached.any?
+      end
+
+      # Connect a server on demand (called by McpLazyProxyTool on first
+      # execute). Dedupes concurrent calls via a per-server channel.
+      def ensure_connected(server_name : String) : Client
+        entry = @mutex.synchronize { @entries[server_name]? }
+        raise "MCP server '#{server_name}' is not configured" unless entry
+
+        # Fast path: already connected.
+        if client = entry.client
+          return client if entry.status.connected?
+        end
+
+        # Dedup: if another fibre is already connecting, wait for it.
+        while true
+          connecting = @mutex.synchronize { @connecting[server_name]? }
+          unless connecting
+            # We are the first caller — claim the slot and connect.
+            @mutex.synchronize { @connecting[server_name] = true }
+            begin
+              connect_one(entry)
+              register_entry_tools(entry)
+              rebuild_reports
+              client = entry.client
+              raise entry.error || "MCP server '#{server_name}' failed to connect" unless client
+              return client
+            ensure
+              @mutex.synchronize { @connecting.delete(server_name) }
+            end
+          end
+
+          # Another fibre is connecting — poll until it finishes.
+          if entry.status.connected? && (client = entry.client)
+            return client
+          end
+          if entry.status.failed? || entry.status == ServerStatus::NeedsAuth
+            raise entry.error || "MCP server '#{server_name}' failed to connect"
+          end
+          Fiber.yield
+        end
+      end
+
+      # Force reconnect + refresh cache for one or all servers.
+      def update_cache(server_name : String? = nil) : Nil
+        if name = server_name
+          reconnect(name)
+        else
+          applicable = @all_configs.select { |c| c.matches_provider?(@active_provider) }
+          applicable.each { |cfg| reconnect(cfg.name) }
+        end
       end
 
       # Reconcile connected servers against a new active provider: disconnect
@@ -252,6 +348,12 @@ module Hcode
         startup_timeout = config.effective_startup_timeout(DEFAULT_STARTUP_TIMEOUT)
         client.connect(timeout: startup_timeout)
         defs = client.list_tools(timeout: startup_timeout)
+
+        # Persist tool definitions to the on-disk cache so subsequent
+        # startups can register lazy tools without connecting.
+        if ap = @active_provider
+          ToolCache.save(ap, config.name, defs)
+        end
 
         # Apply enabled/disabled tools filter.
         all_remote_names = defs.map(&.name)

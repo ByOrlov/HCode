@@ -683,5 +683,83 @@ module Hcode
         end
       end
     end
+
+    # --------------------------------------------------------------------
+    # Tool cache (lazy MCP)
+    # --------------------------------------------------------------------
+    describe ToolCache do
+      it "saves and loads tool definitions" do
+        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
+        ENV["HCODE_HOME"] = home
+        Dir.mkdir_p(home)
+        begin
+          defs = [
+            ToolDefinition.new("search", "Search the web", JSON.parse(%({"type":"object"}))),
+            ToolDefinition.new("read", "Read a page", JSON.parse(%({"type":"object","properties":{}}))),
+          ]
+          ToolCache.save("zai-coding-plan", "web-search", defs)
+
+          loaded = ToolCache.load?("zai-coding-plan", "web-search")
+          loaded.should_not be_nil
+          loaded.not_nil!.size.should eq(2)
+          loaded.not_nil![0].name.should eq("search")
+          loaded.not_nil![0].description.should eq("Search the web")
+          loaded.not_nil![1].name.should eq("read")
+        ensure
+          ENV.delete("HCODE_HOME")
+          rm_r(home) rescue nil
+        end
+      end
+
+      it "returns nil for unknown provider/server" do
+        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
+        ENV["HCODE_HOME"] = home
+        Dir.mkdir_p(home)
+        begin
+          ToolCache.load?("unknown", "nope").should be_nil
+        ensure
+          ENV.delete("HCODE_HOME")
+          rm_r(home) rescue nil
+        end
+      end
+
+      it "clears one server or all servers for a provider" do
+        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
+        ENV["HCODE_HOME"] = home
+        Dir.mkdir_p(home)
+        begin
+          defs = [ToolDefinition.new("t1", "d1", JSON.parse("{}"))]
+          ToolCache.save("prov", "srv1", defs)
+          ToolCache.save("prov", "srv2", defs)
+
+          ToolCache.clear("prov", "srv1")
+          ToolCache.load?("prov", "srv1").should be_nil
+          ToolCache.load?("prov", "srv2").should_not be_nil
+
+          ToolCache.clear("prov")
+          ToolCache.load?("prov", "srv2").should be_nil
+        ensure
+          ENV.delete("HCODE_HOME")
+          rm_r(home) rescue nil
+        end
+      end
+    end
+
+    # --------------------------------------------------------------------
+    # McpLazyProxyTool
+    # --------------------------------------------------------------------
+    describe McpLazyProxyTool do
+      it "exposes static identity without a client" do
+        manager = Manager.new(Dir.tempdir)
+        tool = McpLazyProxyTool.new(
+          "mcp__srv__search", "srv", "search",
+          "Search the web", JSON.parse(%({"type":"object"})),
+          manager
+        )
+        tool.name.should eq("mcp__srv__search")
+        tool.description.should eq("Search the web")
+        tool.parameters["type"].to_s.should eq("object")
+      end
+    end
   end
 end

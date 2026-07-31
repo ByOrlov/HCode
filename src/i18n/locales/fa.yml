@@ -98,7 +98,7 @@ fa:
     init: "تحلیل کدبیس و تولید AGENTS.md"
     export_debug_zip: "صدور بسته اشکال‌زدایی نشست (.tar.gz)"
     experiments: "نمایش پرچم‌های آزمایشی ویژگی‌ها"
-    mcp: "نمایش وضعیت سرور MCP"
+    mcp: "MCP server status, update, configure"
     plugins: "نمایش وضعیت افزونه‌ها"
     login: "نمایش نحوه پیکربندی اعتبارها"
     logout: "پاک کردن اعتبارها از پیکربندی"

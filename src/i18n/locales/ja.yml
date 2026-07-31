@@ -98,7 +98,7 @@ ja:
     init: "コードベースを分析して AGENTS.md を生成"
     export_debug_zip: "セッションのデバッグバンドル (.tar.gz) をエクスポート"
     experiments: "実験的機能フラグを表示"
-    mcp: "MCP サーバーのステータスを表示"
+    mcp: "MCP server status, update, configure"
     plugins: "プラグインのステータスを表示"
     login: "資格情報の設定方法を表示"
     logout: "設定から資格情報をクリア"

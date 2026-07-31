@@ -98,7 +98,7 @@ en:
     init: "Analyze the codebase and generate AGENTS.md"
     export_debug_zip: "Export session debug bundle (.tar.gz)"
     experiments: "Show experimental feature flags"
-    mcp: "Show MCP server status"
+    mcp: "MCP server status, update, configure"
     plugins: "Show plugin status"
     login: "Show how to configure credentials"
     logout: "Clear credentials from config"

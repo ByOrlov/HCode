@@ -374,6 +374,7 @@ module Hcode
       # `/mcp`: returns the live MCP server status text, or nil when no client
       # is wired (e.g. headless path).
       property on_mcp_status : (-> String)? = nil
+      property on_mcp_update : ((String?) -> Nil)? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,
@@ -1999,12 +2000,27 @@ module Hcode
           end
           @messages << Message.new("system", body.strip)
         when "/mcp"
-          # Mirrors TS `showMcpServers`. When the manager is wired (interactive
-          # mode), surface live connection status; otherwise report that no MCP
-          # client is available in this run.
-          status = @on_mcp_status.try(&.call) ||
-                   "MCP servers: not available in this run (no client wired)."
-          @messages << Message.new("system", status)
+          # Subcommands: /mcp status, /mcp update [server], /mcp configure
+          # Bare /mcp defaults to status.
+          sub = args.strip.split(/\s+/).reject(&.empty?)
+          case sub[0]?
+          when "update"
+            server = sub[1]?
+            msg = server ? "Refreshing MCP server '#{server}'..." : "Refreshing all MCP servers..."
+            @messages << Message.new("system", msg)
+            if cb = @on_mcp_update
+              cb.call(server)
+            else
+              @messages << Message.new("error", "MCP update not available in this run.")
+            end
+          when "configure"
+            @messages << Message.new("system", "MCP configuration: edit ~/.hcode/mcp.json directly, then run /mcp update to refresh the cache.")
+          else
+            # Default: show status.
+            status = @on_mcp_status.try(&.call) ||
+                     "MCP servers: not available in this run (no client wired)."
+            @messages << Message.new("system", status)
+          end
         when "/plugins"
           # Mirrors TS `handlePluginsCommand`. hcode.cr has no plugin runtime.
           @messages << Message.new("system",

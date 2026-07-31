@@ -4,6 +4,8 @@ module Hcode
     # response. `input_schema` is the raw JSON Schema the server published and
     # is forwarded verbatim as the proxy tool's `parameters`.
     struct ToolDefinition
+      include JSON::Serializable
+
       getter name : String
       getter description : String
       getter input_schema : JSON::Any

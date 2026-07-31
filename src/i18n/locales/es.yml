@@ -98,7 +98,7 @@ es:
     init: "Analizar el código y generar AGENTS.md"
     export_debug_zip: "Exportar el paquete de depuración de la sesión (.tar.gz)"
     experiments: "Mostrar flags de funciones experimentales"
-    mcp: "Mostrar el estado de los servidores MCP"
+    mcp: "MCP server status, update, configure"
     plugins: "Mostrar el estado de los plugins"
     login: "Mostrar cómo configurar las credenciales"
     logout: "Borrar las credenciales de la configuración"
