@@ -84,9 +84,8 @@ jobs:
             runner: ubuntu-latest
             archive: tar.gz
           - target: aarch64-linux
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm
             archive: tar.gz
-            qemu: true
           - target: x86_64-darwin
             runner: macos-13
             archive: tar.gz
@@ -100,108 +99,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- Linux x86_64 (native) ----
-      - name: Install Crystal (linux x86_64)
-        if: matrix.target == 'x86_64-linux'
+      - name: Install Crystal
         uses: crystal-lang/install-crystal@v1
         with:
           crystal: 1.21.0
 
-      - name: Build (linux x86_64)
-        if: matrix.target == 'x86_64-linux'
+      - name: Build
+        shell: bash
         run: |
           shards install
           crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
-          ./hcode --version
-
-      # ---- Linux aarch64 (QEMU cross via Docker) ----
-      - name: Set up QEMU
-        if: matrix.qemu == true
-        uses: docker/setup-qemu-action@v3
-
-      # No multi-arch Crystal Docker image exists for 1.21.0 (84codes tops
-      # out at 1.20.3, and the old apt repo at distro.crystal-lang.org is dead).
-      # Crystal publishes a prebuilt linux-aarch64 tarball since 1.21.0, so we
-      # extract it in an arm64 ubuntu container and build natively under QEMU.
-      - name: Build (linux aarch64 via Docker)
-        if: matrix.target == 'aarch64-linux'
-        run: |
-          docker run --rm \
-            -v "$PWD":/work -w /work \
-            --platform linux/arm64 \
-            -e HCODE_VERSION="$HCODE_VERSION" \
-            ubuntu:22.04 bash -lc '
-              set -euo pipefail
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update -qq
-              apt-get install -y -qq ca-certificates curl git file pkg-config build-essential \
-                libgmp-dev libevent-dev libssl-dev libxml2-dev libyaml-dev \
-                libpcre3-dev libpcre2-dev zlib1g-dev
-              curl -fsSL https://github.com/crystal-lang/crystal/releases/download/1.21.0/crystal-1.21.0-1-linux-aarch64.tar.gz | tar xzf - -C /opt
-              export PATH="/opt/crystal-1.21.0-1/bin:$PATH"
-              shards install
-              crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
-              file hcode
-            '
-
-      # ---- macOS x86_64 ----
-      - name: Install Crystal (darwin x86_64)
-        if: matrix.target == 'x86_64-darwin'
-        uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: 1.21.0
-
-      - name: Build (darwin x86_64)
-        if: matrix.target == 'x86_64-darwin'
-        run: |
-          shards install
-          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
-          ./hcode --version
-
-      # ---- macOS aarch64 ----
-      - name: Install Crystal (darwin aarch64)
-        if: matrix.target == 'aarch64-darwin'
-        uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: 1.21.0
-
-      - name: Build (darwin aarch64)
-        if: matrix.target == 'aarch64-darwin'
-        run: |
-          shards install
-          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
-          ./hcode --version
-
-      # ---- Windows x86_64 (MinGW/GNU backend via MSYS2) ----
-      # The default MSVC backend can't resolve Win32 console symbols (LNK2019
-      # on getStdHandle etc.) — Crystal's MSVC link setup is incomplete. The
-      # GNU (MinGW) build links via gcc inside an MSYS2 mingw64 shell, where
-      # Win32 import libs resolve correctly.
-      - name: Set up MSYS2 (mingw64)
-        if: matrix.target == 'x86_64-windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-gc git
-
-      - name: Install Crystal (windows x86_64, GNU build)
-        if: matrix.target == 'x86_64-windows'
-        shell: pwsh
-        run: |
-          $url = "https://github.com/crystal-lang/crystal/releases/download/1.21.0/crystal-1.21.0-windows-x86_64-gnu-unsupported.zip"
-          Invoke-WebRequest $url -OutFile crystal.zip
-          Expand-Archive crystal.zip -DestinationPath C:\crystal
-          echo "C:\crystal" >> $env:GITHUB_PATH
-
-      - name: Build (windows x86_64)
-        if: matrix.target == 'x86_64-windows'
-        shell: msys2 {0}
-        run: |
-          export PATH="/c/crystal/bin:$PATH"
-          shards install
-          crystal build src/hcode.cr -o hcode.exe --release --no-debug --warnings none
-          ./hcode.exe --version
+          if [ -f hcode.exe ]; then ./hcode.exe --version; else ./hcode --version; fi
 
       # ---- Archive + upload ----
       - name: Archive (tar.gz)
@@ -215,12 +123,7 @@ jobs:
 
       - name: Generate SHA256
         shell: bash
-        run: |
-          if [ -f "hcode-${{ matrix.target }}.tar.gz" ]; then
-            sha256sum "hcode-${{ matrix.target }}.tar.gz"
-          else
-            sha256sum "hcode-${{ matrix.target }}.zip"
-          fi
+        run: sha256sum hcode-${{ matrix.target }}.*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -49,10 +49,10 @@
       maximum_window_size : Coord
     end
 
-    fun getStdHandle(handle_id : Int32) : Void*
-    fun getConsoleMode(handle : Void*, mode : UInt32*) : Int32
-    fun setConsoleMode(handle : Void*, mode : UInt32) : Int32
-    fun getConsoleScreenBufferInfo(handle : Void*, info : ConsoleScreenBufferInfo*) : Int32
+    fun getStdHandle = "GetStdHandle"(handle_id : Int32) : Void*
+    fun getConsoleMode = "GetConsoleMode"(handle : Void*, mode : UInt32*) : Int32
+    fun setConsoleMode = "SetConsoleMode"(handle : Void*, mode : UInt32) : Int32
+    fun getConsoleScreenBufferInfo = "GetConsoleScreenBufferInfo"(handle : Void*, info : ConsoleScreenBufferInfo*) : Int32
   end
 {% end %}
 
