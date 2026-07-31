@@ -463,8 +463,10 @@ module Hcode
               "No API key needed for #{choice.name}.")
           end
           advance_setup_step
-        when .escape?
-          @provider_list.hide
+        when .escape?, .ctrl_d?
+          # ESC/Ctrl+D at the provider selector: exit the app — the user
+          # is aborting setup. Without this the wizard is inescapable.
+          @running = false
           @dirty = true
         end
       end
@@ -542,7 +544,7 @@ module Hcode
           wizard.model = model
           wizard.step = Setup::Wizard::Step::Done
           advance_setup_step
-        when .escape?
+        when .escape?, .ctrl_d?
           # Clear the search query first; only step back once it is empty.
           unless @model_list.clear_query
             @model_list.hide
@@ -565,8 +567,8 @@ module Hcode
 
         case wizard.step
         when .welcome?
-          # Already at the top: cancel setup (no-op selector already closed).
-          @editor.clear
+          # Already at the top: exit the app (abort setup).
+          @running = false
           @dirty = true
         when .credentials?
           wizard.back
@@ -1193,7 +1195,7 @@ module Hcode
               text = @editor.submit!
               submit_setup_text(text)
             end
-          when .escape?
+          when .escape?, .ctrl_d?
             back_setup_step
           else
             @editor.handle_input(key)
