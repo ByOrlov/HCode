@@ -67,6 +67,8 @@ module Hcode
       @entries : Hash(String, InternalEntry) = {} of String => InternalEntry
       @registry : Tools::Registry?
       @mutex = Mutex.new
+      @all_configs : Array(McpServerConfig) = [] of McpServerConfig
+      @active_provider : String? = nil
 
       def initialize(@home_dir : String = (ENV["HOME"]? || "/tmp"))
       end
@@ -77,26 +79,71 @@ module Hcode
       # by slow or unreachable servers. Pass `blocking: true` to wait for all
       # connections before returning (used by tests and the headless path
       # when tools must be ready before the first turn).
+      #
+      # Only servers whose `providers` match `active_provider` (or are global)
+      # are connected; the rest are remembered in `@all_configs` so a later
+      # `reconcile` can connect them when the provider changes.
       def connect_all(configs : Array(McpServerConfig), registry : Tools::Registry,
-                      *, blocking : Bool = false) : Nil
-        return if configs.empty?
+                      *, active_provider : String? = nil, blocking : Bool = false) : Nil
+        @all_configs = configs
         @registry = registry
+        @active_provider = active_provider
+        applicable = configs.select { |c| c.matches_provider?(active_provider) }
+        return if applicable.empty?
 
         done = Channel(Nil).new
-        configs.each do |cfg|
-          entry = InternalEntry.new(cfg.name, cfg)
-          entry.status = ServerStatus::Disabled unless cfg.enabled?
-          @mutex.synchronize { @entries[cfg.name] = entry }
+        applicable.each { |cfg| spawn_connect(cfg, done) }
+        applicable.size.times { done.receive } if blocking
+      end
 
-          spawn(name: "mcp-connect-#{cfg.name}") do
-            connect_one(entry) if cfg.enabled?
-            register_entry_tools(entry)
-            rebuild_reports
-            done.send(nil)
+      # Reconcile connected servers against a new active provider: disconnect
+      # servers whose provider no longer matches, and connect servers that now
+      # match but were previously skipped. Non-blocking — connections happen in
+      # background fibres, mirroring the interactive startup path.
+      def reconcile(active_provider : String?) : Nil
+        return unless registry = @registry
+        @active_provider = active_provider
+
+        # Disconnect entries that no longer match the active provider.
+        to_disconnect = [] of InternalEntry
+        @mutex.synchronize do
+          @entries.each do |name, entry|
+            unless entry.config.matches_provider?(active_provider)
+              to_disconnect << entry
+            end
           end
         end
+        to_disconnect.each do |entry|
+          disconnect_entry(entry)
+          @mutex.synchronize { @entries.delete(entry.name) }
+        end
 
-        configs.size.times { done.receive } if blocking
+        # Connect configs that now match but are not yet connected.
+        connected_names = @mutex.synchronize { @entries.keys }
+        done = Channel(Nil).new
+        spawned = 0
+        @all_configs.each do |cfg|
+          next unless cfg.matches_provider?(active_provider)
+          next if connected_names.includes?(cfg.name)
+          spawn_connect(cfg, done)
+          spawned += 1
+        end
+        spawned.times { done.receive } if spawned > 0
+
+        rebuild_reports
+      end
+
+      private def spawn_connect(cfg : McpServerConfig, done : Channel(Nil)) : Nil
+        entry = InternalEntry.new(cfg.name, cfg)
+        entry.status = ServerStatus::Disabled unless cfg.enabled?
+        @mutex.synchronize { @entries[cfg.name] = entry }
+
+        spawn(name: "mcp-connect-#{cfg.name}") do
+          connect_one(entry) if cfg.enabled?
+          register_entry_tools(entry)
+          rebuild_reports
+          done.send(nil)
+        end
       end
 
       # Reconnect a single server by name: close the old client, discover
@@ -348,6 +395,17 @@ module Hcode
 
       private def close_entry(entry : InternalEntry) : Nil
         close_client(entry)
+      end
+
+      # Close the connection and unregister the entry's proxy tools from the
+      # shared registry so the model no longer sees them.
+      private def disconnect_entry(entry : InternalEntry) : Nil
+        close_client(entry)
+        if registry = @registry
+          entry.tools.each { |t| registry.unregister(t.name) }
+        end
+        entry.tools.clear
+        entry.status = ServerStatus::Disabled
       end
 
       private def close_client(entry : InternalEntry) : Nil

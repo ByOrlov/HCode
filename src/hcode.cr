@@ -308,7 +308,8 @@ module Hcode
       # Interactive runs connect in the background so a slow server never
       # blocks the TUI; headless runs block so tools are ready for the prompt.
       mcp_manager = Mcp::Manager.new(home)
-      mcp_manager.connect_all(config.mcp_servers, tools, blocking: prompt ? true : false)
+      mcp_manager.connect_all(config.mcp_servers, tools,
+        active_provider: config.provider_name, blocking: prompt ? true : false)
 
       home = ENV["HOME"]? || "/tmp"
       lifecycle = Hcode::Session::Lifecycle.new(home)
@@ -895,6 +896,7 @@ module Hcode
           agent.swap_provider!(provider)
           config.provider_name = name
           config.save
+          mcp_manager.reconcile(name)
           app.model = provider.model_name
           true
         rescue ex : ProviderConfigError
@@ -963,6 +965,7 @@ module Hcode
           provider = build_named_provider(wizard.provider_name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
           agent.swap_provider!(provider)
+          mcp_manager.reconcile(wizard.provider_name.to_s)
           app.model = provider.model_name
         rescue ex : ProviderConfigError
           app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))

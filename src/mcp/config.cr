@@ -32,6 +32,9 @@ module Hcode
       property disabled_tools : Array(String)? = nil
       property startup_timeout_ms : Int32? = nil
       property tool_timeout_ms : Int32? = nil
+      # Provider affinity: when empty the server is global (loads on every
+      # provider); otherwise it loads only when the active provider matches.
+      property providers : Array(String) = [] of String
 
       def initialize(@name : String, @command : String = "",
                      @args : Array(String) = [] of String,
@@ -47,7 +50,14 @@ module Hcode
                      @enabled_tools : Array(String)? = nil,
                      @disabled_tools : Array(String)? = nil,
                      @startup_timeout_ms : Int32? = nil,
-                     @tool_timeout_ms : Int32? = nil)
+                     @tool_timeout_ms : Int32? = nil,
+                     @providers : Array(String) = [] of String)
+      end
+
+      # True when this server should load for the given active provider.
+      # Empty `providers` means global (always loads).
+      def matches_provider?(active : String?) : Bool
+        @providers.empty? || (active ? @providers.includes?(active) : false)
       end
 
       def stdio? : Bool
@@ -192,6 +202,7 @@ module Hcode
                                  h["startup_timeout_ms"]?.try(&.as_i?)
         cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?) ||
                               h["tool_timeout_ms"]?.try(&.as_i?)
+        cfg.providers = parse_providers(h)
         cfg
       end
 
@@ -228,6 +239,7 @@ module Hcode
         end
         cfg.startup_timeout_ms = h["startupTimeoutMs"]?.try(&.as_i?)
         cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?)
+        cfg.providers = parse_providers_json(h)
         cfg
       end
 
@@ -235,6 +247,26 @@ module Hcode
         env = {} of String => String
         h.each { |k, v| env[k] = v.to_s }
         env
+      end
+
+      private def self.parse_providers(h : Hash(String, TOML::Any)) : Array(String)
+        if arr = h["providers"]?.try(&.as_a?)
+          arr.map(&.to_s)
+        elsif single = h["provider"]?.try(&.as_s?)
+          [single]
+        else
+          [] of String
+        end
+      end
+
+      private def self.parse_providers_json(h : Hash(String, JSON::Any)) : Array(String)
+        if arr = h["providers"]?.try(&.as_a?)
+          arr.map(&.to_s)
+        elsif single = h["provider"]?.try(&.to_s)
+          single.empty? ? [] of String : [single]
+        else
+          [] of String
+        end
       end
     end
   end

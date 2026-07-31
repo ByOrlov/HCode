@@ -12,6 +12,10 @@ module Hcode
         @mutex.synchronize { @tools[tool.name] = tool }
       end
 
+      def unregister(name : String) : Nil
+        @mutex.synchronize { @tools.delete(name) }
+      end
+
       def get(name : String) : Tool?
         @mutex.synchronize { @tools[name]? }
       end

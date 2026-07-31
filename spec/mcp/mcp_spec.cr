@@ -164,6 +164,53 @@ module Hcode
           ConfigLoader.parse_toml_section("this is not toml = = =").should be_empty
           ConfigLoader.parse_toml_section(nil).should be_empty
         end
+
+        it "parses providers (array) and provider (single string) from toml" do
+          toml = <<-TOML
+            [[mcp_servers]]
+            name = "zai-search"
+            command = "npx"
+            providers = ["zai", "zai-coding-plan"]
+
+            [[mcp_servers]]
+            name = "single"
+            command = "x"
+            provider = "moonshot"
+          TOML
+          servers = ConfigLoader.parse_toml_section(toml)
+          multi = servers.find(&.name.==("zai-search")).not_nil!
+          multi.providers.should eq(["zai", "zai-coding-plan"])
+          single = servers.find(&.name.==("single")).not_nil!
+          single.providers.should eq(["moonshot"])
+        end
+
+        it "parses providers from mcp.json" do
+          home = File.join(Dir.tempdir, "hcode-mcp-prov-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "zai-search": {
+                    "command": "npx",
+                    "providers": ["zai", "zai-coding-plan"]
+                  },
+                  "moon-only": {
+                    "command": "x",
+                    "provider": "moonshot"
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.parse_mcp_json(home)
+            servers.find(&.name.==("zai-search")).not_nil!.providers
+              .should eq(["zai", "zai-coding-plan"])
+            servers.find(&.name.==("moon-only")).not_nil!.providers
+              .should eq(["moonshot"])
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
+        end
       end
 
       # --------------------------------------------------------------------
@@ -356,6 +403,26 @@ module Hcode
           m.any_connected?.should be_false
           m.status_text.should contain("no `command`")
         end
+
+        it "filters out servers whose provider does not match" do
+          m = Manager.new
+          zai = McpServerConfig.new("zai-search", command: "no-such-cmd",
+                                    providers: ["zai", "zai-coding-plan"])
+          m.connect_all([zai], Tools::Registry.new,
+                        active_provider: "moonshot", blocking: true)
+          m.any_connected?.should be_false
+          m.status_text.should eq("No MCP servers configured.")
+        end
+
+        it "connects global servers regardless of provider" do
+          m = Manager.new
+          global = McpServerConfig.new("global", command: "no-such-cmd")
+          m.connect_all([global], Tools::Registry.new,
+                        active_provider: "moonshot", blocking: true)
+          # It attempts connection (fails on missing binary) but is not filtered.
+          m.status_text.should contain("global")
+          m.status_text.should_not contain("No MCP servers configured.")
+        end
       end
 
       # --------------------------------------------------------------------
@@ -508,6 +575,21 @@ module Hcode
           McpServerConfig.new("h", type: "http", url: "http://x").remote?.should be_true
           McpServerConfig.new("h", type: "sse", url: "http://x").remote?.should be_true
         end
+
+        it "matches_provider? treats empty providers as global" do
+          cfg = McpServerConfig.new("g", command: "c")
+          cfg.matches_provider?("moonshot").should be_true
+          cfg.matches_provider?("zai").should be_true
+          cfg.matches_provider?(nil).should be_true
+        end
+
+        it "matches_provider? only matches listed providers" do
+          cfg = McpServerConfig.new("z", command: "c", providers: ["zai", "zai-coding-plan"])
+          cfg.matches_provider?("zai").should be_true
+          cfg.matches_provider?("zai-coding-plan").should be_true
+          cfg.matches_provider?("moonshot").should be_false
+          cfg.matches_provider?(nil).should be_false
+        end
       end
 
       # --------------------------------------------------------------------
@@ -553,6 +635,23 @@ module Hcode
           m.connect_all([cfg], Tools::Registry.new, blocking: true)
           m.status_text.should contain("⊘")
           m.status_text.should contain("off")
+        end
+      end
+
+      # --------------------------------------------------------------------
+      # Registry: unregister (needed for MCP provider reconcile)
+      # --------------------------------------------------------------------
+      describe Tools::Registry do
+        it "removes a tool by name via unregister" do
+          reg = Tools::Registry.new
+          tool = McpProxyTool.new("mcp__srv__echo", "srv", "echo", "d",
+                                  JSON.parse(%({"type":"object"})),
+                                  Client.new("srv", SmartLoopback.new,
+                                             JsonRpcClient.new(SmartLoopback.new)))
+          reg.register(tool)
+          reg.get("mcp__srv__echo").should_not be_nil
+          reg.unregister("mcp__srv__echo")
+          reg.get("mcp__srv__echo").should be_nil
         end
       end
     end
