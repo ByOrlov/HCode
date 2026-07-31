@@ -8,3 +8,5 @@ kimi-code/
 *.swp
 
 tmp/
+
+*.deb

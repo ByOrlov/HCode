@@ -438,7 +438,7 @@ module Hcode
         spawn do
           sleep 5.seconds
           if process.exists?
-            process.terminate(graceful: false) rescue nil
+            Tool::PROCESS_PORT.force_kill(process)
           end
         end
       end

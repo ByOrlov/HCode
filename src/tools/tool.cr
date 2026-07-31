@@ -1,6 +1,10 @@
 module Hcode
   module Tools
     abstract class Tool
+      # Composition root for cross-platform process termination. Tools that
+      # spawn subprocesses use this instead of `LibC.kill` (POSIX-only).
+      PROCESS_PORT = ::Hcode::ProcessPort.default
+
       abstract def name : String
       abstract def description : String
       abstract def parameters : JSON::Any

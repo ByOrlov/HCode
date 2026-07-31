@@ -87,7 +87,7 @@ module Hcode
             when s = status_ch.receive
               s
             when timeout(SIGTERM_GRACE_S.seconds)
-              process.terminate(graceful: false) rescue nil
+              Tool::PROCESS_PORT.force_kill(process)
               status_ch.receive
             end
           end

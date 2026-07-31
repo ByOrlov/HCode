@@ -119,8 +119,12 @@ jobs:
         if: matrix.qemu == true
         uses: docker/setup-qemu-action@v3
 
-      # No official arm64 crystallang Docker image exists, so build natively
-      # under QEMU in an arm64 ubuntu container with Crystal from the apt repo.
+      # The official crystallang images are amd64-only. 84codes publishes
+      # multi-arch images (amd64 + arm64) for every Crystal release (incl.
+      # 1.14.0), with crystal + shards + build deps preinstalled, so we build
+      # natively under QEMU in the arm64 variant of that image.
+      # (The previous apt-repo route via distro.crystal-lang.org is dead —
+      # that host no longer resolves.)
       - name: Build (linux aarch64 via Docker)
         if: matrix.target == 'aarch64-linux'
         run: |
@@ -128,15 +132,8 @@ jobs:
             -v "$PWD":/work -w /work \
             --platform linux/arm64 \
             -e HCODE_VERSION="$HCODE_VERSION" \
-            ubuntu:22.04 bash -lc '
+            84codes/crystal:1.14.0-ubuntu-22.04 bash -lc '
               set -euo pipefail
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update -qq
-              apt-get install -y -qq ca-certificates curl gnupg build-essential \
-                libssl-dev libxml2-dev libyaml-dev libgmp-dev libreadline-dev \
-                zlib1g-dev libevent-dev git pkg-config
-              curl -fsSL https://distro.crystal-lang.org/crystal/setup.sh | bash
-              apt-get install -y -qq crystal
               shards install
               crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
               file hcode
