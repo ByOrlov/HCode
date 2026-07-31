@@ -171,20 +171,35 @@ jobs:
           crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
           ./hcode --version
 
-      # ---- Windows x86_64 ----
-      - name: Install Crystal (windows x86_64)
+      # ---- Windows x86_64 (MinGW/GNU backend via MSYS2) ----
+      # The default MSVC backend can't resolve Win32 console symbols (LNK2019
+      # on getStdHandle etc.) — Crystal's MSVC link setup is incomplete. The
+      # GNU (MinGW) build links via gcc inside an MSYS2 mingw64 shell, where
+      # Win32 import libs resolve correctly.
+      - name: Set up MSYS2 (mingw64)
         if: matrix.target == 'x86_64-windows'
-        uses: crystal-lang/install-crystal@v1
+        uses: msys2/setup-msys2@v2
         with:
-          crystal: 1.21.0
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf
 
-      - name: Build (windows x86_64)
+      - name: Install Crystal (windows x86_64, GNU build)
         if: matrix.target == 'x86_64-windows'
         shell: pwsh
         run: |
+          $url = "https://github.com/crystal-lang/crystal/releases/download/1.21.0/crystal-1.21.0-windows-x86_64-gnu-unsupported.zip"
+          Invoke-WebRequest $url -OutFile crystal.zip
+          Expand-Archive crystal.zip -DestinationPath C:\crystal
+          echo "C:\crystal" >> $env:GITHUB_PATH
+
+      - name: Build (windows x86_64)
+        if: matrix.target == 'x86_64-windows'
+        shell: msys2 {0}
+        run: |
           shards install
           crystal build src/hcode.cr -o hcode.exe --release --no-debug --warnings none
-          .\hcode.exe --version
+          ./hcode.exe --version
 
       # ---- Archive + upload ----
       - name: Archive (tar.gz)
