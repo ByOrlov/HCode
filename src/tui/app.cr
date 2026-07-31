@@ -335,7 +335,7 @@ module Hcode
       # background processes.
       @on_exit : (-> Nil)? = nil
       property on_exit : (-> Nil)?
-      # Reload `config.toml` + session state without restarting the process.
+      # Reload `config.json` + session state without restarting the process.
       @on_reload : (-> Nil)? = nil
       property on_reload : (-> Nil)?
       @on_login : (-> Nil)? = nil
@@ -344,7 +344,7 @@ module Hcode
       # `wire.jsonl` / `state.json` live). Used by `/export-debug-zip`.
       @on_session_dir : (-> String?)? = nil
       property on_session_dir : (-> String?)?
-      # Logout: clear stored credentials (API key from config.toml).
+      # Logout: clear stored credentials (API key from config.json).
       @on_logout : (-> Nil)? = nil
       property on_logout : (-> Nil)?
       # Undo N turns (count is the selected turn's index). When wired, opens
@@ -2013,12 +2013,12 @@ module Hcode
             @messages << Message.new("system", "Starting OAuth device-code login...")
             cb.call
           else
-            cfg_path = File.join(@home, ".hcode", "config.toml")
+            cfg_path = File.join(@home, ".hcode", "config.json")
             cred_path = File.join(@home, ".kimi-code", "credentials", "kimi-code.json")
             body = String.build do |s|
               s << "Interactive login is not available in this build.\n\n"
               s << "Manual authentication options:\n"
-              s << "  1. API key in config.toml:\n"
+              s << "  1. API key in config.json:\n"
               s << "       [provider.moonshot]\n"
               s << "       api_key = \"sk-...\"\n"
               s << "     Path: #{cfg_path}\n"

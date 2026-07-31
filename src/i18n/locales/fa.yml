@@ -92,7 +92,7 @@ fa:
     plan: "تغییر حالت برنامه‌ریزی"
     debug: "دریافت کامل گزارش نشست به stdout"
     feedback: "ارسال بازخورد به تیم"
-    reload: "بارگذاری مجدد config.toml و وضعیت نشست"
+    reload: "بارگذاری مجدد config.json و وضعیت نشست"
     web: "چاپ URL نشست برای Web UI"
     settings: "نمایش پیکربندی فعلی"
     init: "تحلیل کدبیس و تولید AGENTS.md"

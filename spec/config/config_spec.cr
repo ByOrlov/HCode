@@ -107,20 +107,18 @@ describe Hcode::Config::Config do
     end
   end
 
-  describe "TOML round-trip" do
-    it "parses nil-able fields from TOML" do
-      toml = <<-TOML
-        [provider]
-        default = "ollama"
-
-        [model]
-        default = "llama3.2"
-
-        [provider.ollama]
-        endpoint = "http://gpu:11434/v1"
-        model = "qwen2.5"
-      TOML
-      config = Hcode::Config::Config.parse_toml(toml)
+  describe "JSON round-trip" do
+    it "parses nil-able fields from JSON" do
+      json = <<-JSON
+        {
+          "model": { "default": "llama3.2" },
+          "provider": {
+            "default": "ollama",
+            "ollama": { "endpoint": "http://gpu:11434/v1", "model": "qwen2.5" }
+          }
+        }
+      JSON
+      config = Hcode::Config::Config.parse_json(json)
       config.provider_name.should eq("ollama")
       config.model.should eq("llama3.2")
       config.ollama_endpoint.should eq("http://gpu:11434/v1")
@@ -128,11 +126,8 @@ describe Hcode::Config::Config do
     end
 
     it "leaves nil-able fields nil when absent" do
-      toml = <<-TOML
-        [model]
-        thinking_effort = "high"
-      TOML
-      config = Hcode::Config::Config.parse_toml(toml)
+      json = %({"model": {"thinking_effort": "high"}})
+      config = Hcode::Config::Config.parse_json(json)
       config.provider_name.should be_nil
       config.model.should be_nil
       config.api_key.should be_nil
@@ -145,16 +140,15 @@ describe Hcode::Config::Config do
       config.provider_name = "ollama"
       config.ollama_endpoint = "http://localhost:11434/v1"
 
-      io = IO::Memory.new
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.toml")
+      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
         content = File.read(path)
-        content.should contain("default = \"ollama\"")
-        content.should contain("[provider.ollama]")
-        content.should contain("endpoint = \"http://localhost:11434/v1\"")
+        content.should contain("\"default\": \"ollama\"")
+        content.should contain("\"ollama\"")
+        content.should contain("\"endpoint\": \"http://localhost:11434/v1\"")
         # lmstudio section should not be written when unset
-        content.should_not contain("[provider.lmstudio]")
+        content.should_not contain("\"lmstudio\"")
       ensure
         File.delete(path) rescue nil
       end

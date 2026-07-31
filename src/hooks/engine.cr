@@ -26,7 +26,7 @@ module Hcode
       end
     end
 
-    # One hook definition, parsed from a `[[hooks]]` table in config.toml:
+    # One hook definition, parsed from a `[[hooks]]` table in config.json:
     #
     #   [[hooks]]
     #   event = "PreToolUse"

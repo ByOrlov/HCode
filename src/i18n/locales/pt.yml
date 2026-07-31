@@ -92,7 +92,7 @@ pt:
     plan: "Alternar modo de planejamento"
     debug: "Exportar a transcrição completa da sessão para stdout"
     feedback: "Enviar feedback para a equipe"
-    reload: "Recarregar config.toml e estado da sessão"
+    reload: "Recarregar config.json e estado da sessão"
     web: "Mostrar URL da sessão para a Web UI"
     settings: "Mostrar configuração atual"
     init: "Analisar a base de código e gerar AGENTS.md"

@@ -92,7 +92,7 @@ es:
     plan: "Activar/desactivar el modo plan"
     debug: "Volcar la transcripción completa de la sesión a stdout"
     feedback: "Enviar comentarios al equipo"
-    reload: "Recargar config.toml y el estado de la sesión"
+    reload: "Recargar config.json y el estado de la sesión"
     web: "Mostrar el URL de la sesión para la Web UI"
     settings: "Mostrar la configuración actual"
     init: "Analizar el código y generar AGENTS.md"

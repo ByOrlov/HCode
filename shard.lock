@@ -4,7 +4,3 @@ shards:
     git: https://github.com/crystal-i18n/i18n.git
     version: 0.2.2
 
-  toml:
-    git: https://github.com/crystal-community/toml.cr.git
-    version: 0.8.1
-

@@ -13,7 +13,5 @@ targets:
     main: src/hcode.cr
 
 dependencies:
-  toml:
-    github: crystal-community/toml.cr
   i18n:
     github: crystal-i18n/i18n

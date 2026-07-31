@@ -84,25 +84,33 @@ module Hcode
       # Config loading
       # --------------------------------------------------------------------
       describe ConfigLoader do
-        it "parses the [[mcp_servers]] toml section with args + env" do
-          toml = <<-TOML
-            [[mcp_servers]]
-            name = "github"
-            command = "npx"
-            args = ["-y", "@modelcontextprotocol/server-github"]
-            env = { GITHUB_TOKEN = "ghp_secret" }
-
-            [[mcp_servers]]
-            name = "empty"
-          TOML
-          servers = ConfigLoader.parse_toml_section(toml)
-          servers.size.should eq(2)
-          gh = servers.find { |s| s.name == "github" }.not_nil!
-          gh.command.should eq("npx")
-          gh.args.should eq(["-y", "@modelcontextprotocol/server-github"])
-          gh.env["GITHUB_TOKEN"].should eq("ghp_secret")
-          gh.stdio?.should be_true
-          servers.find(&.name.==("empty")).not_nil!.command.should eq("")
+        it "parses mcp.json with args + env" do
+          home = File.join(Dir.tempdir, "hcode-mcp-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "github": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "env": { "GITHUB_TOKEN": "ghp_secret" }
+                  },
+                  "empty": {}
+                }
+              }
+            JSON
+            servers = ConfigLoader.parse_mcp_json(home)
+            servers.size.should eq(2)
+            gh = servers.find { |s| s.name == "github" }.not_nil!
+            gh.command.should eq("npx")
+            gh.args.should eq(["-y", "@modelcontextprotocol/server-github"])
+            gh.env["GITHUB_TOKEN"].should eq("ghp_secret")
+            gh.stdio?.should be_true
+            servers.find(&.name.==("empty")).not_nil!.command.should eq("")
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
         end
 
         it "parses mcp.json (mcpServers object)" do
@@ -132,56 +140,66 @@ module Hcode
           end
         end
 
-        it "merges toml + mcp.json by name (json wins)" do
+        it "merges user + project mcp.json by name (project wins)" do
           home = File.join(Dir.tempdir, "hcode-mcp-#{Random::Secure.hex(8)}")
           hcode_home = File.join(home, ".hcode")
           Dir.mkdir_p(hcode_home)
           begin
             File.write(File.join(hcode_home, "mcp.json"), <<-JSON)
-              { "mcpServers": { "github": { "command": "node", "args": [] } } }
+              {
+                "mcpServers": {
+                  "github": { "command": "node", "args": [] },
+                  "postgres": { "command": "pg-mcp" }
+                }
+              }
             JSON
-            toml = <<-TOML
-              [[mcp_servers]]
-              name = "github"
-              command = "npx"
-
-              [[mcp_servers]]
-              name = "postgres"
-              command = "pg-mcp"
-            TOML
-            merged = ConfigLoader.load(toml, home, cwd: home)
+            merged = ConfigLoader.load(home, cwd: home)
             names = merged.map(&.name).sort!
             names.should eq(["github", "postgres"])
             gh = merged.find(&.name.==("github")).not_nil!
-            # json entry overrides the toml command
             gh.command.should eq("node")
           ensure
             FileUtils.rm_r(home) rescue nil
           end
         end
 
-        it "tolerates a malformed toml section" do
-          ConfigLoader.parse_toml_section("this is not toml = = =").should be_empty
-          ConfigLoader.parse_toml_section(nil).should be_empty
+        it "tolerates a missing mcp.json" do
+          home = File.join(Dir.tempdir, "hcode-mcp-none-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            servers = ConfigLoader.load(home, cwd: home)
+            servers.should be_empty
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
         end
 
-        it "parses providers (array) and provider (single string) from toml" do
-          toml = <<-TOML
-            [[mcp_servers]]
-            name = "zai-search"
-            command = "npx"
-            providers = ["zai", "zai-coding-plan"]
-
-            [[mcp_servers]]
-            name = "single"
-            command = "x"
-            provider = "moonshot"
-          TOML
-          servers = ConfigLoader.parse_toml_section(toml)
-          multi = servers.find(&.name.==("zai-search")).not_nil!
-          multi.providers.should eq(["zai", "zai-coding-plan"])
-          single = servers.find(&.name.==("single")).not_nil!
-          single.providers.should eq(["moonshot"])
+        it "parses providers (array) and provider (single string) from mcp.json" do
+          home = File.join(Dir.tempdir, "hcode-mcp-prov2-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "zai-search": {
+                    "command": "npx",
+                    "providers": ["zai", "zai-coding-plan"]
+                  },
+                  "single": {
+                    "command": "x",
+                    "provider": "moonshot"
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.parse_mcp_json(home)
+            multi = servers.find(&.name.==("zai-search")).not_nil!
+            multi.providers.should eq(["zai", "zai-coding-plan"])
+            single = servers.find(&.name.==("single")).not_nil!
+            single.providers.should eq(["moonshot"])
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
         end
 
         it "parses providers from mcp.json" do
@@ -454,24 +472,34 @@ module Hcode
       # Config OAuth fields (Phase 4)
       # --------------------------------------------------------------------
       describe ConfigLoader do
-        it "parses OAuth fields from [[mcp_servers]]" do
-          toml = <<-TOML
-            [[mcp_servers]]
-            name = "remote"
-            type = "http"
-            url = "https://mcp.example.com/sse"
-            oauth_client_id = "my-client"
-            oauth_client_secret = "secret123"
-            oauth_scopes = ["read", "write"]
-          TOML
-          servers = ConfigLoader.parse_toml_section(toml)
-          s = servers.first
-          s.stdio?.should be_false
-          s.url.should eq("https://mcp.example.com/sse")
-          s.oauth_client_id.should eq("my-client")
-          s.oauth_client_secret.should eq("secret123")
-          s.oauth_scopes.should eq(["read", "write"])
-          s.oauth_configured?.should be_true
+        it "parses OAuth fields from mcp.json" do
+          home = File.join(Dir.tempdir, "hcode-oauth-cfg-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "remote": {
+                    "type": "http",
+                    "url": "https://mcp.example.com/sse",
+                    "oauth_client_id": "my-client",
+                    "oauth_client_secret": "secret123",
+                    "oauth_scopes": ["read", "write"]
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.parse_mcp_json(home)
+            s = servers.first
+            s.stdio?.should be_false
+            s.url.should eq("https://mcp.example.com/sse")
+            s.oauth_client_id.should eq("my-client")
+            s.oauth_client_secret.should eq("secret123")
+            s.oauth_scopes.should eq(["read", "write"])
+            s.oauth_configured?.should be_true
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
         end
       end
 

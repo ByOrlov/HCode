@@ -92,7 +92,7 @@ ja:
     plan: "プランモードを切替"
     debug: "完全なセッションのトランスクリプトを stdout に出力"
     feedback: "チームにフィードバックを送信"
-    reload: "config.toml とセッション状態を再読み込み"
+    reload: "config.json とセッション状態を再読み込み"
     web: "Web UI 用のセッション URL を表示"
     settings: "現在の設定を表示"
     init: "コードベースを分析して AGENTS.md を生成"

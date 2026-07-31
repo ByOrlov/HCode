@@ -644,7 +644,7 @@ module Hcode
     end
 
     # Run the interactive setup wizard inside a minimal TUI. The wizard collects
-    # the provider choice and credentials, writes them to config.toml, then
+    # the provider choice and credentials, writes them to config.json, then
     # returns so the caller can build the real provider and proceed.
     private def self.run_setup_wizard(config) : Nil
       app = TUI::App.new
@@ -1013,7 +1013,7 @@ module Hcode
         app.add_message("system", "#{Hcode.t("info.output_of", task_id: task_id)}\n#{preview}")
         nil
       end
-      # `/logout` clears the configured API keys and re-saves config.toml.
+      # `/logout` clears the configured API keys and re-saves config.json.
       app.on_logout = -> : Nil do
         config.api_key = ""
         config.zai_api_key = ""

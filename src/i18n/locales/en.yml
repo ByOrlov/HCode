@@ -92,7 +92,7 @@ en:
     plan: "Toggle plan mode"
     debug: "Dump full session transcript to stdout"
     feedback: "Send feedback to the team"
-    reload: "Reload config.toml and session state"
+    reload: "Reload config.json and session state"
     web: "Print session URL for the Web UI"
     settings: "Show current configuration"
     init: "Analyze the codebase and generate AGENTS.md"

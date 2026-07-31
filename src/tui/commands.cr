@@ -56,7 +56,7 @@ module Hcode
         CommandInfo.new("/plan", "Toggle plan mode", description_key: "plan"),
         CommandInfo.new("/debug", "Dump full session transcript to stdout", description_key: "debug"),
         CommandInfo.new("/feedback", "Send feedback to the team", "<message>", "feedback"),
-        CommandInfo.new("/reload", "Reload config.toml and session state", description_key: "reload"),
+        CommandInfo.new("/reload", "Reload config.json and session state", description_key: "reload"),
         CommandInfo.new("/web", "Print session URL for the Web UI", description_key: "web"),
         CommandInfo.new("/settings", "Show current configuration", description_key: "settings"),
         CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md", description_key: "init"),

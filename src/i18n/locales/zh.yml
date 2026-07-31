@@ -92,7 +92,7 @@ zh:
     plan: "切换计划模式"
     debug: "将完整会话记录输出到 stdout"
     feedback: "向团队发送反馈"
-    reload: "重新加载 config.toml 和会话状态"
+    reload: "重新加载 config.json 和会话状态"
     web: "打印 Web UI 的会话 URL"
     settings: "显示当前配置"
     init: "分析代码库并生成 AGENTS.md"

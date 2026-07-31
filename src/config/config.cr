@@ -1,3 +1,4 @@
+require "json"
 require "../mcp/config"
 
 module Hcode
@@ -37,7 +38,7 @@ module Hcode
 
         if File.exists?(config_path)
           content = File.read(config_path)
-          config = parse_toml(content)
+          config = parse_json(content)
         end
 
         if key = ENV["MOONSHOT_API_KEY"]?
@@ -95,78 +96,84 @@ module Hcode
       def self.default_config_path : String
         home = ENV["HOME"]? || "/tmp"
         hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        File.join(hcode_home, "config.toml")
+        File.join(hcode_home, "config.json")
       end
 
-      def self.parse_toml(content : String) : Config
+      def self.parse_json(content : String) : Config
         config = Config.new
+        root = JSON.parse(content)
 
-        # Parse `[[hooks]]` array-of-tables first (the line-oriented parser
-        # below does not handle the `[[...]]` form). Each block collects its
-        # key=value pairs until the next `[[hooks]]` or `[section]`.
-        config.hooks = parse_hooks_array(content)
+        if model = root["model"]?.try(&.as_h?)
+          config.model = model["default"]?.try(&.as_s?)
+          config.thinking_effort = model["thinking_effort"]?.try(&.as_s?) || "medium"
+        end
 
-        # MCP servers: parse the `[[mcp_servers]]` section via the real TOML
-        # parser (arrays + inline tables) and merge in every mcp.json source
-        # (user-global, project-root, project-local).
-        home = ENV["HOME"]? || "/tmp"
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        config.mcp_servers = Mcp::ConfigLoader.load(content, home, cwd: Dir.current)
+        if perm = root["permission"]?.try(&.as_h?)
+          config.permission_mode = perm["mode"]?.try(&.as_s?) || "manual"
+        end
 
-        current_section = ""
-
-        content.each_line do |line|
-          line = line.strip
-          next if line.empty? || line.starts_with?('#')
-
-          if line =~ /^\[(.+)\]$/
-            current_section = $1
-          elsif line =~ /^(\w+)\s*=\s*(.+)$/
-            key = $1
-            val = $2.strip
-
-            is_str = val.starts_with?('"') || val.starts_with?('\'')
-            val = val.strip('"').strip('\'') if is_str
-
-            case {current_section, key}
-            when {"model", "default"}        then config.model = val
-            when {"model", "thinking_effort"} then config.thinking_effort = val
-            when {"permission", "mode"}      then config.permission_mode = val
-            when {"provider", "default"}     then config.provider_name = val
-            when {"provider.moonshot", "api_key"} then config.api_key = val
-            when {"provider.moonshot", "endpoint"} then config.endpoint = val
-            when {"provider.zai", "api_key"}  then config.zai_api_key = val
-            when {"provider.zai", "endpoint"} then config.zai_endpoint = val
-            when {"provider.zai", "model"}    then config.zai_model = val
-            when {"provider.zai-coding-plan", "endpoint"} then config.zai_coding_plan_endpoint = val
-            when {"provider.zai-coding-plan", "model"}    then config.zai_coding_plan_model = val
-            when {"provider.ollama", "endpoint"} then config.ollama_endpoint = val
-            when {"provider.ollama", "model"}    then config.ollama_model = val
-            when {"provider.lmstudio", "endpoint"} then config.lmstudio_endpoint = val
-            when {"provider.lmstudio", "model"}    then config.lmstudio_model = val
-            when {"agent", "max_steps"}      then config.max_steps = val.to_i? || 100
-            when {"agent", "max_context_tokens"} then config.max_context_tokens = val.to_i? || 262144
-            when {"agent", "temperature"}    then config.temperature = val.to_f64?
-            when {"ui", "language"}          then config.language = val
-            # [notifications]
-            when {"notifications", "enabled"}   then config.notifications.enabled = parse_bool(val)
-            when {"notifications", "condition"} then config.notifications.condition = val
-            # [notifications.sound]
-            when {"notifications.sound", "enabled"}        then config.notifications.sound_enabled = parse_bool(val)
-            when {"notifications.sound", "done"}           then config.notifications.sound_done = val
-            when {"notifications.sound", "input_required"} then config.notifications.sound_input_required = val
-            when {"notifications.sound", "working"}        then config.notifications.sound_working = val
-            # [notifications.terminal]
-            when {"notifications.terminal", "enabled"} then config.notifications.terminal_enabled = parse_bool(val)
-            # [notifications.webhook]
-            when {"notifications.webhook", "enabled"}    then config.notifications.webhook_enabled = parse_bool(val)
-            when {"notifications.webhook", "url"}        then config.notifications.webhook_url = val
-            when {"notifications.webhook", "method"}     then config.notifications.webhook_method = val
-            when {"notifications.webhook", "timeout_ms"} then config.notifications.webhook_timeout_ms = val.to_i? || 5000
-            when {"notifications.webhook", "secret"}     then config.notifications.webhook_secret = val
-            end
+        if provider = root["provider"]?.try(&.as_h?)
+          config.provider_name = provider["default"]?.try(&.as_s?)
+          if moonshot = provider["moonshot"]?.try(&.as_h?)
+            config.api_key = moonshot["api_key"]?.try(&.as_s?)
+            config.endpoint = moonshot["endpoint"]?.try(&.as_s?)
+          end
+          if zai = provider["zai"]?.try(&.as_h?)
+            config.zai_api_key = zai["api_key"]?.try(&.as_s?) || ""
+            config.zai_endpoint = zai["endpoint"]?.try(&.as_s?) || config.zai_endpoint
+            config.zai_model = zai["model"]?.try(&.as_s?) || config.zai_model
+          end
+          if zcp = provider["zai-coding-plan"]?.try(&.as_h?)
+            config.zai_coding_plan_endpoint = zcp["endpoint"]?.try(&.as_s?) || config.zai_coding_plan_endpoint
+            config.zai_coding_plan_model = zcp["model"]?.try(&.as_s?) || config.zai_coding_plan_model
+          end
+          if ollama = provider["ollama"]?.try(&.as_h?)
+            config.ollama_endpoint = ollama["endpoint"]?.try(&.as_s?)
+            config.ollama_model = ollama["model"]?.try(&.as_s?)
+          end
+          if lmstudio = provider["lmstudio"]?.try(&.as_h?)
+            config.lmstudio_endpoint = lmstudio["endpoint"]?.try(&.as_s?)
+            config.lmstudio_model = lmstudio["model"]?.try(&.as_s?)
           end
         end
+
+        if agent = root["agent"]?.try(&.as_h?)
+          config.max_steps = agent["max_steps"]?.try(&.as_i?) || 100
+          config.max_context_tokens = agent["max_context_tokens"]?.try(&.as_i?) || 262144
+          config.temperature = agent["temperature"]?.try(&.as_f?)
+        end
+
+        if ui = root["ui"]?.try(&.as_h?)
+          config.language = ui["language"]?.try(&.as_s?)
+        end
+
+        if notif = root["notifications"]?.try(&.as_h?)
+          config.notifications.enabled = notif["enabled"]?.try(&.as_bool?) || config.notifications.enabled
+          config.notifications.condition = notif["condition"]?.try(&.as_s?) || config.notifications.condition
+          if sound = notif["sound"]?.try(&.as_h?)
+            config.notifications.sound_enabled = sound["enabled"]?.try(&.as_bool?) || config.notifications.sound_enabled
+            config.notifications.sound_done = sound["done"]?.try(&.as_s?) || ""
+            config.notifications.sound_input_required = sound["input_required"]?.try(&.as_s?) || ""
+            config.notifications.sound_working = sound["working"]?.try(&.as_s?) || ""
+          end
+          if term = notif["terminal"]?.try(&.as_h?)
+            config.notifications.terminal_enabled = term["enabled"]?.try(&.as_bool?) || config.notifications.terminal_enabled
+          end
+          if webhook = notif["webhook"]?.try(&.as_h?)
+            config.notifications.webhook_enabled = webhook["enabled"]?.try(&.as_bool?) || config.notifications.webhook_enabled
+            config.notifications.webhook_url = webhook["url"]?.try(&.as_s?) || ""
+            config.notifications.webhook_method = webhook["method"]?.try(&.as_s?) || "POST"
+            config.notifications.webhook_timeout_ms = webhook["timeout_ms"]?.try(&.as_i?) || 5000
+            config.notifications.webhook_secret = webhook["secret"]?.try(&.as_s?) || ""
+          end
+        end
+
+        config.hooks = parse_hooks_array(root["hooks"]?.try(&.as_a?))
+
+        # MCP servers: load from mcp.json sources (user-global, project-root,
+        # project-local) and merge by name.
+        home = ENV["HOME"]? || "/tmp"
+        config.mcp_servers = Mcp::ConfigLoader.load(home, cwd: Dir.current)
 
         config
       end
@@ -176,94 +183,130 @@ module Hcode
         dir = File.dirname(config_path)
         Dir.mkdir_p(dir) unless Dir.exists?(dir)
 
-        content = String.build do |s|
-          s << "[model]\n"
-          if m = @model
-            s << "default = \"#{m}\"\n"
-          end
-          s << "thinking_effort = \"#{@thinking_effort}\"\n"
-          s << '\n'
-          s << "[permission]\n"
-          s << "mode = \"#{@permission_mode}\"\n"
-          s << '\n'
-          s << "[provider]\n"
-          if pn = @provider_name
-            s << "default = \"#{pn}\"\n"
-          end
-          s << '\n'
-          if @api_key || @endpoint
-            s << "[provider.moonshot]\n"
-            if k = @api_key
-              s << "api_key = \"#{k}\"\n"
+        root = JSON.build(indent: 2) do |json|
+          json.object do
+            json.field("model") do
+              json.object do
+                if m = @model
+                  json.field("default", m)
+                end
+                json.field("thinking_effort", @thinking_effort)
+              end
             end
-            if ep = @endpoint
-              s << "endpoint = \"#{ep}\"\n"
+
+            json.field("permission") do
+              json.object do
+                json.field("mode", @permission_mode)
+              end
             end
-            s << '\n'
-          end
-          s << "[provider.zai]\n"
-          s << "api_key = \"#{@zai_api_key}\"\n"
-          s << "endpoint = \"#{@zai_endpoint}\"\n"
-          s << "model = \"#{@zai_model}\"\n"
-          s << '\n'
-          s << "[provider.zai-coding-plan]\n"
-          s << "endpoint = \"#{@zai_coding_plan_endpoint}\"\n"
-          s << "model = \"#{@zai_coding_plan_model}\"\n"
-          s << '\n'
-          if @ollama_endpoint || @ollama_model
-            s << "[provider.ollama]\n"
-            if ep = @ollama_endpoint
-              s << "endpoint = \"#{ep}\"\n"
+
+            json.field("provider") do
+              json.object do
+                if pn = @provider_name
+                  json.field("default", pn)
+                end
+                if @api_key || @endpoint
+                  json.field("moonshot") do
+                    json.object do
+                      if k = @api_key
+                        json.field("api_key", k)
+                      end
+                      if ep = @endpoint
+                        json.field("endpoint", ep)
+                      end
+                    end
+                  end
+                end
+                json.field("zai") do
+                  json.object do
+                    json.field("api_key", @zai_api_key)
+                    json.field("endpoint", @zai_endpoint)
+                    json.field("model", @zai_model)
+                  end
+                end
+                json.field("zai-coding-plan") do
+                  json.object do
+                    json.field("endpoint", @zai_coding_plan_endpoint)
+                    json.field("model", @zai_coding_plan_model)
+                  end
+                end
+                if @ollama_endpoint || @ollama_model
+                  json.field("ollama") do
+                    json.object do
+                      if ep = @ollama_endpoint
+                        json.field("endpoint", ep)
+                      end
+                      if m = @ollama_model
+                        json.field("model", m)
+                      end
+                    end
+                  end
+                end
+                if @lmstudio_endpoint || @lmstudio_model
+                  json.field("lmstudio") do
+                    json.object do
+                      if ep = @lmstudio_endpoint
+                        json.field("endpoint", ep)
+                      end
+                      if m = @lmstudio_model
+                        json.field("model", m)
+                      end
+                    end
+                  end
+                end
+              end
             end
-            if m = @ollama_model
-              s << "model = \"#{m}\"\n"
+
+            json.field("agent") do
+              json.object do
+                json.field("max_steps", @max_steps)
+                json.field("max_context_tokens", @max_context_tokens)
+                if temp = @temperature
+                  json.field("temperature", temp)
+                end
+              end
             end
-            s << '\n'
-          end
-          if @lmstudio_endpoint || @lmstudio_model
-            s << "[provider.lmstudio]\n"
-            if ep = @lmstudio_endpoint
-              s << "endpoint = \"#{ep}\"\n"
+
+            json.field("ui") do
+              json.object do
+                if lang = @language
+                  json.field("language", lang)
+                end
+              end
             end
-            if m = @lmstudio_model
-              s << "model = \"#{m}\"\n"
+
+            json.field("notifications") do
+              json.object do
+                json.field("enabled", @notifications.enabled)
+                json.field("condition", @notifications.condition)
+                json.field("sound") do
+                  json.object do
+                    json.field("enabled", @notifications.sound_enabled)
+                    json.field("done", @notifications.sound_done)
+                    json.field("input_required", @notifications.sound_input_required)
+                    json.field("working", @notifications.sound_working)
+                  end
+                end
+                json.field("terminal") do
+                  json.object do
+                    json.field("enabled", @notifications.terminal_enabled)
+                  end
+                end
+                json.field("webhook") do
+                  json.object do
+                    json.field("enabled", @notifications.webhook_enabled)
+                    json.field("url", @notifications.webhook_url)
+                    json.field("method", @notifications.webhook_method)
+                    json.field("timeout_ms", @notifications.webhook_timeout_ms)
+                    json.field("secret", @notifications.webhook_secret)
+                  end
+                end
+              end
             end
-            s << '\n'
           end
-          s << "[agent]\n"
-          s << "max_steps = #{@max_steps}\n"
-          s << "max_context_tokens = #{@max_context_tokens}\n"
-          if temp = @temperature
-            s << "temperature = #{temp}\n"
-          end
-          s << '\n'
-          s << "[ui]\n"
-          if lang = @language
-            s << "language = \"#{lang}\"\n"
-          end
-          s << '\n'
-          s << "[notifications]\n"
-          s << "enabled = #{@notifications.enabled}\n"
-          s << "condition = \"#{@notifications.condition}\"\n"
-          s << '\n'
-          s << "[notifications.sound]\n"
-          s << "enabled = #{@notifications.sound_enabled}\n"
-          s << "done = \"#{@notifications.sound_done}\"\n"
-          s << "input_required = \"#{@notifications.sound_input_required}\"\n"
-          s << "working = \"#{@notifications.sound_working}\"\n"
-          s << '\n'
-          s << "[notifications.terminal]\n"
-          s << "enabled = #{@notifications.terminal_enabled}\n"
-          s << '\n'
-          s << "[notifications.webhook]\n"
-          s << "enabled = #{@notifications.webhook_enabled}\n"
-          s << "url = \"#{@notifications.webhook_url}\"\n"
-          s << "method = \"#{@notifications.webhook_method}\"\n"
-          s << "timeout_ms = #{@notifications.webhook_timeout_ms}\n"
-          s << "secret = \"#{@notifications.webhook_secret}\"\n"
         end
 
-        File.write(config_path, content)
+        File.write(config_path, root + "\n")
       end
 
       def ensure_hcode_home : Nil
@@ -305,66 +348,17 @@ module Hcode
         File.exists?(path)
       end
 
-      private def self.parse_bool(val : String) : Bool
-        val.downcase.in?("true", "1", "yes", "on")
-      end
-
-      # Parses all `[[hooks]]` array-of-table blocks from a TOML string.
-      # Each block becomes one `Hooks::HookDef`. The line-oriented main parser
-      # cannot handle `[[...]]`, so this is a dedicated scan.
-      private def self.parse_hooks_array(content : String) : Array(Hooks::HookDef)
-        hooks = [] of Hooks::HookDef
-        current = {} of String => String
-        in_hooks = false
-
-        content.each_line do |raw|
-          line = raw.strip
-          next if line.empty? || line.starts_with?('#')
-
-          if line =~ /^\[\[hooks\]\]$/
-            if in_hooks && !current.empty?
-              hooks << build_hook_def(current)
-            end
-            current = {} of String => String
-            in_hooks = true
-            next
-          end
-
-          if line =~ /^\[/ # any other section ends the hooks block
-            if in_hooks && !current.empty?
-              hooks << build_hook_def(current)
-            end
-            current = {} of String => String
-            in_hooks = false
-            next
-          end
-
-          next unless in_hooks
-
-          if line =~ /^(\w+)\s*=\s*(.+)$/
-            key = $1
-            val = $2.strip
-            if val.starts_with?('"') || val.starts_with?('\'')
-              val = val.strip('"').strip('\'')
-            end
-            current[key] = val
-          end
+      private def self.parse_hooks_array(arr : Array(JSON::Any)?) : Array(Hooks::HookDef)
+        return [] of Hooks::HookDef unless arr
+        arr.map do |entry|
+          h = entry.as_h
+          Hooks::HookDef.new(
+            event: h["event"]?.try(&.as_s?) || "",
+            command: h["command"]?.try(&.as_s?) || "",
+            matcher: h["matcher"]?.try(&.as_s?) || "",
+            timeout: h["timeout"]?.try(&.as_i?) || 30,
+          )
         end
-
-        if in_hooks && !current.empty?
-          hooks << build_hook_def(current)
-        end
-
-        hooks
-      end
-
-      private def self.build_hook_def(fields : Hash(String, String)) : Hooks::HookDef
-        Hooks::HookDef.new(
-          event: fields["event"]? || "",
-          command: fields["command"]? || "",
-          matcher: fields["matcher"]? || "",
-          timeout: (fields["timeout"]? || "30").to_i? || 30,
-        )
       end
     end
   end

@@ -1,5 +1,4 @@
 require "json"
-require "toml"
 
 module Hcode
   module Mcp
@@ -98,25 +97,22 @@ module Hcode
       end
     end
 
-    # Loader for the `[[mcp_servers]]` toml section and the optional
-    # `~/.hcode/mcp.json` file. The two sources are merged by server name;
-    # mcp.json wins on conflict so the JS-compatible file takes precedence.
+    # Loader for the optional `~/.hcode/mcp.json` file and its project-local
+    # overrides (`<project-root>/.mcp.json`, `<cwd>/.hcode/mcp.json`). Sources
+    # are merged by server name; later files override earlier ones.
     module ConfigLoader
-      # Load from every source: the `[[mcp_servers]]` toml section in
-      # config.toml, plus three mcp.json files — user-global, project-root,
-      # and project-local — mirroring JS `loadMcpServers`. Later files
-      # override earlier ones with the same name.
-      def self.load(toml_content : String?, home_dir : String, cwd : String = Dir.current) : Array(McpServerConfig)
-        from_toml = parse_toml_section(toml_content)
+      # Load from three mcp.json files — user-global, project-root, and
+      # project-local — mirroring JS `loadMcpServers`. Later files override
+      # earlier ones with the same name.
+      def self.load(home_dir : String, cwd : String = Dir.current) : Array(McpServerConfig)
         hcode_home = ENV["HCODE_HOME"]? || File.join(home_dir, ".hcode")
 
         user_json = read_mcp_json_file(File.join(hcode_home, "mcp.json"))
         project_root_json = read_mcp_json_file(project_root_mcp_json(cwd))
         project_json = read_mcp_json_file(File.join(cwd, ".hcode", "mcp.json"))
 
-        # Merge by name: toml → user → project-root → project (later wins).
+        # Merge by name: user → project-root → project (later wins).
         merged = {} of String => McpServerConfig
-        from_toml.each { |c| merged[c.name] = c }
         user_json.each { |c| merged[c.name] = c }
         project_root_json.each { |c| merged[c.name] = c }
         project_json.each { |c| merged[c.name] = c }
@@ -134,18 +130,7 @@ module Hcode
         end
       end
 
-      def self.parse_toml_section(toml_content : String?) : Array(McpServerConfig)
-        return [] of McpServerConfig if toml_content.nil? || toml_content.empty?
-        root = TOML.parse(toml_content)
-        arr = root["mcp_servers"]?.try(&.as_a?) || [] of TOML::Any
-        arr.map { |entry| from_any(entry.as_h) }
-      rescue ex
-        # A malformed or partially-unparseable config file must not break the
-        # agent — MCP servers are optional.
-        [] of McpServerConfig
-      end
-
-      # Legacy: parse `mcp.json` from a directory (joins `<dir>/mcp.json`).
+      # Convenience: parse `mcp.json` from a directory (joins `<dir>/mcp.json`).
       def self.parse_mcp_json(home_dir : String) : Array(McpServerConfig)
         read_mcp_json_file(File.join(home_dir, "mcp.json"))
       end
@@ -160,50 +145,6 @@ module Hcode
         end
       rescue ex
         [] of McpServerConfig
-      end
-
-      def self.merge_by_name(toml_list : Array(McpServerConfig),
-                             json_list : Array(McpServerConfig)) : Array(McpServerConfig)
-        merged = {} of String => McpServerConfig
-        toml_list.each { |c| merged[c.name] = c }
-        json_list.each { |c| merged[c.name] = c }
-        merged.values
-      end
-
-      private def self.from_any(h : Hash(String, TOML::Any)) : McpServerConfig
-        name = h["name"]?.try(&.as_s?) || ""
-        cfg = McpServerConfig.new(name)
-        cfg.type = h["type"]?.try(&.as_s?) || "stdio"
-        cfg.command = h["command"]?.try(&.as_s?) || ""
-        cfg.args = (h["args"]?.try(&.as_a?) || [] of TOML::Any).map(&.to_s)
-        if env_any = h["env"]?.try(&.as_h?)
-          cfg.env = env_of(env_any)
-        end
-        cfg.cwd = h["cwd"]?.try(&.as_s?)
-        cfg.url = h["url"]?.try(&.as_s?)
-        if headers_any = h["headers"]?.try(&.as_h?)
-          cfg.headers = env_of(headers_any)
-        end
-        cfg.token_env = h["token_env"]?.try(&.as_s?) ||
-                        h["bearerTokenEnvVar"]?.try(&.as_s?)
-        cfg.oauth_client_id = h["oauth_client_id"]?.try(&.as_s?)
-        cfg.oauth_client_secret = h["oauth_client_secret"]?.try(&.as_s?)
-        if scopes_any = h["oauth_scopes"]?.try(&.as_a?)
-          cfg.oauth_scopes = scopes_any.map(&.to_s)
-        end
-        cfg.enabled = h["enabled"]?.try(&.as_bool?) != false
-        if et = h["enabledTools"]?.try(&.as_a?) || h["enabled_tools"]?.try(&.as_a?)
-          cfg.enabled_tools = et.map(&.to_s)
-        end
-        if dt = h["disabledTools"]?.try(&.as_a?) || h["disabled_tools"]?.try(&.as_a?)
-          cfg.disabled_tools = dt.map(&.to_s)
-        end
-        cfg.startup_timeout_ms = h["startupTimeoutMs"]?.try(&.as_i?) ||
-                                 h["startup_timeout_ms"]?.try(&.as_i?)
-        cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?) ||
-                              h["tool_timeout_ms"]?.try(&.as_i?)
-        cfg.providers = parse_providers(h)
-        cfg
       end
 
       private def self.from_any_json(name : String, h : Hash(String, JSON::Any)) : McpServerConfig
@@ -243,21 +184,7 @@ module Hcode
         cfg
       end
 
-      private def self.env_of(h : Hash(String, TOML::Any)) : Hash(String, String)
-        env = {} of String => String
-        h.each { |k, v| env[k] = v.to_s }
-        env
-      end
 
-      private def self.parse_providers(h : Hash(String, TOML::Any)) : Array(String)
-        if arr = h["providers"]?.try(&.as_a?)
-          arr.map(&.to_s)
-        elsif single = h["provider"]?.try(&.as_s?)
-          [single]
-        else
-          [] of String
-        end
-      end
 
       private def self.parse_providers_json(h : Hash(String, JSON::Any)) : Array(String)
         if arr = h["providers"]?.try(&.as_a?)
