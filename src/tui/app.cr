@@ -653,11 +653,13 @@ module Hcode
           end
         end
 
-        Signal::WINCH.trap do
-          @terminal.refresh_size
-          @first_render = true
-          @dirty = true
-        end
+        {% if flag?(:unix) %}
+          Signal::WINCH.trap do
+            @terminal.refresh_size
+            @first_render = true
+            @dirty = true
+          end
+        {% end %}
 
         render
 

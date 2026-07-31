@@ -1,24 +1,75 @@
-lib LibCExtra
-  VMIN  = 6
-  VTIME = 5
+{% if flag?(:unix) %}
+  lib LibCExtra
+    VMIN  = 6
+    VTIME = 5
 
-  TIOCGWINSZ = 0x5413
+    TIOCGWINSZ = 0x5413
 
-  struct Winsize
-    ws_row : UInt16
-    ws_col : UInt16
-    ws_xpixel : UInt16
-    ws_ypixel : UInt16
+    struct Winsize
+      ws_row : UInt16
+      ws_col : UInt16
+      ws_xpixel : UInt16
+      ws_ypixel : UInt16
+    end
+
+    fun ioctl(fd : Int32, request : UInt32, ...) : Int32
+    fun isatty(fd : Int32) : Int32
   end
+{% end %}
 
-  fun ioctl(fd : Int32, request : UInt32, ...) : Int32
-  fun isatty(fd : Int32) : Int32
-end
+{% if flag?(:win32) %}
+  @[Link("kernel32")]
+  lib LibCConsole
+    STD_INPUT_HANDLE  = -10_i32
+    STD_OUTPUT_HANDLE = -11_i32
+
+    ENABLE_PROCESSED_INPUT             =  0x0001_u32
+    ENABLE_LINE_INPUT                  =  0x0002_u32
+    ENABLE_ECHO_INPUT                  =  0x0004_u32
+    ENABLE_VIRTUAL_TERMINAL_INPUT      =  0x0200_u32
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING =  0x0004_u32
+
+    struct Coord
+      x : Int16
+      y : Int16
+    end
+
+    struct SmallRect
+      left : Int16
+      top : Int16
+      right : Int16
+      bottom : Int16
+    end
+
+    struct ConsoleScreenBufferInfo
+      size : Coord
+      cursor_position : Coord
+      attributes : UInt16
+      window : SmallRect
+      maximum_window_size : Coord
+    end
+
+    fun getStdHandle(handle_id : Int32) : Void*
+    fun getConsoleMode(handle : Void*, mode : UInt32*) : Int32
+    fun setConsoleMode(handle : Void*, mode : UInt32) : Int32
+    fun getConsoleScreenBufferInfo(handle : Void*, info : ConsoleScreenBufferInfo*) : Int32
+  end
+{% end %}
 
 module Hcode
   module TUI
     class Terminal
-      @original_termios : LibC::Termios?
+      {% if flag?(:unix) %}
+        @original_termios : LibC::Termios?
+      {% end %}
+
+      {% if flag?(:win32) %}
+        @stdin_handle : Void*? = nil
+        @stdout_handle : Void*? = nil
+        @original_in_mode : UInt32 = 0
+        @original_out_mode : UInt32 = 0
+      {% end %}
+
       @raw : Bool = false
 
       def self.current : Terminal
@@ -34,20 +85,47 @@ module Hcode
 
       def raw! : Nil
         return if @raw
-        fd = STDIN.fd
 
-        orig = uninitialized LibC::Termios
-        LibC.tcgetattr(fd, pointerof(orig))
-        @original_termios = orig
+        {% if flag?(:unix) %}
+          fd = STDIN.fd
 
-        raw_termios = orig
-        raw_termios.c_lflag &= ~(LibC::ICANON | LibC::ECHO | LibC::ISIG | LibC::IEXTEN)
-        raw_termios.c_iflag &= ~(LibC::IXON | LibC::ICRNL)
-        raw_termios.c_oflag &= ~LibC::OPOST
-        raw_termios.c_cc[LibCExtra::VMIN] = 0
-        raw_termios.c_cc[LibCExtra::VTIME] = 0
+          orig = uninitialized LibC::Termios
+          LibC.tcgetattr(fd, pointerof(orig))
+          @original_termios = orig
 
-        LibC.tcsetattr(fd, LibC::TCSAFLUSH, pointerof(raw_termios))
+          raw_termios = orig
+          raw_termios.c_lflag &= ~(LibC::ICANON | LibC::ECHO | LibC::ISIG | LibC::IEXTEN)
+          raw_termios.c_iflag &= ~(LibC::IXON | LibC::ICRNL)
+          raw_termios.c_oflag &= ~LibC::OPOST
+          raw_termios.c_cc[LibCExtra::VMIN] = 0
+          raw_termios.c_cc[LibCExtra::VTIME] = 0
+
+          LibC.tcsetattr(fd, LibC::TCSAFLUSH, pointerof(raw_termios))
+        {% else %}
+          in_h = LibCConsole.getStdHandle(LibCConsole::STD_INPUT_HANDLE)
+          out_h = LibCConsole.getStdHandle(LibCConsole::STD_OUTPUT_HANDLE)
+          @stdin_handle = in_h
+          @stdout_handle = out_h
+
+          if in_h && !in_h.null?
+            old_in = uninitialized UInt32
+            if LibCConsole.getConsoleMode(in_h, pointerof(old_in)) != 0
+              @original_in_mode = old_in
+              new_in = LibCConsole::ENABLE_VIRTUAL_TERMINAL_INPUT
+              LibCConsole.setConsoleMode(in_h, new_in)
+            end
+          end
+
+          if out_h && !out_h.null?
+            old_out = uninitialized UInt32
+            if LibCConsole.getConsoleMode(out_h, pointerof(old_out)) != 0
+              @original_out_mode = old_out
+              new_out = old_out | LibCConsole::ENABLE_VIRTUAL_TERMINAL_PROCESSING
+              LibCConsole.setConsoleMode(out_h, new_out)
+            end
+          end
+        {% end %}
+
         @raw = true
 
         print ANSI.hide_cursor
@@ -56,16 +134,26 @@ module Hcode
 
       def restore! : Nil
         return unless @raw
-        fd = STDIN.fd
 
         print "\e[?2004l" # Disable bracketed paste mode
         print ANSI.show_cursor
         print "\r\n"
 
-        if orig = @original_termios
-          restored = orig
-          LibC.tcsetattr(fd, LibC::TCSANOW, pointerof(restored))
-        end
+        {% if flag?(:unix) %}
+          fd = STDIN.fd
+          if orig = @original_termios
+            restored = orig
+            LibC.tcsetattr(fd, LibC::TCSANOW, pointerof(restored))
+          end
+        {% else %}
+          if h = @stdin_handle
+            LibCConsole.setConsoleMode(h, @original_in_mode)
+          end
+          if h = @stdout_handle
+            LibCConsole.setConsoleMode(h, @original_out_mode)
+          end
+        {% end %}
+
         @raw = false
       end
 
@@ -74,19 +162,41 @@ module Hcode
       end
 
       def tty? : Bool
-        LibCExtra.isatty(STDIN.fd) == 1
+        {% if flag?(:unix) %}
+          LibCExtra.isatty(STDIN.fd) == 1
+        {% else %}
+          STDIN.tty?
+        {% end %}
       end
 
       private def size : {Int32, Int32}
-        ws = uninitialized LibCExtra::Winsize
-        ret = LibCExtra.ioctl(STDOUT.fd, LibCExtra::TIOCGWINSZ, pointerof(ws))
-        if ret == 0 && ws.ws_col > 0 && ws.ws_row > 0
-          {ws.ws_col.to_i32, ws.ws_row.to_i32}
-        else
-          env_cols = ENV["COLUMNS"]?.try(&.to_i?) || 80
-          env_rows = ENV["LINES"]?.try(&.to_i?) || 24
-          {env_cols, env_rows}
-        end
+        {% if flag?(:unix) %}
+          ws = uninitialized LibCExtra::Winsize
+          ret = LibCExtra.ioctl(STDOUT.fd, LibCExtra::TIOCGWINSZ, pointerof(ws))
+          if ret == 0 && ws.ws_col > 0 && ws.ws_row > 0
+            {ws.ws_col.to_i32, ws.ws_row.to_i32}
+          else
+            env_cols = ENV["COLUMNS"]?.try(&.to_i?) || 80
+            env_rows = ENV["LINES"]?.try(&.to_i?) || 24
+            {env_cols, env_rows}
+          end
+        {% else %}
+          h = LibCConsole.getStdHandle(LibCConsole::STD_OUTPUT_HANDLE)
+          info = uninitialized LibCConsole::ConsoleScreenBufferInfo
+          if h && !h.null? && LibCConsole.getConsoleScreenBufferInfo(h, pointerof(info)) != 0
+            cols = info.window.right - info.window.left + 1
+            rows = info.window.bottom - info.window.top + 1
+            if cols > 0 && rows > 0
+              {cols.to_i32, rows.to_i32}
+            else
+              {80, 24}
+            end
+          else
+            env_cols = ENV["COLUMNS"]?.try(&.to_i?) || 80
+            env_rows = ENV["LINES"]?.try(&.to_i?) || 24
+            {env_cols, env_rows}
+          end
+        {% end %}
       end
     end
 
