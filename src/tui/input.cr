@@ -117,9 +117,10 @@ module Hcode
       private def read_available : Nil
         loop do
           buf = uninitialized UInt8[256]
-          bytes_read = LibC.read(STDIN.fd, buf.to_unsafe, buf.size)
+          slice = buf.to_slice
+          bytes_read = STDIN.read(slice)
           break if bytes_read <= 0
-          @buffer.concat(buf.to_slice[0, bytes_read].to_a)
+          @buffer.concat(slice[0, bytes_read].to_a)
         end
       end
 

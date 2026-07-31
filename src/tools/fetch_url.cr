@@ -1,3 +1,6 @@
+require "compress/gzip"
+require "compress/deflate"
+
 module Hcode
   module Tools
     # FetchURL — чтение публичного URL с извлечением текста.
@@ -177,17 +180,15 @@ module Hcode
           "Accept-Encoding" => "gzip",
         }
 
-        status_code = 0
-        content_type = ""
-        body = String.build do |io|
-          response = @transport.request("GET", uri, headers)
-          status_code = response.status_code
-          content_type = response.headers["Content-Type"]? || ""
-          if response.status_code >= 400
-            raise HttpFetchError.new(response.status_code, "HTTP #{response.status_code} #{response.status_message}")
-          end
-          io << response.body
+        response = @transport.request("GET", uri, headers)
+        status_code = response.status_code
+        content_type = response.headers["Content-Type"]? || ""
+        content_encoding = response.headers["Content-Encoding"]? || ""
+        if response.status_code >= 400
+          raise HttpFetchError.new(response.status_code, "HTTP #{response.status_code} #{response.status_message}")
         end
+
+        body = decompress_body(response.body, content_encoding)
 
         bytesize = body.bytesize
         if bytesize > FetchURL::DEFAULT_MAX_BYTES
@@ -198,6 +199,18 @@ module Hcode
       end
 
       # ------------------------------------------------------------------
+
+      private def decompress_body(raw : String, content_encoding : String) : String
+        if content_encoding.includes?("gzip")
+          io = IO::Memory.new(raw.to_slice)
+          Compress::Gzip::Reader.open(io, &.gets_to_end)
+        elsif content_encoding.includes?("deflate")
+          io = IO::Memory.new(raw.to_slice)
+          Compress::Deflate::Reader.open(io, &.gets_to_end)
+        else
+          raw
+        end
+      end
 
       def parse_safe_target(url : String) : URI
         uri = URI.parse(url)

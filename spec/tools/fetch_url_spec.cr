@@ -1,6 +1,7 @@
 require "../spec_helper"
 require "../../src/tools/fetch_url"
 require "../support/mock_http_transport"
+require "compress/gzip"
 
 # Тестовый fetcher: возвращает заданные данные / ошибки.
 private class FakeFetcher < Hcode::Tools::UrlFetcher
@@ -240,6 +241,32 @@ describe Hcode::Tools::FetchURL do
         fetcher.fetch("https://example.com")
       end
       (error.message || "").should contain("Broken pipe")
+    end
+
+    it "decompresses gzip-encoded response body" do
+      transport = Hcode::MockHttpTransport.new
+      raw = "hello gzipped world"
+      compressed = IO::Memory.new
+      Compress::Gzip::Writer.open(compressed) { |gz| gz << raw }
+      transport.response_body = String.new(compressed.to_slice)
+      transport.response_status = 200
+      transport.response_headers["Content-Encoding"] = "gzip"
+      transport.response_headers["Content-Type"] = "text/plain"
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      result = fetcher.fetch("https://example.com")
+      result.kind.passthrough?.should be_true
+      result.content.should eq(raw)
+    end
+
+    it "passes through non-encoded response unchanged" do
+      transport = Hcode::MockHttpTransport.new
+      transport.response_body = "plain text"
+      transport.response_status = 200
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      result = fetcher.fetch("https://example.com")
+      result.content.should contain("plain text")
     end
   end
 end

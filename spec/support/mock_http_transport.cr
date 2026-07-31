@@ -23,6 +23,7 @@ module Hcode
     # Response body for single-shot `request` (fetch_url, web_search, OAuth).
     property response_body : String = "{\"data\":[]}"
     property response_status : Int32 = 200
+    property response_headers : HTTP::Headers = HTTP::Headers.new
     # When set, `request` raises this instead of returning a response.
     property request_error : Exception? = nil
     property last_uri : URI? = nil
@@ -37,7 +38,7 @@ module Hcode
       if err = @request_error
         raise err
       end
-      HTTP::Client::Response.new(@response_status, body: @response_body)
+      HTTP::Client::Response.new(@response_status, body: @response_body, headers: @response_headers)
     end
 
     def request_stream(method : String, uri : URI, headers : HTTP::Headers,
