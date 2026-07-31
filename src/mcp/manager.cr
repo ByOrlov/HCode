@@ -91,7 +91,7 @@ module Hcode
         applicable = configs.select { |c| c.matches_provider?(active_provider) }
         return if applicable.empty?
 
-        done = Channel(Nil).new
+        done = Channel(Nil).new(applicable.size)
         applicable.each { |cfg| spawn_connect(cfg, done) }
         applicable.size.times { done.receive } if blocking
       end
