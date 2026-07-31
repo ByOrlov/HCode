@@ -114,17 +114,24 @@ jobs:
             "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           /usr/local/bin/brew install libyaml pcre2 openssl@3
           echo "PKG_CONFIG_PATH=/usr/local/opt/openssl@3/lib/pkgconfig:/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
+          # CC wrapper: skip -arch x86_64 for macro programs (compiled for host arch)
+          cat > /tmp/cc-wrapper << 'WRAPPER'
+          #!/bin/bash
+          for arg in "$@"; do
+            case "$arg" in */.cache/crystal/*) exec /usr/bin/cc "$@" ;; esac
+          done
+          exec /usr/bin/cc -arch x86_64 -L/usr/local/lib -L/usr/local/opt/openssl@3/lib "$@"
+          WRAPPER
+          chmod +x /tmp/cc-wrapper
+          echo "CC=/tmp/cc-wrapper" >> "$GITHUB_ENV"
 
       - name: Build
         shell: bash
         run: |
           shards install
-          TARGET_ARGS=()
-          if [ -n "${{ matrix.cross_target }}" ]; then
-            TARGET_ARGS+=(--target "${{ matrix.cross_target }}")
-            TARGET_ARGS+=(--link-flags "-arch x86_64 -L/usr/local/lib -L/usr/local/opt/openssl@3/lib")
-          fi
-          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none "${TARGET_ARGS[@]}"
+          TARGET_ARGS=""
+          [ -n "${{ matrix.cross_target }}" ] && TARGET_ARGS="--target ${{ matrix.cross_target }}"
+          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none $TARGET_ARGS
           if [ -f hcode.exe ]; then ./hcode.exe --version; else ./hcode --version; fi
 
       # ---- Archive + upload ----
