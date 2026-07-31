@@ -5,6 +5,7 @@ require "../../src/tui/spinner"
 require "../../src/tui/editor"
 require "../../src/tui/markdown"
 require "../../src/tui/select_list"
+require "../../src/tui/diff"
 require "../../src/tui/help_panel"
 require "../../src/tui/app"
 

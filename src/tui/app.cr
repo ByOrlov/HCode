@@ -194,7 +194,6 @@ module Hcode
       # 80ms animation tick independently of @agent_busy so progress bars
       # keep moving even when the parent turn is in a tool-call gap.
       @swarm_active : Bool = false
-      @scroll_offset : Int32 = 0
       @exit_confirm : Bool = false
       @exit_key : String = "CTRL+C"
       @current_step : Int32 = 0
@@ -815,16 +814,13 @@ module Hcode
           @current_step = event.step
           @spinner.start
           @status = thinking_status
-          @scroll_offset = 0
         when .text_delta?
           finalize_streaming_thinking
           @streaming_text += event.text
           @status = thinking_status
-          @scroll_offset = 0
         when .thinking_delta?
           @streaming_thinking += event.text
           @status = "thinking..."
-          @scroll_offset = 0
         when .assistant_text?
           finalize_streaming_thinking
           unless @streaming_text.empty?
@@ -910,7 +906,6 @@ module Hcode
           @is_compacting = true
           @defer_user_messages = true
           @status = "Compacting context..."
-          @scroll_offset = 0
           msg = Message.new("compaction", "")
           msg.compaction_state = "running"
           msg.tip = event.tip || ""
@@ -1284,18 +1279,12 @@ module Hcode
           if @show_command_hints && @command_hints.size > 0
             @command_hint_selected = (@command_hint_selected - 1 + @command_hints.size) % @command_hints.size
             @dirty = true
-          elsif @editor.empty?
-            @scroll_offset += 1
-            @dirty = true
           else
             @editor.handle_input(key)
           end
         when .down?
           if @show_command_hints && @command_hints.size > 0
             @command_hint_selected = (@command_hint_selected + 1) % @command_hints.size
-            @dirty = true
-          elsif @editor.empty?
-            @scroll_offset -= 1 if @scroll_offset > 0
             @dirty = true
           else
             @editor.handle_input(key)
@@ -1396,7 +1385,6 @@ module Hcode
         @step_tool_count = 0
         @agent_busy = true
         @status = "Thinking..."
-        @scroll_offset = 0
         @spinner.start
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
