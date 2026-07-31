@@ -84,6 +84,7 @@ module Hcode
 
       @buffer : Array(UInt8) = [] of UInt8
       @events : Array(KeyEvent) = [] of KeyEvent
+      @wait : InputWait = InputWait.default
 
       def read_key : KeyEvent?
         return @events.shift? unless @events.empty?
@@ -107,11 +108,7 @@ module Hcode
           remaining = COLLECT_TIMEOUT - elapsed
           break if remaining <= Time::Span.zero
 
-          begin
-            STDIN.wait_readable(remaining)
-          rescue IO::TimeoutError
-            break
-          end
+          break unless @wait.stdin_readable?(remaining)
 
           read_available
         end
