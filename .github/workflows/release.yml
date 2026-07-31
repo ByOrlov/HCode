@@ -93,9 +93,6 @@ jobs:
           - target: aarch64-darwin
             runner: macos-latest
             archive: tar.gz
-          - target: x86_64-windows
-            runner: windows-latest
-            archive: zip
 
     steps:
       - uses: actions/checkout@v4
@@ -170,21 +167,6 @@ jobs:
           shards install
           crystal build src/hcode.cr -o hcode --release --no-debug --warnings none
           ./hcode --version
-
-      # ---- Windows x86_64 ----
-      - name: Install Crystal (windows x86_64)
-        if: matrix.target == 'x86_64-windows'
-        uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: 1.21.0
-
-      - name: Build (windows x86_64)
-        if: matrix.target == 'x86_64-windows'
-        shell: pwsh
-        run: |
-          shards install
-          crystal build src/hcode.cr -o hcode.exe --release --no-debug --warnings none
-          .\hcode.exe --version
 
       # ---- Archive + upload ----
       - name: Archive (tar.gz)
