@@ -71,32 +71,32 @@ module Hcode
       def initialize(@home_dir : String = (ENV["HOME"]? || "/tmp"))
       end
 
-      def connect_all(configs : Array(McpServerConfig), registry : Tools::Registry) : Nil
+      # Connect every configured server. By default this is non-blocking —
+      # each server connects in its own fibre, registers its tools, and
+      # reports status as it finishes, so application startup is not held up
+      # by slow or unreachable servers. Pass `blocking: true` to wait for all
+      # connections before returning (used by tests and the headless path
+      # when tools must be ready before the first turn).
+      def connect_all(configs : Array(McpServerConfig), registry : Tools::Registry,
+                      *, blocking : Bool = false) : Nil
         return if configs.empty?
         @registry = registry
 
         done = Channel(Nil).new
         configs.each do |cfg|
           entry = InternalEntry.new(cfg.name, cfg)
-          unless cfg.enabled?
-            entry.status = ServerStatus::Disabled
-          end
+          entry.status = ServerStatus::Disabled unless cfg.enabled?
           @mutex.synchronize { @entries[cfg.name] = entry }
-          if cfg.enabled?
-            spawn(name: "mcp-connect-#{cfg.name}") do
-              connect_one(entry)
-              done.send(nil)
-            end
-          else
-            spawn { done.send(nil) }
+
+          spawn(name: "mcp-connect-#{cfg.name}") do
+            connect_one(entry) if cfg.enabled?
+            register_entry_tools(entry)
+            rebuild_reports
+            done.send(nil)
           end
         end
 
-        configs.size.times { done.receive }
-
-        # Register tools from every connected entry into the shared registry.
-        @entries.each_value { |e| register_entry_tools(e) }
-        rebuild_reports
+        configs.size.times { done.receive } if blocking
       end
 
       # Reconnect a single server by name: close the old client, discover
@@ -302,11 +302,11 @@ module Hcode
         end
 
         server_url = config.url || ""
-        if stored = OAuth.load_tokens(config.name, @home_dir)
+        if stored = OAuth.load_tokens(config.name, server_url, @home_dir)
           return stored.access_token unless stored.expired?
           begin
             metadata = OAuth.discover_metadata(server_url)
-            if refreshed = OAuth.refresh(config.name, @home_dir, stored, metadata)
+            if refreshed = OAuth.refresh(config.name, server_url, @home_dir, stored, metadata)
               return refreshed.access_token
             end
           rescue

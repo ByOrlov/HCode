@@ -70,42 +70,95 @@ module Hcode
     # Reconnection reuses the stored tokens; if they expired, a refresh-token
     # grant runs automatically before prompting the user again.
     module OAuth
-      CALLBACK_PORT   = 8931
       CODE_VERIFIER_LEN = 64
       STATE_LEN         = 32
 
-      # Try to load persisted tokens for `server_name` from the hcode home.
-      def self.load_tokens(server_name : String, home_dir : String) : OAuthTokens?
-        path = tokens_path(server_name, home_dir)
+      # Try to load persisted tokens for `server_name` + `server_url` from the
+      # hcode credentials dir. Mirrors JS `JsonFileStore.read`.
+      def self.load_tokens(server_name : String, server_url : String, home_dir : String) : OAuthTokens?
+        path = tokens_path(server_name, server_url, home_dir)
         return nil unless File.exists?(path)
         OAuthTokens.from_json(File.read(path))
       rescue ex
         nil
       end
 
-      # Persist tokens to `~/.hcode/mcp-tokens/<server>.json`.
-      def self.save_tokens(server_name : String, home_dir : String, tokens : OAuthTokens) : Nil
-        dir = File.join(home_dir, "mcp-tokens")
-        Dir.mkdir_p(dir) unless Dir.exists?(dir)
-        File.write(tokens_path(server_name, home_dir), tokens.to_json)
+      # Persist tokens via atomic write (temp → fsync → rename) at mode 0600,
+      # under `<hcode_home>/credentials/mcp/` at mode 0700. Mirrors JS
+      # `JsonFileStore.write`.
+      def self.save_tokens(server_name : String, server_url : String,
+                           home_dir : String, tokens : OAuthTokens) : Nil
+        dir = credentials_dir(home_dir)
+        ensure_credentials_dir(dir)
+        target = tokens_path(server_name, server_url, home_dir)
+        tmp = "#{target}.tmp.#{Process.pid}.#{Random::Secure.hex(4)}"
+
+        File.open(tmp, "w", perm: 0o600) do |f|
+          f << tokens.to_json
+          f << '\n'
+          f.flush
+          f.fsync
+        end
+        # Best-effort chmod (POSIX only; Windows ignores).
+        File.chmod(tmp, 0o600) rescue nil
+        File.rename(tmp, target)
+      rescue ex
+        File.delete(tmp) rescue nil if tmp
+        raise ex
       end
 
       # Clear persisted tokens (used on auth failure or server removal).
-      def self.clear_tokens(server_name : String, home_dir : String) : Nil
-        path = tokens_path(server_name, home_dir)
+      def self.clear_tokens(server_name : String, server_url : String, home_dir : String) : Nil
+        path = tokens_path(server_name, server_url, home_dir)
         File.delete(path) if File.exists?(path)
       rescue
       end
 
-      private def self.tokens_path(server_name : String, home_dir : String) : String
-        safe = server_name.gsub(/[^A-Za-z0-9_-]/, "_")
-        File.join(home_dir, "mcp-tokens", "#{safe}.json")
+      private def self.credentials_dir(home_dir : String) : String
+        hcode_home = ENV["HCODE_HOME"]? || File.join(home_dir, ".hcode")
+        File.join(hcode_home, "credentials", "mcp")
+      end
+
+      private def self.ensure_credentials_dir(dir : String) : Nil
+        Dir.mkdir_p(dir)
+        File.chmod(dir, 0o700) rescue nil
+      end
+
+      # Store key: `<safeName>-<sha256(serverName\0canonicalUrl)[0..23]>`.
+      # Includes the URL so one server with two different URLs produces two
+      # files. Mirrors JS `mcpOAuthStoreKey`.
+      private def self.tokens_path(server_name : String, server_url : String, home_dir : String) : String
+        key = store_key(server_name, server_url)
+        File.join(credentials_dir(home_dir), "#{key}.json")
+      end
+
+      def self.store_key(server_name : String, server_url : String) : String
+        safe = sanitize_store_key(server_name)
+        canonical = canonical_url(server_url)
+        digest = Digest::SHA256.hexdigest("#{server_name}\0#{canonical}")[0...24]
+        "#{safe}-#{digest}"
+      end
+
+      private def self.sanitize_store_key(name : String) : String
+        # Strip path-traversal segments, collapse underscores.
+        safe = File.basename(name).gsub(/[^A-Za-z0-9_-]/, "_").gsub(/_+/, "_")
+        safe.empty? || safe.starts_with?('.') ? "server" : safe
+      end
+
+      # Canonical URL: strip the hash fragment. Mirrors JS
+      # `canonicalMcpOAuthResource`.
+      private def self.canonical_url(server_url : String) : String
+        uri = URI.parse(server_url)
+        uri.fragment = nil
+        uri.to_s
+      rescue
+        server_url
       end
 
       # Attempt a token refresh via the stored refresh_token. Returns the new
       # tokens on success, nil if the refresh failed (caller should re-auth).
-      def self.refresh(server_name : String, home_dir : String, tokens : OAuthTokens,
-                       metadata : ServerMetadata) : OAuthTokens?
+      def self.refresh(server_name : String, server_url : String, home_dir : String,
+                       tokens : OAuthTokens, metadata : ServerMetadata) : OAuthTokens?
         return nil unless refresh_tok = tokens.refresh_token
         return nil unless token_ep = metadata.token_endpoint
 
@@ -119,7 +172,7 @@ module Hcode
 
         data = JSON.parse(resp.body)
         new_tokens = build_tokens(data)
-        save_tokens(server_name, home_dir, new_tokens)
+        save_tokens(server_name, server_url, home_dir, new_tokens)
         new_tokens
       rescue
         nil
@@ -128,6 +181,9 @@ module Hcode
       # Run the full authorization-code + PKCE flow. `on_authorization` is
       # called with the URL the user must open in a browser. Blocks until the
       # user completes authorization (or times out / errors).
+      #
+      # The callback server binds a random free port (port 0) so two parallel
+      # MCP OAuth flows never collide — mirrors JS `callback-server.ts`.
       def self.authorize(server_url : String, server_name : String, home_dir : String,
                          client_id : String? = nil, client_secret : String? = nil,
                          scopes : Array(String)? = nil,
@@ -138,24 +194,34 @@ module Hcode
           raise OAuthError.new("OAuth discovery failed: server '#{server_name}' did not return authorization_endpoint + token_endpoint")
         end
 
+        # Start the callback server FIRST on a dynamic port, so the redirect_uri
+        # is known before DCR and auth_url construction.
+        state = random_hex(STATE_LEN)
+        callback = start_callback_server(state)
+        redirect_uri = callback.redirect_uri
+
         # Register a client dynamically if none was provided.
         registered_cid = client_id
         registered_secret = client_secret
         if registered_cid.nil?
           if reg_ep = metadata.registration_endpoint
-            registered_cid, registered_secret = register_client(reg_ep)
+            registered_cid, registered_secret = register_client(reg_ep, redirect_uri)
           end
         end
-        raise OAuthError.new("No client_id available (DCR failed or not supported)") unless registered_cid
+
+        # Clean up the callback server if we bail out before the flow completes.
+        unless registered_cid
+          callback.server.close rescue nil
+          raise OAuthError.new("No client_id available (DCR failed or not supported)")
+        end
 
         verifier  = generate_code_verifier
         challenge = pkce_challenge(verifier)
-        state     = random_hex(STATE_LEN)
 
         auth_params = URI::Params.new
         auth_params["response_type"] = "code"
         auth_params["client_id"] = registered_cid
-        auth_params["redirect_uri"] = callback_url
+        auth_params["redirect_uri"] = redirect_uri
         auth_params["code_challenge"] = challenge
         auth_params["code_challenge_method"] = "S256"
         auth_params["state"] = state
@@ -164,13 +230,15 @@ module Hcode
         end
 
         auth_url = "#{metadata.authorization_endpoint}?#{auth_params}"
-        code = wait_for_callback(auth_url, state) { |u| on_authorization.call(u) }
+        on_authorization.call(auth_url)
+
+        code = wait_for_code(callback, state)
 
         # Exchange the authorization code for tokens.
         token_params = URI::Params.encode({
           "grant_type"    => "authorization_code",
           "code"          => code,
-          "redirect_uri"  => callback_url,
+          "redirect_uri"  => redirect_uri,
           "client_id"     => registered_cid,
           "code_verifier" => verifier,
         })
@@ -189,7 +257,7 @@ module Hcode
         raise OAuthError.new("Token response missing access_token") unless access_token
 
         tokens = build_tokens(data)
-        save_tokens(server_name, home_dir, tokens)
+        save_tokens(server_name, server_url, home_dir, tokens)
         tokens
       end
 
@@ -243,9 +311,10 @@ module Hcode
       # Dynamic Client Registration (RFC 7591)
       # ------------------------------------------------------------------
 
-      private def self.register_client(registration_endpoint : String) : {String, String?}
+      private def self.register_client(registration_endpoint : String,
+                                      redirect_uri : String) : {String, String?}
         body = {
-          "redirect_uris" => [callback_url] of String,
+          "redirect_uris" => [redirect_uri] of String,
           "token_endpoint_auth_method" => "none",
           "grant_types" => ["authorization_code"] of String,
           "response_types" => ["code"] of String,
@@ -288,17 +357,24 @@ module Hcode
       end
 
       # ------------------------------------------------------------------
-      # Callback HTTP server
+      # Callback HTTP server (dynamic port — mirrors JS callback-server.ts)
       # ------------------------------------------------------------------
 
-      private def self.callback_url : String
-        "http://localhost:#{CALLBACK_PORT}/callback"
+      # Callback handle returned by `start_callback_server`.
+      private struct CallbackHandle
+        getter server : HTTP::Server
+        getter redirect_uri : String
+        getter code_ch : Channel(String)
+        getter error_ch : Channel(String)
+        getter expected_state : String
+
+        def initialize(@server, @redirect_uri, @code_ch, @error_ch, @expected_state)
+        end
       end
 
-      # Start a localhost HTTP server, emit the authorization URL, and block
-      # until the callback arrives with a valid `code` + matching `state`.
-      private def self.wait_for_callback(auth_url : String, expected_state : String,
-                                         &on_authorization : String ->) : String
+      # Bind a one-shot callback server on a random free port. `expected_state`
+      # is validated against the `state` query param on each callback request.
+      private def self.start_callback_server(expected_state : String) : CallbackHandle
         code_ch = Channel(String).new
         error_ch = Channel(String).new
 
@@ -333,24 +409,30 @@ module Hcode
           context.response.puts "Missing code parameter"
         end
 
-        spawn do
-          server.listen("127.0.0.1", CALLBACK_PORT)
-        end
+        # Bind on a random free port — the OS picks one.
+        addr = server.bind_tcp("127.0.0.1", 0)
+        redirect_uri = "http://127.0.0.1:#{addr.port}/callback"
 
-        # Brief settle so the socket is bound before we hand the URL out.
+        # Start listening in a background fiber.
+        spawn(name: "mcp-oauth-callback") { server.listen }
+
+        # Brief settle so the socket is ready.
         3.times { Fiber.yield }
 
-        on_authorization.call(auth_url)
+        CallbackHandle.new(server, redirect_uri, code_ch, error_ch, expected_state)
+      end
 
+      # Block until the callback delivers a valid code (or timeout / error).
+      private def self.wait_for_code(callback : CallbackHandle, expected_state : String) : String
         select
-        when code = code_ch.receive
-          server.close rescue nil
+        when code = callback.code_ch.receive
+          callback.server.close rescue nil
           code
-        when err = error_ch.receive
-          server.close rescue nil
+        when err = callback.error_ch.receive
+          callback.server.close rescue nil
           raise OAuthError.new(err)
         when timeout(5.minutes)
-          server.close rescue nil
+          callback.server.close rescue nil
           raise OAuthError.new("OAuth: timed out waiting for authorization callback")
         end
       end

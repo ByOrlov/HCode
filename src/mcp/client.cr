@@ -80,7 +80,17 @@ module Hcode
       # blocks are concatenated; image/audio blocks are embedded as base64
       # data URIs so the model can consume them; resource blocks get a
       # descriptive placeholder (text or blob-decoded depending on type).
+      #
+      # Handles both the modern `{ content, isError }` shape and the legacy
+      # `{ toolResult }` shape (collapsed to a single text block). Mirrors JS
+      # `toMcpToolResult`.
       private def decode_result(result : JSON::Any) : CallResult
+        # Legacy shape: `{ toolResult: ... }` → single text block.
+        if legacy = result["toolResult"]?
+          text = legacy.as_s? || legacy.to_s
+          return CallResult.new(text, false)
+        end
+
         is_error = result["isError"]?.try(&.as_bool?) == true
         blocks = result["content"]?.try(&.as_a?) || [] of JSON::Any
         parts = [] of String

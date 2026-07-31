@@ -274,6 +274,34 @@ module Hcode
           res.is_error?.should be_true
           res.text.should eq("boom")
         end
+
+        it "handles legacy { toolResult } shape" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(p : JSON::Any) {
+            JSON.parse(%({"toolResult":"legacy string result"}))
+          }
+          client = Client.new("test", t, JsonRpcClient.new(t))
+          client.connect
+          res = client.call_tool("legacy", JSON.parse("{}"))
+          res.text.should eq("legacy string result")
+          res.is_error?.should be_false
+        end
+
+        it "handles legacy { toolResult } with object" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(p : JSON::Any) {
+            JSON.parse(%({"toolResult":{"key":"val"}}))
+          }
+          client = Client.new("test", t, JsonRpcClient.new(t))
+          client.connect
+          res = client.call_tool("legacy", JSON.parse("{}"))
+          res.text.should contain("key")
+          res.text.should contain("val")
+        end
       end
 
       # --------------------------------------------------------------------
@@ -316,7 +344,7 @@ module Hcode
         it "fails an HTTP server with no url" do
           m = Manager.new
           cfg = McpServerConfig.new("remote", type: "http")
-          m.connect_all([cfg], Tools::Registry.new)
+          m.connect_all([cfg], Tools::Registry.new, blocking: true)
           m.any_connected?.should be_false
           m.status_text.should contain("no `url`")
         end
@@ -324,7 +352,7 @@ module Hcode
         it "fails a server with no command" do
           m = Manager.new
           cfg = McpServerConfig.new("empty")
-          m.connect_all([cfg], Tools::Registry.new)
+          m.connect_all([cfg], Tools::Registry.new, blocking: true)
           m.any_connected?.should be_false
           m.status_text.should contain("no `command`")
         end
@@ -390,8 +418,8 @@ module Hcode
           begin
             tokens = OAuthTokens.new("access-123", "refresh-456", "Bearer",
                                      Time.utc.to_unix + 3600, "read")
-            OAuth.save_tokens("srv", home, tokens)
-            loaded = OAuth.load_tokens("srv", home)
+            OAuth.save_tokens("srv", "https://mcp.example.com", home, tokens)
+            loaded = OAuth.load_tokens("srv", "https://mcp.example.com", home)
             loaded.should_not be_nil
             loaded.not_nil!.access_token.should eq("access-123")
             loaded.not_nil!.refresh_token.should eq("refresh-456")
@@ -411,12 +439,25 @@ module Hcode
           Dir.mkdir_p(home)
           begin
             tokens = OAuthTokens.new("tok")
-            OAuth.save_tokens("srv", home, tokens)
-            OAuth.clear_tokens("srv", home)
-            OAuth.load_tokens("srv", home).should be_nil
+            OAuth.save_tokens("srv", "https://mcp.example.com", home, tokens)
+            OAuth.clear_tokens("srv", "https://mcp.example.com", home)
+            OAuth.load_tokens("srv", "https://mcp.example.com", home).should be_nil
           ensure
             FileUtils.rm_r(home) rescue nil
           end
+        end
+
+        it "store key includes URL digest (different URLs → different files)" do
+          key1 = OAuth.store_key("srv", "https://mcp.example.com/v1")
+          key2 = OAuth.store_key("srv", "https://mcp.example.com/v2")
+          key1.should_not eq(key2)
+          key1.should start_with("srv-")
+        end
+
+        it "store key is stable for same name + URL" do
+          key1 = OAuth.store_key("srv", "https://mcp.example.com")
+          key2 = OAuth.store_key("srv", "https://mcp.example.com")
+          key1.should eq(key2)
         end
       end
 
@@ -509,7 +550,7 @@ module Hcode
           m = Manager.new
           cfg = McpServerConfig.new("off", command: "nonexistent")
           cfg.enabled = false
-          m.connect_all([cfg], Tools::Registry.new)
+          m.connect_all([cfg], Tools::Registry.new, blocking: true)
           m.status_text.should contain("⊘")
           m.status_text.should contain("off")
         end

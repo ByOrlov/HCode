@@ -305,8 +305,10 @@ module Hcode
       # (child process) and HTTP (Streamable HTTP + SSE, OAuth) transports.
       # Failures are isolated per server — a broken server is reported, not
       # fatal. `shutdown` is wired into both exit paths below.
+      # Interactive runs connect in the background so a slow server never
+      # blocks the TUI; headless runs block so tools are ready for the prompt.
       mcp_manager = Mcp::Manager.new(home)
-      mcp_manager.connect_all(config.mcp_servers, tools)
+      mcp_manager.connect_all(config.mcp_servers, tools, blocking: prompt ? true : false)
 
       home = ENV["HOME"]? || "/tmp"
       lifecycle = Hcode::Session::Lifecycle.new(home)
