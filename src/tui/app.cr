@@ -53,60 +53,65 @@ module Hcode
 
     MCP_HELP_TEXT = <<-TEXT
       MCP (Model Context Protocol) lets you connect external tool servers to hcode.
-      Servers are configured in JSON files, loaded and merged in this order
-      (later sources override earlier ones by server name):
+      Here is how to set one up.
 
-        1. ~/.hcode/mcp.json            (user-global)
-        2. <project-root>/.mcp.json     (root = nearest parent with a .git dir)
-        3. <cwd>/.hcode/mcp.json         (project-local)
+      Step 1 — Create the config file
 
-      The file uses this top-level shape:
+        Open (or create) ~/.hcode/mcp.json. This is the global config.
+        Project-local overrides are also supported (see the note at the bottom).
 
-        {
-          "mcpServers": {
-            "<name>": { "<server-config>" },
-            ...
-          }
-        }
+      Step 2 — Add a server entry
 
-      -- stdio server (local child process) --
+        Every file has the same top-level shape: a "mcpServers" object where
+        each key is a server name you choose. Two server types are supported.
 
-        {
-          "mcpServers": {
-            "github": {
-              "command": "npx",
-              "args": ["-y", "@modelcontextprotocol/server-github"],
-              "env": { "GITHUB_TOKEN": "ghp_xxx" }
-            }
-          }
-        }
+        a) Local server (stdio) — hcode launches a child process:
 
-      -- HTTP / SSE server (remote endpoint) --
+             {
+               "mcpServers": {
+                 "github": {
+                   "command": "npx",
+                   "args": ["-y", "@modelcontextprotocol/server-github"],
+                   "env": { "GITHUB_TOKEN": "ghp_xxx" }
+                 }
+               }
+             }
 
-        {
-          "mcpServers": {
-            "remote": {
-              "type": "http",
-              "url": "https://mcp.example.com/sse",
-              "bearerTokenEnvVar": "MCP_REMOTE_TOKEN"
-            }
-          }
-        }
-        (Then export MCP_REMOTE_TOKEN=... in your shell; the token is never
-        written to the config file.)
+        b) Remote server (HTTP/SSE) — hcode connects to a URL:
 
-      Common optional fields per server:
-        "enabled": false              — skip this server entirely (default true)
-        "enabledTools": ["foo"]       — register only these tool names
-        "disabledTools": ["bar"]      — hide these tool names
-        "startupTimeoutMs": 30000     — connection timeout (default 30000)
-        "toolTimeoutMs": 60000        — per tool-call timeout
-        "providers": ["moonshot"]     — load only for these providers
-                                        (empty/absent = always load)
+             {
+               "mcpServers": {
+                 "remote": {
+                   "type": "http",
+                   "url": "https://mcp.example.com/sse",
+                   "bearerTokenEnvVar": "MCP_REMOTE_TOKEN"
+                 }
+               }
+             }
 
-      Tools from MCP servers are exposed under the name mcp__<server>__<tool>.
-      After editing a config file, run /mcp update (optionally with a server
-      name) to reconnect without restarting hcode.
+           For remote servers, put the token in an environment variable
+           (export MCP_REMOTE_TOKEN=... in your shell). It is never written
+           to the config file.
+
+      Step 3 — Apply the changes
+
+        Run /mcp update to (re)connect. Use /mcp status to check that the
+        server is connected and see its tools.
+
+      Tips
+
+        - Tools from MCP servers appear as mcp__<server>__<tool>.
+        - Config file locations (later overrides earlier, by server name):
+            ~/.hcode/mcp.json            (global)
+            <project-root>/.mcp.json     (nearest parent with .git)
+            <cwd>/.hcode/mcp.json        (project-local)
+        - Optional fields per server:
+            "enabled": false              skip this server
+            "enabledTools": ["foo"]       register only these tools
+            "disabledTools": ["bar"]      hide these tools
+            "startupTimeoutMs": 30000     connection timeout
+            "toolTimeoutMs": 60000        per tool-call timeout
+            "providers": ["moonshot"]     load only for these providers
       TEXT
 
     struct Message
