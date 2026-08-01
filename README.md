@@ -203,15 +203,15 @@ From featherweight to heavyweight.
 | # | Agent       | Lang       | Idle RAM         | License             | Source |
 |---|-------------|------------|------------------|---------------------|--------|
 | 1 | **HCode**   | **Crystal**| **~3 MB**        | **GPL-2.0-or-later**| [1]    |
-| 2 | Codex CLI   | Rust       | ~30 MB           | Apache-2.0          | [2]    |
-| 3 | grok-build  | Rust       | ~30–60 MB (est)  | Apache-2.0          | [3]    |
+| 2 | grok-build  | Rust       | ~20 MB           | Apache-2.0          | [3]    |
+| 3 | Codex CLI   | Rust       | ~30 MB           | Apache-2.0          | [2]    |
 | 4 | Goose       | Rust + TS  | ~50–100 MB (est) | Apache-2.0          | [4]    |
 | 5 | Claude Code | TS / Node  | ~120 MB (grows)  | proprietary         | [7]    |
 | 6 | Aider       | Python     | ~150–250 MB(est) | Apache-2.0          | [6]    |
 | 7 | kimi-code   | TS / Node  | ~250 MB+         | MIT                 | [5]    |
 | 8 | opencode    | TS / Bun   | ~400 MB          | MIT                 | [8]    |
 
-**The gap.** HCode sits ~10× under the nearest Rust agent (Codex), ~40× under the lightest Node agent (Claude Code), ~80× under kimi-code, and **~130× under opencode.** The Node family spans an enormous range — from ~120 MB up to ~400 MB — because each one ships a V8 runtime per process and grows with use. The Rust agents (Codex, grok-build, Goose) are native and lean; HCode keeps pace with them on RAM and beats them on readability and license (see [Why Crystal?](#why-crystal)).
+**The gap.** HCode sits ~7× under the nearest Rust agent (grok-build), ~40× under the lightest Node agent (Claude Code), ~80× under kimi-code, and **~130× under opencode.** The Node family spans an enormous range — from ~120 MB up to ~400 MB — because each one ships a V8 runtime per process and grows with use. The Rust agents (Codex, grok-build, Goose) are native and lean; HCode keeps pace with them on RAM and beats them on readability and license (see [Why Crystal?](#why-crystal)).
 
 > Aider (est. ~150–250 MB) and kimi-code (~250 MB+) sit on the border of the same weight class — their relative order is within the margin.
 
@@ -236,7 +236,7 @@ Memory is half the story. The other half: who owns the code, where you're allowe
 
 - **[1] HCode** — author measurement, idle RSS. Baseline documented in [`PLAN.md`](./PLAN.md) (Crystal + Boehm GC, ~1 MB GC baseline, ~8 KB per fiber stack).
 - **[2] Codex CLI** — author measurement, idle RSS (~30 MB). Native Rust binary, [`openai/codex`](https://github.com/openai/codex).
-- **[3] grok-build** — no public measurement; estimate for a native Rust TUI/harness. [`xai-org/grok-build`](https://github.com/xai-org/grok-build).
+- **[3] grok-build** — author measurement, idle RSS (~20 MB). Native Rust binary, [`xai-org/grok-build`](https://github.com/xai-org/grok-build).
 - **[4] Goose** — no public measurement; estimate for Rust core + embedded TS/V8 UI. [`aaif-goose/goose`](https://github.com/aaif-goose/goose).
 - **[5] kimi-code** — author measurement, ~250 MB+ idle RSS (TypeScript / Node.js). Supersedes the internal planning estimate in `PLAN.md`.
 - **[6] Aider** — no public idle number; estimate for CPython + tree-sitter + litellm deps. Pathological growth reported in [`Aider-AI/aider#573`](https://github.com/Aider-AI/aider/issues/573).
