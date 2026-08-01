@@ -315,6 +315,8 @@ module Hcode
         Dir.mkdir_p(hcode_home) unless Dir.exists?(hcode_home)
         sessions_dir = File.join(hcode_home, "sessions")
         Dir.mkdir_p(sessions_dir) unless Dir.exists?(sessions_dir)
+        exceptions_dir = File.join(hcode_home, "exceptions")
+        Dir.mkdir_p(exceptions_dir) unless Dir.exists?(exceptions_dir)
       end
 
       # Returns true when the current provider_name + credentials are sufficient

@@ -503,6 +503,16 @@ module Hcode
       PROJECT_BRAND_DIRS   = [".hcode/skills"]
       PROJECT_GENERIC_DIRS = [".agents/skills"]
 
+      # Scan a single directory for SKILL.md files (used by the plugin system
+      # to discover skills from plugin-declared skill roots).
+      def self.discover_from_dir(dir : String, source : String = "plugin") : Array(SkillDefinition)
+        return [] of SkillDefinition unless Dir.exists?(dir)
+        skills = [] of SkillDefinition
+        seen = Set(String).new
+        walk_skill_dir(dir, source, 0, skills, seen)
+        skills
+      end
+
       # Scan both user (home) and project (work_dir) roots, parse SKILL.md
       # files, return deduplicated skills ordered by discovery.
       def self.discover(home : String, work_dir : String) : Array(SkillDefinition)

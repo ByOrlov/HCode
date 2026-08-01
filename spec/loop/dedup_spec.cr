@@ -96,7 +96,7 @@ describe Hcode::Loop::DedupTracker do
       # only 64-char SHA256 hex digests.
       history = tracker.@call_history["Edit"]
       history.each do |entry|
-        entry.size.should eq(64)             # SHA256 hex length
+        entry.size.should eq(64)             # SHA256 hex digest length
         entry.should_not contain("x" * 100)  # no payload leak
       end
     end

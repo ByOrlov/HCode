@@ -156,7 +156,7 @@ module Hcode
         [] of McpServerConfig
       end
 
-      private def self.from_any_json(name : String, h : Hash(String, JSON::Any)) : McpServerConfig
+      def self.from_any_json(name : String, h : Hash(String, JSON::Any)) : McpServerConfig
         cfg = McpServerConfig.new(name)
         cfg.type = h["transport"]?.try(&.to_s) || h["type"]?.try(&.to_s) || "stdio"
         cfg.command = h["command"]?.try(&.to_s) || ""

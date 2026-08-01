@@ -70,8 +70,8 @@ module Hcode
       end
 
       # Derive a stable workspace id from a cwd: the first 12 hex chars of
-      # the SHA-256 of the resolved absolute path. Stable across runs for
-      # the same directory, filesystem-safe, and short enough for a path
+      # the SHA-256 hash of the resolved absolute path. Stable across runs
+      # for the same directory, filesystem-safe, and short enough for a path
       # segment.
       def self.workspace_id(cwd : String) : String
         resolved = File.expand_path(cwd)

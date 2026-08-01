@@ -14,6 +14,7 @@ require "colorize"
 require "./version"
 require "./version_compare"
 require "./upgrader"
+require "./exception_handler"
 require "./process_port"
 require "./llm/types"
 require "./llm/token_counter"
@@ -90,6 +91,15 @@ require "./notify/dispatcher"
 require "./config/config"
 require "./i18n/i18n"
 require "./hooks/engine"
+require "./plugin/types"
+require "./plugin/store"
+require "./plugin/source"
+require "./plugin/manifest"
+require "./plugin/archive"
+require "./plugin/github_resolver"
+require "./plugin/commands"
+require "./plugin/injector"
+require "./plugin/manager"
 require "./prompt/template"
 require "./prompt/agents_md"
 require "./prompt/system_prompt"
@@ -304,14 +314,22 @@ module Hcode
 
       permission = Permission::Manager.new(Permission::Mode.parse(config.permission_mode))
 
-      # Connect configured MCP servers and register their tools. Supports stdio
-      # (child process) and HTTP (Streamable HTTP + SSE, OAuth) transports.
-      # Failures are isolated per server — a broken server is reported, not
-      # fatal. `shutdown` is wired into both exit paths below.
-      # Interactive runs connect in the background so a slow server never
-      # blocks the TUI; headless runs block so tools are ready for the prompt.
+      # Load installed plugins and merge their declared capabilities (skills,
+      # MCP servers, hooks, commands, session-start) into the session.
+      plugin_manager = Plugin::Manager.new(home)
+      plugin_manager.load
+      plugin_mcp_servers = plugin_manager.enabled_mcp_servers
+      plugin_hooks = plugin_manager.enabled_hooks
+
+      # Connect configured MCP servers (config.toml + plugins) and register
+      # their tools. Supports stdio (child process) and HTTP (Streamable HTTP
+      # + SSE, OAuth) transports. Failures are isolated per server — a broken
+      # server is reported, not fatal. `shutdown` is wired into both exit paths
+      # below. Interactive runs connect in the background so a slow server
+      # never blocks the TUI; headless runs block so tools are ready.
+      merged_mcp = config.mcp_servers + plugin_mcp_servers
       mcp_manager = Mcp::Manager.new(home)
-      mcp_manager.register_from_cache(config.mcp_servers, tools,
+      mcp_manager.register_from_cache(merged_mcp, tools,
         active_provider: config.provider_name, blocking: prompt ? true : false)
 
       home = ENV["HOME"]? || "/tmp"
@@ -350,11 +368,13 @@ module Hcode
       configure_provider(provider, config, sid_for_cache)
 
       agent = Loop::Agent.new(provider, memory, tools, permission)
-      agent.hooks = Hooks::Engine.new(config.hooks, cwd: work_dir, session_id: store.meta_id?) unless config.hooks.empty?
+      merged_hooks = config.hooks + plugin_hooks
+      agent.hooks = Hooks::Engine.new(merged_hooks, cwd: work_dir, session_id: store.meta_id?) unless merged_hooks.empty?
 
-      # Discover skills from disk (user home + project root) and register them
-      # in the global catalog so the Skill tool can resolve them.
+      # Discover skills from disk (user home + project root) plus plugin skills,
+      # and register them in the global catalog so the Skill tool can resolve them.
       discovered = Hcode::Tools::SkillDiscovery.discover(home, work_dir)
+      discovered += plugin_manager.plugin_skills
       skill_catalog = Hcode::Tools::InMemorySkillCatalog.new(discovered)
       Hcode::Tools::Skill.catalog = skill_catalog
       Hcode::Tools::Skill.memory = memory
@@ -370,10 +390,18 @@ module Hcode
       Hcode::Tools::Goal.service = goal_service
       agent_runner, swarm_runner = wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
-      if prompt
-        run_headless(prompt, agent, system_prompt, store, config, task_service, mcp_manager)
-      else
-        run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner, task_service, mcp_manager)
+      begin
+        if prompt
+          run_headless(prompt, agent, system_prompt, store, config, task_service, mcp_manager)
+        else
+          run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, tui_prompt, agent_runner, swarm_runner, task_service, mcp_manager, plugin_manager)
+        end
+      rescue ex : Loop::UserCancellationError
+        # Expected user-initiated interruption; not a crash.
+        raise ex
+      rescue ex
+        ExceptionHandler.report_and_notify(ex, "CLI.run")
+        raise ex
       end
     end
 
@@ -640,6 +668,7 @@ module Hcode
       rescue ex
         STDERR.puts Hcode.t("errors.fatal", message: ex.message.to_s).colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
+        ExceptionHandler.report_and_notify(ex, "run_headless")
         exit(1)
       ensure
         mcp_manager.shutdown
@@ -678,7 +707,8 @@ module Hcode
                                      agent_runner : Loop::SubagentAgentRunner? = nil,
                                      swarm_runner : Loop::SubagentSwarmRunner? = nil,
                                      task_service : Tools::InMemoryTaskService? = nil,
-                                     mcp_manager : Mcp::Manager = Mcp::Manager.new)
+                                     mcp_manager : Mcp::Manager = Mcp::Manager.new,
+                                     plugin_manager : Plugin::Manager = Plugin::Manager.new(home))
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
       app.model = agent.provider.model_name
@@ -1106,6 +1136,25 @@ module Hcode
 
       app.session_id = store.meta_id? || ""
 
+      # Plugin session-start: inject skill text into context on the first
+      # turn of a new or resumed session (mirrors TS PluginSessionStartInjector).
+      session_starts = plugin_manager.enabled_session_starts
+      unless session_starts.empty?
+        catalog = Hcode::Tools::Skill.catalog
+        Plugin::SessionStartInjector.render(session_starts, catalog, agent.context)
+      end
+
+      # Plugin slash commands: register them so `/<plugin_id>:<command>` dispatches.
+      plugin_commands = plugin_manager.enabled_commands
+      unless plugin_commands.empty?
+        app.plugin_commands = plugin_commands
+      end
+
+      # `/plugins` subcommand handler — all plugin management operations.
+      app.on_plugins_command = ->(raw_args : String) do
+        handle_plugins_subcommand(plugin_manager, raw_args)
+      end
+
       # Background update check (non-blocking): runs in a fiber so the TUI
       # starts immediately. Respects a 24h cache — most startups are a no-op.
       # If a newer version exists, surfaces it as a system message.
@@ -1174,6 +1223,7 @@ module Hcode
         rescue ex : Loop::NetworkFailureError
           app.show_interrupted(ex.message.to_s)
         rescue ex
+          ExceptionHandler.report(ex, "interactive turn")
           app.on_event(Loop::Event.error(ex.message.to_s))
         end
       end
@@ -1258,6 +1308,162 @@ module Hcode
         end
       end
       File.write(path, content)
+    end
+
+    private def self.handle_plugins_subcommand(plugin_manager : Plugin::Manager, raw_args : String) : String
+      parts = raw_args.split(/\s+/, 2)
+      sub = parts[0]? || ""
+      rest = parts[1]? || ""
+
+      case sub
+      when "", "list"
+        render_plugins_list(plugin_manager)
+      when "install"
+        if rest.empty?
+          "Usage: /plugins install <path-or-url>"
+        else
+          begin
+            record = plugin_manager.install(rest.strip)
+            "Installed plugin \"#{record.display_name}\" (#{record.id}) v#{record.version || "?"}.\n" \
+              "Run /reload or /new to activate."
+          rescue ex
+            "Install failed: #{ex.message}"
+          end
+        end
+      when "info"
+        id = rest.strip
+        return "Usage: /plugins info <id>" if id.empty?
+        render_plugin_info(plugin_manager, id)
+      when "enable"
+        begin
+          plugin_manager.set_enabled(rest.strip, true)
+          "Plugin \"#{rest.strip}\" enabled. Run /reload or /new to activate."
+        rescue ex
+          ex.message.to_s
+        end
+      when "disable"
+        begin
+          plugin_manager.set_enabled(rest.strip, false)
+          "Plugin \"#{rest.strip}\" disabled. Run /reload or /new to activate."
+        rescue ex
+          ex.message.to_s
+        end
+      when "remove"
+        begin
+          plugin_manager.remove(rest.strip)
+          "Plugin \"#{rest.strip}\" removed. Run /reload or /new to apply."
+        rescue ex
+          ex.message.to_s
+        end
+      when "reload"
+        summary = plugin_manager.reload
+        msg = String.build do |s|
+          s << "Reloaded #{plugin_manager.list.size} plugin(s)."
+          s << "\nAdded: #{summary.added.join(", ")}" unless summary.added.empty?
+          s << "\nRemoved: #{summary.removed.join(", ")}" unless summary.removed.empty?
+          summary.errors.each { |e| s << "\nError [#{e[:id]}]: #{e[:message]}" }
+        end
+        msg
+      when "mcp"
+        handle_plugins_mcp(plugin_manager, rest)
+      else
+        # Try matching a plugin id for info
+        if plugin_manager.installed?(sub)
+          render_plugin_info(plugin_manager, sub)
+        else
+          "Unknown subcommand: #{sub}\n" \
+            "Usage: /plugins [list|install|info|enable|disable|remove|reload|mcp]"
+        end
+      end
+    end
+
+    private def self.handle_plugins_mcp(plugin_manager : Plugin::Manager, rest : String) : String
+      parts = rest.split(/\s+/)
+      action = parts[0]? || ""
+      plugin_id = parts[1]? || ""
+      server = parts[2]? || ""
+
+      case action
+      when "enable", "disable"
+        return "Usage: /plugins mcp #{action} <plugin-id> <server>" if plugin_id.empty? || server.empty?
+        begin
+          plugin_manager.set_mcp_server_enabled(plugin_id, server, action == "enable")
+          "MCP server \"#{server}\" #{action}d for plugin \"#{plugin_id}\". Run /reload or /new to apply."
+        rescue ex
+          ex.message.to_s
+        end
+      else
+        "Usage: /plugins mcp <enable|disable> <plugin-id> <server>"
+      end
+    end
+
+    private def self.render_plugins_list(plugin_manager : Plugin::Manager) : String
+      plugins = plugin_manager.list
+      return "No plugins installed." if plugins.empty?
+
+      String.build do |s|
+        s << "Installed plugins (#{plugins.size}):\n"
+        plugins.each do |r|
+          status = r.enabled ? (r.ok? ? "enabled" : "error") : "disabled"
+          s << "  #{r.id} (#{r.display_name}"
+          s << " v#{r.version}" if r.version
+          s << ") [#{status}]"
+          s << " — #{r.skill_count} skill(s), #{r.mcp_server_count} MCP, #{r.hook_count} hook(s), #{r.command_count} cmd(s)"
+          s << '\n'
+          if r.has_errors?
+            r.diagnostics.select(&.severity.error?).each { |d| s << "    ! #{d.message}\n" }
+          end
+        end
+        s << "\nUsage: /plugins install <path-or-url> | /plugins info <id> | /plugins enable|disable <id>"
+      end
+    end
+
+    private def self.render_plugin_info(plugin_manager : Plugin::Manager, id : String) : String
+      record = plugin_manager.get(id)
+      return "Plugin \"#{id}\" is not installed." unless record
+
+      String.build do |s|
+        s << "Plugin: #{record.display_name} (#{record.id})\n"
+        s << "Version: #{record.version || "unknown"}\n"
+        s << "Source: #{record.source}\n"
+        s << "State: #{record.ok? ? "ok" : "error"} (#{record.enabled ? "enabled" : "disabled"})\n"
+        s << "Root: #{record.root}\n"
+        s << "Installed: #{record.installed_at}\n"
+        s << "Updated: #{record.updated_at}\n" if record.updated_at
+
+        if m = record.manifest
+          s << "\nSkills (#{m.skills.size}):\n"
+          m.skills.each { |path| s << "  #{path}\n" }
+
+          unless m.mcp_servers.empty?
+            s << "\nMCP servers (#{m.mcp_servers.size}):\n"
+            m.mcp_servers.each do |srv_name, cfg|
+              caps = record.capabilities
+              enabled = caps.try(&.mcp_servers[srv_name]?).try(&.enabled?) || cfg.enabled?
+              s << "  #{srv_name} [#{enabled ? "enabled" : "disabled"}] — #{cfg.stdio? ? cfg.command : cfg.url}\n"
+            end
+          end
+
+          unless m.hooks.empty?
+            s << "\nHooks (#{m.hooks.size}):\n"
+            m.hooks.each { |h| s << "  #{h.event}: #{h.command}\n" }
+          end
+
+          unless m.commands.empty?
+            s << "\nCommands (#{m.commands.size}):\n"
+            m.commands.each { |c| s << "  /#{record.id}:#{c.name}\n" }
+          end
+
+          if ss = m.session_start
+            s << "\nSession start skill: #{ss.skill}\n"
+          end
+        end
+
+        unless record.diagnostics.empty?
+          s << "\nDiagnostics:\n"
+          record.diagnostics.each { |d| s << "  [#{d.severity}] #{d.message}\n" }
+        end
+      end
     end
 
     private def self.render_tool_block(name : String, args : String, output : String, is_error : Bool) : Nil

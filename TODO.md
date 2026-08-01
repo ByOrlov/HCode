@@ -38,7 +38,21 @@
       Сейчас provider-поля разбросаны по `Config`. Нужен структурированный
       `[provider.<name>]`.
 - [ ] MCP-клиент — нет; `/mcp` заглушка.
-- [ ] Plugins runtime — нет; `/plugins` заглушка.
+- [x] **`src/plugin/` — Plugin System** — РАБОТАЕТ. Полный port JS plugin system:
+      `Plugin::Manager` (`plugin/manager.cr`): install (local-path/zip-url/github),
+      enable/disable/remove/reload. `ManifestParser` (`plugin/manifest.cr`):
+      парсит `kimi.plugin.json`, валидация name (regex), path safety (symlink
+      escape guard), auto-detect SKILL.md. `Store` (`plugin/store.cr`): atomic
+      read/write `installed.json`. `SourceResolver` (`plugin/source.cr`):
+      local-path/zip-url/github URL parsing. `Archive` (`plugin/archive.cr`):
+      download zip + unzip shellout + detectPluginRoot. `GithubResolver`
+      (`plugin/github_resolver.cr`): codeload tarball resolution (no
+      api.github.com). `CommandLoader` (`plugin/commands.cr`): .md frontmatter
+      parse + $ARGUMENTS expansion. `SessionStartInjector` (`plugin/injector.cr`):
+      text injection в Context::Memory на первом turn. Startup wiring в `hcode.cr`:
+      merge skills/MCP/hooks/commands из plugins. TUI `/plugins` subcommands
+      (list/install/info/enable/disable/remove/reload/mcp). Plugin slash commands
+      `/<plugin_id>:<command>`. 40 тестов (manifest/store/source/commands/manager).
 - [ ] `/btw` — forked side-agent — нет.
 
 ## 2. Инфраструктура: реализована inline, не вынесена в модули
@@ -87,7 +101,7 @@ undo_dialog, question_dialog, session_picker, help_panel, SelectList-диало�
 - [ ] `cron_message` рендер
 - [ ] `skill_activation` рендер (зависит от `/skill:foo` slash-команды, которой нет)
 - [ ] `agent_group` / `agent_swarm_progress` / `background_agent_status`
-- [ ] `mcp_status_panel`, `plugins_status_panel`
+- [x] `mcp_status_panel`, `plugins_status_panel` — `/plugins` реализован как text subcommands
 - [ ] Searchable-list / paging для больших транскриптов
 
 ## 5. Слэш-команды (отсутствуют)

@@ -669,4 +669,54 @@ describe Hcode::TUI::App do
       app.@swarm_active.should be_false
     end
   end
+
+  # The welcome banner is rendered from @show_welcome.  It must stay in the
+  #  render array after the first message so it scrolls off naturally as
+  #  content grows — it must never be *removed* from the array (which would
+  #  shrink content, trigger a full repaint, and visually "clear" the screen).
+  describe "welcome banner persistence" do
+    it "is visible on a fresh app" do
+      app = Hcode::TUI::App.new
+      app.@show_welcome.should be_true
+      lines, _ = app.build_rendered_lines(80)
+      lines.any?(&.includes?("Welcome")).should be_true
+    end
+
+    it "stays in the render array after the first user message" do
+      app = Hcode::TUI::App.new
+      app.add_message("user", "hello")
+      app.@show_welcome.should be_true
+      lines, _ = app.build_rendered_lines(80)
+      lines.any?(&.includes?("Welcome")).should be_true
+    end
+
+    it "stays in the render array after loading a transcript" do
+      app = Hcode::TUI::App.new
+      memory = Hcode::Context::Memory.new
+      memory.add_user("previous message")
+      app.load_transcript_from(memory)
+      app.@show_welcome.should be_true
+    end
+
+    it "is present even as multiple messages accumulate" do
+      app = Hcode::TUI::App.new
+      5.times { |i| app.add_message("user", "message #{i}") }
+      app.@show_welcome.should be_true
+      lines, _ = app.build_rendered_lines(80)
+      lines.any?(&.includes?("Welcome")).should be_true
+    end
+
+    # Regression: full_render must never emit \e[2J (full-screen erase).
+    # That blanks the entire visible area for one frame even inside a
+    # synchronized update, causing a visible flicker/"clear".  full_render
+    # must rewrite lines in place (\e[H + per-line \e[K + trailing \e[J).
+    it "full_render does not emit \\e[2J" do
+      app = Hcode::TUI::App.new
+      app.add_message("user", "hello")
+      # @first_render is true on a fresh app, so build_render_output takes
+      # the full_render path.
+      output = app.build_render_output
+      output.should_not contain("\e[2J")
+    end
+  end
 end

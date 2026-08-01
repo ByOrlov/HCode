@@ -438,6 +438,11 @@ module Hcode
       # is wired (e.g. headless path).
       property on_mcp_status : (-> String)? = nil
       property on_mcp_update : ((String?) -> Nil)? = nil
+      # Plugin slash commands loaded from installed plugins.
+      property plugin_commands : Array(Hcode::Plugin::PluginCommandDef) = [] of Hcode::Plugin::PluginCommandDef
+      # `/plugins` subcommand handler: receives the raw args string, returns
+      # text to display in the transcript.
+      property on_plugins_command : (String -> String)? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,
@@ -826,7 +831,6 @@ module Hcode
       # step summaries) is not recoverable from the wire log and is omitted.
       def load_transcript_from(memory : Context::Memory) : Nil
         @messages.clear
-        @show_welcome = false
         @streaming_text = ""
         @streaming_thinking = ""
         @streaming_tool = nil
@@ -1479,7 +1483,6 @@ module Hcode
       # log (e.g. it sat in the queue and `enqueue_message` persisted it); the
       # drain path sets it to avoid a duplicate `turn.prompt` record.
       private def start_turn(text : String, persisted : Bool = false) : Nil
-        @show_welcome = false
         @messages << Message.new("user", text)
         @current_step = 0
         @step_tool_count = 0
@@ -1772,6 +1775,13 @@ module Hcode
 
         cmd = parsed.not_nil!.command
         args = parsed.not_nil!.args
+
+        # Plugin slash commands: `/<plugin_id>:<command> [args]`
+        if cmd.includes?(':')
+          if handle_plugin_command(cmd, args)
+            return
+          end
+        end
 
         case cmd
         when "/help"
@@ -2121,10 +2131,7 @@ module Hcode
             @messages << Message.new("system", status)
           end
         when "/plugins"
-          # Mirrors TS `handlePluginsCommand`. hcode.cr has no plugin runtime.
-          @messages << Message.new("system",
-            "Plugins: not supported in this build.\n" \
-            "Plugin runtime is tracked as future work.")
+          handle_plugins_command(args)
         when "/login"
           if cb = @on_login
             @messages << Message.new("system", "Starting OAuth device-code login...")
@@ -2215,6 +2222,33 @@ module Hcode
         service.exit
         @messages << Message.new("system", Hcode.t("ui.swarm_mode_state",
           state: Hcode.t("ui.swarm_mode_off")))
+      end
+
+      private def handle_plugins_command(args : String) : Nil
+        if cb = @on_plugins_command
+          result = cb.call(args)
+          @messages << Message.new("system", result)
+        else
+          @messages << Message.new("system", "Plugin management is not available.")
+        end
+      end
+
+      private def handle_plugin_command(cmd : String, args : String) : Bool
+        # cmd is like "/<plugin_id>:<command>"
+        full = cmd.lchop('/')
+        plugin_id = full.split(':', 2)[0]?
+        command_name = full.split(':', 2)[1]?
+
+        return false unless plugin_id && command_name
+
+        match = @plugin_commands.find do |c|
+          c.plugin_id == plugin_id && c.name == command_name
+        end
+        return false unless match
+
+        expanded = Hcode::Plugin::CommandLoader.expand_arguments(match.body, args)
+        submit_message(expanded)
+        true
       end
 
       private def handle_goal_command(args : String) : Nil
@@ -2744,6 +2778,14 @@ module Hcode
       end
 
       def render : Nil
+        print build_render_output
+        STDOUT.flush
+      end
+
+      # Build the full ANSI frame string that render() writes to the terminal.
+      # Extracted so tests can assert on the raw escape sequences without
+      # redirecting STDOUT.
+      def build_render_output : String
         cols = @terminal.cols
         rows = @terminal.rows
 
@@ -2764,13 +2806,12 @@ module Hcode
         position_cursor(output, new_lines.size, editor_content_line)
         output << "\e[?2026l" # End synchronized update
 
-        print output.to_s
-        STDOUT.flush
-
         @previous_lines = new_lines
         @last_cols = cols
         @last_rows = rows
         @cursor_line = new_lines.size
+
+        output.to_s
       end
 
       def build_rendered_lines(cols : Int32) : {Array(String), Int32}
@@ -2919,12 +2960,21 @@ module Hcode
       end
 
       private def full_render(output : IO::Memory, new_lines : Array(String), rows : Int32) : Nil
-        output << "\e[2J\e[H\e[3J"
+        # Avoid \e[2J (full-screen erase) — it blanks the entire visible area
+        # before any new content is written, causing a visible flicker/"clear"
+        # even inside a synchronized update. Instead, go to the home position
+        # and rewrite each line in place with \e[K (erase-to-end-of-line),
+        # then wipe any leftover rows below with \e[J. This never produces a
+        # fully blank frame.
+        # \e[3J would clear the scrollback buffer — never use it in the main
+        # screen buffer, it destroys the user's terminal scroll history.
+        output << "\e[H"
         new_lines.each_with_index do |line, i|
           output << "\r\n" if i > 0
           output << line
           output << "\e[0m\e[K"
         end
+        output << "\e[J"
         @hardware_cursor_row = {0, new_lines.size - 1}.max
         @max_lines_rendered = new_lines.size
         @previous_viewport_top = {0, {rows, new_lines.size}.max - rows}.max
