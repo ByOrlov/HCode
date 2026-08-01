@@ -1,5 +1,6 @@
 require "./tool_batch"
 require "./retry"
+require "../tools/swarm_mode"
 
 module Hcode
   module Loop
@@ -120,6 +121,7 @@ module Hcode
             @context.prune_injections
             inject_step_reminders(steps)
             inject_plan_reminder
+            inject_swarm_reminder
 
             step_result = execute_step(sys_prompt, on_event)
 
@@ -163,6 +165,7 @@ module Hcode
           raise ex
         ensure
           @busy = false
+          auto_exit_swarm_mode
           on_event.call(Event.turn_end(cancelled))
         end
 
@@ -441,6 +444,24 @@ module Hcode
 
         Plan file: #{plan_path}
         TEXT
+      end
+
+      # --- Swarm mode injection (ported from swarm/enter-reminder.md) -----
+
+      private def inject_swarm_reminder : Nil
+        service = Tools::SwarmMode.service
+        return unless service && service.active?
+        @context.add_injection(Tools::SwarmMode::ENTER_REMINDER)
+      end
+
+      # Auto-exit task/tool-triggered swarm mode at turn end and leave an
+      # exit-reminder so the next turn knows the workflow ended. A manual
+      # toggle (`/swarm` / `/swarm on`) persists until the user turns it off.
+      private def auto_exit_swarm_mode : Nil
+        service = Tools::SwarmMode.service
+        return unless service
+        return unless service.auto_exit!
+        @context.add_injection(Tools::SwarmMode::EXIT_REMINDER)
       end
 
       # --- Goal injection (ported from injection/goal.ts) -------------------

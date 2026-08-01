@@ -51,6 +51,64 @@ module Hcode
       end
     end
 
+    MCP_HELP_TEXT = <<-TEXT
+      MCP (Model Context Protocol) lets you connect external tool servers to hcode.
+      Servers are configured in JSON files, loaded and merged in this order
+      (later sources override earlier ones by server name):
+
+        1. ~/.hcode/mcp.json            (user-global)
+        2. <project-root>/.mcp.json     (root = nearest parent with a .git dir)
+        3. <cwd>/.hcode/mcp.json         (project-local)
+
+      The file uses this top-level shape:
+
+        {
+          "mcpServers": {
+            "<name>": { "<server-config>" },
+            ...
+          }
+        }
+
+      -- stdio server (local child process) --
+
+        {
+          "mcpServers": {
+            "github": {
+              "command": "npx",
+              "args": ["-y", "@modelcontextprotocol/server-github"],
+              "env": { "GITHUB_TOKEN": "ghp_xxx" }
+            }
+          }
+        }
+
+      -- HTTP / SSE server (remote endpoint) --
+
+        {
+          "mcpServers": {
+            "remote": {
+              "type": "http",
+              "url": "https://mcp.example.com/sse",
+              "bearerTokenEnvVar": "MCP_REMOTE_TOKEN"
+            }
+          }
+        }
+        (Then export MCP_REMOTE_TOKEN=... in your shell; the token is never
+        written to the config file.)
+
+      Common optional fields per server:
+        "enabled": false              — skip this server entirely (default true)
+        "enabledTools": ["foo"]       — register only these tool names
+        "disabledTools": ["bar"]      — hide these tool names
+        "startupTimeoutMs": 30000     — connection timeout (default 30000)
+        "toolTimeoutMs": 60000        — per tool-call timeout
+        "providers": ["moonshot"]     — load only for these providers
+                                        (empty/absent = always load)
+
+      Tools from MCP servers are exposed under the name mcp__<server>__<tool>.
+      After editing a config file, run /mcp update (optionally with a server
+      name) to reconnect without restarting hcode.
+      TEXT
+
     struct Message
       property role : String
       property content : String
@@ -1892,6 +1950,8 @@ module Hcode
           else
             @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
           end
+        when "/swarm"
+          handle_swarm_command(args)
         when "/todos"
           todos = current_todos
           if todos.nil? || todos.empty?
@@ -2022,6 +2082,8 @@ module Hcode
             end
           when "configure"
             @messages << Message.new("system", "MCP configuration: edit ~/.hcode/mcp.json directly, then run /mcp update to refresh the cache.")
+          when "help"
+            @messages << Message.new("system", MCP_HELP_TEXT)
           else
             # Default: show status.
             status = @on_mcp_status.try(&.call) ||
@@ -2073,6 +2135,56 @@ module Hcode
 
         @show_command_hints = false
         @dirty = true
+      end
+
+      private def handle_swarm_command(args : String) : Nil
+        service = Hcode::Tools::SwarmMode.service
+        unless service
+          @messages << Message.new("error", Hcode.t("ui.swarm_not_wired"))
+          return
+        end
+
+        sub = args.strip.downcase
+        case sub
+        when "on"
+          enable_swarm_mode(service, Hcode::Tools::SwarmTrigger::Manual)
+        when "off"
+          disable_swarm_mode(service)
+        when ""
+          service.active? ? disable_swarm_mode(service) : enable_swarm_mode(service, Hcode::Tools::SwarmTrigger::Manual)
+        else
+          # `/swarm <prompt>`: a one-shot swarm task. Enters with the `task`
+          # trigger so `Loop::Agent` auto-exits (and leaves an exit-reminder)
+          # at the end of this turn.
+          if @agent_busy
+            @messages << Message.new("error", Hcode.t("ui.swarm_busy"))
+            return
+          end
+          service.enter(Hcode::Tools::SwarmTrigger::Task)
+          @messages << Message.new("system", Hcode.t("ui.swarm_task_started"))
+          start_turn(args.strip)
+        end
+      end
+
+      private def enable_swarm_mode(service : Hcode::Tools::SwarmModeService,
+                                   trigger : Hcode::Tools::SwarmTrigger) : Nil
+        if service.active?
+          @messages << Message.new("system", Hcode.t("ui.swarm_already_on"))
+          return
+        end
+        service.enter(trigger)
+        @messages << Message.new("system", Hcode.t("ui.swarm_mode_state",
+          state: Hcode.t("ui.swarm_mode_on")))
+      end
+
+      private def disable_swarm_mode(service : Hcode::Tools::SwarmModeService) : Nil
+        unless service.active?
+          @messages << Message.new("system", Hcode.t("ui.swarm_already_off"))
+          return
+        end
+        service.exit
+        @messages << Message.new("system", Hcode.t("ui.swarm_mode_state",
+          state: Hcode.t("ui.swarm_mode_off")))
       end
 
       private def handle_goal_command(args : String) : Nil
