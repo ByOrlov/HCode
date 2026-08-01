@@ -171,6 +171,7 @@ en:
     plan_mode_state: "Plan mode: %{state}"
     plan_mode_on: "on"
     plan_mode_off: "off"
+    plan_mode_placeholder: "Plan mode"
     plan_not_wired: "Plan mode is not wired up."
     swarm_mode_state: "Swarm mode: %{state}"
     swarm_mode_on: "on"

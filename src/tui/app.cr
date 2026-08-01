@@ -254,7 +254,7 @@ module Hcode
       @run_turn_cb : (String, Bool -> Nil)?
       # Plan mode mirrors TS: while on, tools that mutate state are blocked
       # and the agent only researches. Toggled via `/plan` or `EnterPlanMode`.
-      @plan_mode : Bool = false
+      property plan_mode : Bool = false
       @queue : Array(QueuedMessage) = [] of QueuedMessage
       @spin_phase : Int32 = 0
       @dirty : Bool = true
@@ -1404,6 +1404,8 @@ module Hcode
             @editor.set("#{selected.name} ")
             @show_command_hints = false
             @dirty = true
+          else
+            toggle_plan_mode
           end
         when .escape?
           if @agent_busy
@@ -1772,6 +1774,19 @@ module Hcode
         end
       end
 
+      # Toggle Plan mode on/off (wired to both `/plan` and the Tab shortcut).
+      # Mirrors the TS rule: tools that mutate state are blocked while on, so
+      # the agent only researches. Returns to normal mode on the next toggle.
+      # The active state is signalled visually by the input frame colour and
+      # the placeholder text, not by a transcript system message.
+      private def toggle_plan_mode : Nil
+        if @on_plan_mode.try(&.call(!@plan_mode))
+          @plan_mode = !@plan_mode
+        else
+          @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
+        end
+      end
+
       private def handle_slash_command(input : String) : Nil
         parsed = CommandRegistry.parse(input)
         unless parsed
@@ -1990,12 +2005,7 @@ module Hcode
             @messages << Message.new("system", Hcode.t("ui.effort_not_wired"))
           end
         when "/plan"
-          if @on_plan_mode.try(&.call(!@plan_mode))
-            @plan_mode = !@plan_mode
-            @messages << Message.new("system", Hcode.t("ui.plan_mode_state", state: @plan_mode ? Hcode.t("ui.plan_mode_on") : Hcode.t("ui.plan_mode_off")))
-          else
-            @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
-          end
+          toggle_plan_mode
         when "/swarm"
           handle_swarm_command(args)
         when "/todos"
@@ -3665,7 +3675,10 @@ module Hcode
 
       private def render_editor_box(cols : Int32) : Array(String)
         box_w = cols
-        bc = ANSI.color(@theme.colors.border, nil)
+        # Input frame tint: white in normal mode, yellow (opencode darkYellow
+        # #e5c07b) when Plan mode is active.
+        border_color = @plan_mode ? 180 : 255
+        bc = ANSI.color(border_color, nil)
         pc = ANSI.color(@theme.colors.primary, nil)
         tc = ANSI.color(@theme.colors.text, nil)
         dc = ANSI.color(@theme.colors.dim, nil)
@@ -3698,6 +3711,8 @@ module Hcode
           prompt = "#{pc}#{ANSI.bold}>#{r} "
           placeholder_text = if @setup_mode && (w = @wizard) && !w.done?
                                w.placeholder
+                             elsif @plan_mode
+                               Hcode.t("ui.send_a_message") + " (" + Hcode.t("ui.plan_mode_placeholder") + ")"
                              else
                                Hcode.t("ui.send_a_message")
                              end

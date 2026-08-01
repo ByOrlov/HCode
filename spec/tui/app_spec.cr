@@ -751,4 +751,38 @@ describe Hcode::TUI::App do
       output.should_not contain("\e[2J")
     end
   end
+
+  describe "plan mode input frame" do
+    # Normal mode tints the input frame white; Plan mode tints it yellow
+    # (opencode darkYellow, 180). Both are exposed via the box border.
+    # Plan mode also swaps the placeholder to "Plan mode" instead of pushing
+    # a transcript system message.
+    it "uses the white colour for the border in normal mode" do
+      app = Hcode::TUI::App.new
+      app.plan_mode = false
+      lines, _ = app.build_rendered_lines(40)
+      joined = lines.join('\n')
+      joined.should contain("\e[38;5;255m")
+      joined.should_not contain("\e[38;5;180m")
+    end
+
+    it "tints the border yellow when plan mode is on" do
+      app = Hcode::TUI::App.new
+      app.plan_mode = true
+      lines, _ = app.build_rendered_lines(40)
+      joined = lines.join('\n')
+      joined.should contain("\e[38;5;180m")
+    end
+
+    it "shows the plan mode placeholder and no system message" do
+      app = Hcode::TUI::App.new
+      app.plan_mode = true
+      lines, _ = app.build_rendered_lines(40)
+      joined = lines.join('\n')
+      # Placeholder shown inside the input box.
+      app_strip_ansi(joined).should contain("Send a message... (Plan mode)")
+      # No transcript system message is pushed on toggle.
+      app.@messages.none? { |m| m.role == "system" && m.content.includes?("Plan mode") }.should be_true
+    end
+  end
 end
