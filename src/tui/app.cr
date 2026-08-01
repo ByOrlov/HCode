@@ -1369,6 +1369,8 @@ module Hcode
           if !@editor.empty?
             text = @editor.submit!
             steer_or_queue(text)
+          elsif !@queue.empty?
+            steer_queued
           end
         when .ctrl_g?
           handle_external_editor
@@ -1622,6 +1624,25 @@ module Hcode
         @on_persist_queued.try(&.call("turn.steer", text))
         @messages << Message.new("user", text)
         @messages << Message.new("system", "[Steered into running turn]")
+        @dirty = true
+      end
+
+      # Ctrl+S with an empty editor but queued messages: the queue hint
+      # ("Ctrl+S steers now") promises this drains the queue into the live
+      # turn instead of waiting for turn-end drain. No-op unless a turn is
+      # actually running; the queued entries were already persisted on
+      # enqueue, so they are not re-persisted here.
+      private def steer_queued : Nil
+        return if @queue.empty?
+        return unless @agent_busy
+        return if @is_compacting || @defer_user_messages
+
+        @queue.dup.each do |qm|
+          @on_steer.try(&.call(qm.text))
+          @messages << Message.new("user", qm.text)
+        end
+        @queue.clear
+        @messages << Message.new("system", "[Queued messages steered into running turn]")
         @dirty = true
       end
 
