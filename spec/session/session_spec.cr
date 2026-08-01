@@ -88,6 +88,37 @@ describe Hcode::Session::Index do
     end
   end
 
+  it "list(ws_id) isolates sessions by workspace, never mixing folders" do
+    home = temp_home
+    begin
+      ws_a = Hcode::Session::Index.workspace_id("/repo-a")
+      ws_b = Hcode::Session::Index.workspace_id("/repo-b")
+
+      ["a" * 12, "b" * 12].each do |sid|
+        dir = File.join(home, ".hcode", "sessions", ws_a, sid)
+        Dir.mkdir_p(dir)
+        File.write(File.join(dir, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"in A"}}))
+        File.write(File.join(dir, "state.json"), Hcode::Session::StateMeta.new(sid).to_json)
+      end
+      dir_b = File.join(home, ".hcode", "sessions", ws_b, "c" * 12)
+      Dir.mkdir_p(dir_b)
+      File.write(File.join(dir_b, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"in B"}}))
+      File.write(File.join(dir_b, "state.json"), Hcode::Session::StateMeta.new("c" * 12).to_json)
+
+      idx = Hcode::Session::Index.new(home)
+      # Scoped to A: only A sessions, B is excluded.
+      idx.list(ws_a).size.should eq(2)
+      idx.list(ws_a).map(&.id).should_not contain("c" * 12)
+      # Scoped to B: only the one B session.
+      idx.list(ws_b).size.should eq(1)
+      idx.list(ws_b)[0].id.should eq("c" * 12)
+      # Unscoped: all three.
+      idx.list.size.should eq(3)
+    ensure
+      FileUtils.rm_rf(home)
+    end
+  end
+
   it "finds a session by id across layouts" do
     home = temp_home
     begin

@@ -2439,7 +2439,12 @@ module Hcode
         include_archived = mode == :restore
         title = include_archived ? Hcode.t("ui.restore_session") : Hcode.t("ui.resume_session")
 
-        entries = Session::Index.new(@home).list(include_archived: include_archived)
+        # Scope to the current workspace so sessions from other folders don't
+        # mix in. Falls back to all sessions when @work_dir is unset (e.g. in
+        # tests or non-standard entry points).
+        index = Session::Index.new(@home)
+        ws_id = @work_dir.empty? ? nil : Session::Index.workspace_id(@work_dir)
+        entries = index.list(ws_id, include_archived: include_archived)
         if entries.empty?
           msg = include_archived ? "No archived sessions to restore." : "No sessions found."
           @messages << Message.new("system", msg)
