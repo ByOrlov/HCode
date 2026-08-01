@@ -6,8 +6,10 @@ def hcode_build_version
   tag.empty? ? "0.0.0-dev" : tag
 end
 
-def build_hcode(output = "hcode")
-  sh "HCODE_VERSION=#{hcode_build_version} crystal build src/hcode.cr -o #{output} --warnings none --no-color"
+def build_hcode(output = "hcode", release: false)
+  flags = ["--warnings none", "--no-color"]
+  flags << "--release" if release
+  sh "HCODE_VERSION=#{hcode_build_version} crystal build src/hcode.cr -o #{output} #{flags.join(' ')}"
 end
 
 desc "Build the hcode binary"
@@ -15,10 +17,26 @@ task :build do
   build_hcode
 end
 
-desc "Build and run the TUI"
-task :run => :build do
-  sh "./hcode --yolo"
+desc "Build the hcode binary with --release"
+task :build_release do
+  build_hcode(release: true)
 end
+
+namespace :run do
+  desc "Build (debug) and run the TUI"
+  task :default => :build do
+    sh "./hcode --yolo"
+  end
+
+  desc "Build with --release and run the TUI"
+  task :release => :build_release do
+    sh "./hcode --yolo"
+  end
+end
+
+# Backward-compatible alias for `rake run:default`.
+desc "Build (debug) and run the TUI (alias of run:default)"
+task :run => "run:default"
 
 desc "Run the test suite"
 task :spec do
