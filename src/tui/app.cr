@@ -1842,6 +1842,8 @@ module Hcode
           @messages << Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}")
         when "/upgrade"
           @messages << Message.new("system", Hcode.t("ui.upgrade_checking"))
+          @dirty = true
+          render
           ok, msg = Hcode::Upgrader.run
           @messages << Message.new(ok ? "system" : "error", msg)
         when "/usage"
