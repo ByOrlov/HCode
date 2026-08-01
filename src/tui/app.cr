@@ -826,6 +826,7 @@ module Hcode
       # step summaries) is not recoverable from the wire log and is omitted.
       def load_transcript_from(memory : Context::Memory) : Nil
         @messages.clear
+        @show_welcome = false
         @streaming_text = ""
         @streaming_thinking = ""
         @streaming_tool = nil
@@ -1476,6 +1477,7 @@ module Hcode
       # log (e.g. it sat in the queue and `enqueue_message` persisted it); the
       # drain path sets it to avoid a duplicate `turn.prompt` record.
       private def start_turn(text : String, persisted : Bool = false) : Nil
+        @show_welcome = false
         @messages << Message.new("user", text)
         @current_step = 0
         @step_tool_count = 0
@@ -1763,6 +1765,7 @@ module Hcode
           else
             @on_new_session.try(&.call)
             @messages.clear
+            @show_welcome = true
             @messages << Message.new("system", Hcode.t("ui.new_session_started"))
           end
         when "/sessions", "/resume"
@@ -1810,6 +1813,7 @@ module Hcode
           else
             @on_clear.try(&.call)
             @messages.clear
+            @show_welcome = true
             @messages << Message.new("system", Hcode.t("ui.conversation_cleared"))
           end
         when "/compact"
