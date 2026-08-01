@@ -208,6 +208,7 @@ en:
     upgrade_download_failed: "Download failed: %{error}"
     upgrade_install_failed: "Installation failed: %{error}"
     upgrade_done: "Updated to %{version}. Restart hcode to use the new version."
+    upgrade_available: "Update available: %{current} → %{latest}. Run /upgrade to update."
   language:
     changed: "Language changed to %{name}"
     unknown: "Unknown language: %{name}"

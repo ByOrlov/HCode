@@ -727,6 +727,10 @@ module Hcode
         @messages << Message.new(role, content)
       end
 
+      def dirty! : Nil
+        @dirty = true
+      end
+
       # Deep byte size of the on-screen transcript — the TUI-side duplicate of
       # the conversation history. Used by the `/memory` profiler.
       def profiled_bytes : Int64
@@ -1845,6 +1849,7 @@ module Hcode
           @dirty = true
           render
           ok, msg = Hcode::Upgrader.run
+          Hcode::Upgrader.record_check(nil)
           @messages << Message.new(ok ? "system" : "error", msg)
         when "/usage"
           @usage_panel.show

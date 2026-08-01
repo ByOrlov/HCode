@@ -40,6 +40,7 @@ require "./tools/glob"
 require "./tools/grep"
 require "./tools/todo_list"
 require "./tools/agent_swarm"
+require "./tools/swarm_mode"
 require "./tools/agent"
 require "./tools/ask_user_question"
 require "./tools/fetch_url"
@@ -725,6 +726,8 @@ module Hcode
       # TUI's PlanReviewDialog. `/plan` toggles the mode through on_plan_mode.
       plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
       Hcode::Tools::PlanMode.plan_service = plan_service
+      # Swarm-mode wiring: a fresh in-memory service per interactive session.
+      Hcode::Tools::SwarmMode.service = Hcode::Tools::SwarmModeService.new
       Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(
         auto: permission.mode.auto?)
       Hcode::Tools::PlanMode.plan_review_service = AppPlanReviewService.new(app)
@@ -1102,6 +1105,16 @@ module Hcode
       end
 
       app.session_id = store.meta_id? || ""
+
+      # Background update check (non-blocking): runs in a fiber so the TUI
+      # starts immediately. Respects a 24h cache — most startups are a no-op.
+      # If a newer version exists, surfaces it as a system message.
+      spawn do
+        if msg = Hcode::Upgrader.background_check
+          app.add_message("system", msg)
+          app.dirty!
+        end
+      end
 
       app.run(initial_prompt: initial_prompt) do |prompt_text, persisted|
         store.append_simple("turn.prompt", "prompt", prompt_text) unless persisted

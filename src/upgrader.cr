@@ -9,6 +9,9 @@ module Hcode
   module Upgrader
     REPO = "ByOrlov/HCode"
 
+    # Minimum interval between background update checks.
+    CHECK_INTERVAL = 24.hours
+
     # Injectable so specs can stub the network. Returns the raw response body.
     @@http_get : Proc(String, String) = ->(url : String) { real_http_get(url) }
 
@@ -18,6 +21,17 @@ module Hcode
 
     def self.http_get=(proc : Proc(String, String))
       @@http_get = proc
+    end
+
+    # Injectable so specs can control the clock.
+    @@now : Proc(Time) = ->{ Time.utc }
+
+    def self.now : Proc(Time)
+      @@now
+    end
+
+    def self.now=(proc : Proc(Time))
+      @@now = proc
     end
 
     # Asset name for the binary's own platform, baked at compile time.
@@ -39,6 +53,72 @@ module Hcode
       json["tag_name"]?.try(&.as_s)
     rescue ex
       nil
+    end
+
+    # --- Background update check with 24h cache --------------------------------
+
+    # Path to the cache file storing the timestamp of the last check.
+    private def self.cache_file_path : String
+      home = ENV["HOME"]? || "/tmp"
+      hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
+      File.join(hcode_home, "update_check.json")
+    end
+
+    # Injectable so specs can point at a temp file.
+    @@cache_path : Proc(String) = ->{ cache_file_path }
+
+    def self.cache_path : Proc(String)
+      @@cache_path
+    end
+
+    def self.cache_path=(proc : Proc(String))
+      @@cache_path = proc
+    end
+
+    # Returns true if no check has been performed in the last `CHECK_INTERVAL`.
+    def self.should_check? : Bool
+      data = read_cache
+      return true unless data
+      checked_at = data["checked_at"]?
+      return true unless checked_at
+      last = Time.parse_rfc3339(checked_at.as_s)
+      @@now.call - last >= CHECK_INTERVAL
+    rescue
+      true
+    end
+
+    # Persists the current timestamp (and latest version) to the cache file.
+    def self.record_check(latest : String?) : Nil
+      data = {
+        "checked_at" => JSON::Any.new(@@now.call.to_rfc3339),
+        "latest"     => latest ? JSON::Any.new(latest) : JSON::Any.new(nil),
+      } of String => JSON::Any
+      dir = File.dirname(@@cache_path.call)
+      Dir.mkdir_p(dir) rescue nil
+      File.write(@@cache_path.call, data.to_json)
+    rescue
+      # Cache write failure is non-fatal — next startup will just re-check.
+    end
+
+    # Reads and parses the cache file. Returns nil on any error.
+    private def self.read_cache : JSON::Any?
+      path = @@cache_path.call
+      return nil unless File.exists?(path)
+      JSON.parse(File.read(path))
+    rescue
+      nil
+    end
+
+    # Background check entry point: returns a notification message if a newer
+    # version is available, or nil. Respects the 24h cache so most startups
+    # are a no-op. Always records the timestamp when it actually hits the network.
+    def self.background_check : String?
+      return nil unless should_check?
+      latest = latest_version
+      record_check(latest)
+      return nil if latest.nil?
+      return nil unless VersionCompare.newer?(latest, current_version)
+      Hcode.t("ui.upgrade_available", current: current_version, latest: latest)
     end
 
     # Runs the full check → download → replace flow.

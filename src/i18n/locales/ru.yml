@@ -208,6 +208,7 @@ ru:
     upgrade_download_failed: "Ошибка загрузки: %{error}"
     upgrade_install_failed: "Ошибка установки: %{error}"
     upgrade_done: "Обновлено до %{version}. Перезапустите hcode, чтобы использовать новую версию."
+    upgrade_available: "Доступно обновление: %{current} → %{latest}. Введите /upgrade для обновления."
   language:
     changed: "Язык изменён на %{name}"
     unknown: "Неизвестный язык: %{name}"
