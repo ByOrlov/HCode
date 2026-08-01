@@ -201,7 +201,7 @@ module Hcode
       THINKING_PREVIEW_LINES    = 2
       THINKING_INDENT           = "  "
       STATUS_BULLET             = "● "
-      USER_BULLET               = "✨ "
+      USER_BULLET               = "👤 "
       DEFAULT_KEEP_RECENT_STEPS = 30
       KEEP_RECENT_STEPS_ENV     = "HCODE_TUI_KEEP_RECENT_STEPS"
       # Cross-turn trimming: turns older than this count are collapsed into
