@@ -201,6 +201,7 @@ module Hcode
       THINKING_PREVIEW_LINES    = 2
       THINKING_INDENT           = "  "
       STATUS_BULLET             = "● "
+      ASSISTANT_BULLET          = "💬 "
       USER_BULLET               = "👤 "
       DEFAULT_KEEP_RECENT_STEPS = 30
       KEEP_RECENT_STEPS_ENV     = "HCODE_TUI_KEEP_RECENT_STEPS"
@@ -3133,7 +3134,7 @@ module Hcode
           lines << ""
         when "assistant"
           unless msg.content.empty?
-            bullet = "#{ANSI.color(@theme.colors.text, nil)}#{STATUS_BULLET}#{ANSI.reset}"
+            bullet = "#{ANSI.color(@theme.colors.text, nil)}#{ASSISTANT_BULLET}#{ANSI.reset}"
             md_lines = @markdown.render(msg.content, cols)
             md_lines.each_with_index do |l, i|
               if i == 0
