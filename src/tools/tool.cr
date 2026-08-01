@@ -45,7 +45,8 @@ module Hcode
       property? truncated : Bool = false
       property display : ToolDisplay? = nil
 
-      def initialize(@content : String, @is_error : Bool = false)
+      def initialize(@content : String, @is_error : Bool = false, *, truncated : Bool = false)
+        @truncated = truncated
       end
 
       def self.success(content : String) : ToolResult

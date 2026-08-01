@@ -33,7 +33,7 @@ module Hcode
       end
 
       private def self.sanitize(part : String) : String
-        cleaned = part.gsub(/[^A-Za-z0-9_]/, "_")
+        cleaned = part.gsub(/[^A-Za-z0-9_]/, "_").gsub(/_+/, "_")
         cleaned.empty? ? "tool" : cleaned
       end
 

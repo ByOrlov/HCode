@@ -37,7 +37,7 @@ module Hcode
         client = @manager.ensure_connected(@server_name)
         result = client.call_tool(@remote_name, input, timeout: @tool_timeout || 120.seconds)
         processed = Output.post_process(result.text, @proxy_name)
-        Tools::ToolResult.new(processed, result.is_error?)
+        Tools::ToolResult.new(processed[:text], result.is_error?, truncated: processed[:truncated])
       rescue ex : RpcError
         Tools::ToolResult.error("MCP server '#{@server_name}' tool '#{@remote_name}' failed: #{ex.message}")
       rescue ex

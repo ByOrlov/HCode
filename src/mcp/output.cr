@@ -26,7 +26,10 @@ module Hcode
       # (data URIs with no accompanying text), wrap it so the model can
       # attribute the binary content. Compress oversized images, truncate
       # oversized text, and drop oversized binary parts.
-      def self.post_process(text : String, qualified_tool_name : String) : String
+      #
+      # Returns a named tuple `{text, truncated}` so callers can propagate the
+      # `truncated` flag onto `ToolResult`.
+      def self.post_process(text : String, qualified_tool_name : String) : {text: String, truncated: Bool}
         # Detect media-only: has data URIs but no real text content.
         has_media = text.includes?("data:")
         has_non_media_text = text.lines.any? do |l|
@@ -44,8 +47,10 @@ module Hcode
 
         # Apply per-line binary cap (after compression, so only truly
         # incompressible oversized parts are dropped).
+        truncated = false
         text = text.lines.map do |line|
           if line.starts_with?("data:") && line.size > MAX_BINARY_PART_CHARS
+            truncated = true
             approx_mb = (line.size * 3 / 4 / (1024 * 1024)).to_i
             cap_mb = MAX_BINARY_PART_BYTES / (1024 * 1024)
             "[binary dropped: ~#{approx_mb} MB exceeds #{cap_mb} MB per-part limit. " \
@@ -58,9 +63,10 @@ module Hcode
         # Apply text budget.
         if text.size > MAX_OUTPUT_CHARS
           text = text[0...MAX_OUTPUT_CHARS] + TRUNCATED_TEXT
+          truncated = true
         end
 
-        text
+        {text: text, truncated: truncated}
       end
 
       # Walk each line; for `data:image/...;base64,...` URIs, decode → compress

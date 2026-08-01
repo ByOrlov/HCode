@@ -40,6 +40,7 @@ module Hcode
       property tools : Array(Tools::Tool) = [] of Tools::Tool
       property client : Client? = nil
       property error : String? = nil
+      property attempt_id : Int32 = 0
 
       def initialize(@name : String, @config : McpServerConfig)
       end
@@ -72,6 +73,7 @@ module Hcode
       @mutex = Mutex.new
       @all_configs : Array(McpServerConfig) = [] of McpServerConfig
       @active_provider : String? = nil
+      @global_attempt_counter = Atomic(Int32).new(0)
 
       def initialize(@home_dir : String = (ENV["HOME"]? || "/tmp"))
       end
@@ -311,15 +313,18 @@ module Hcode
 
       private def connect_one(entry : InternalEntry) : Nil
         config = entry.config
+        my_attempt = next_attempt_id(entry)
 
         if config.stdio?
           if config.command.empty?
+            return if stale?(entry, my_attempt)
             entry.status = ServerStatus::Failed
             entry.error = "MCP server '#{config.name}' has no `command`"
             return
           end
         else
           if (config.url || "").empty?
+            return if stale?(entry, my_attempt)
             entry.status = ServerStatus::Failed
             entry.error = "MCP server '#{config.name}' (#{config.type}) has no `url`"
             return
@@ -333,6 +338,7 @@ module Hcode
             token = resolve_http_token(config)
           rescue ex
             if needs_auth_like?(ex, config)
+              return if stale?(entry, my_attempt)
               entry.status = ServerStatus::NeedsAuth
               entry.error = ex.message || ex.class.to_s
               register_auth_tool(entry)
@@ -348,6 +354,9 @@ module Hcode
         startup_timeout = config.effective_startup_timeout(DEFAULT_STARTUP_TIMEOUT)
         client.connect(timeout: startup_timeout)
         defs = client.list_tools(timeout: startup_timeout)
+
+        # Bail if a newer attempt superseded this one before we finished.
+        return if stale?(entry, my_attempt)
 
         # Persist tool definitions to the on-disk cache so subsequent
         # startups can register lazy tools without connecting.
@@ -369,6 +378,7 @@ module Hcode
         entry.status = ServerStatus::Connected
         watch_for_close(entry)
       rescue ex : RpcError
+        return if my_attempt && stale?(entry, my_attempt)
         close_client(entry)
         cfg = entry.config
         if cfg.remote? && needs_auth_like?(ex, cfg) && !cfg.token_env
@@ -377,12 +387,26 @@ module Hcode
           register_auth_tool(entry)
         else
           entry.status = ServerStatus::Failed
-          entry.error = format_error(ex)
+          entry.error = format_error(ex, entry)
         end
       rescue ex
+        return if my_attempt && stale?(entry, my_attempt)
         close_client(entry)
         entry.status = ServerStatus::Failed
-        entry.error = format_error(ex)
+        entry.error = format_error(ex, entry)
+      end
+
+      # True when a newer connection attempt has superseded `my_attempt` on
+      # this entry — the caller should bail without touching entry state.
+      private def stale?(entry : InternalEntry, my_attempt : Int32) : Bool
+        entry.attempt_id != my_attempt
+      end
+
+      # Atomically allocate a new attempt id and stamp it onto the entry.
+      private def next_attempt_id(entry : InternalEntry) : Int32
+        id = @global_attempt_counter.add(1) + 1
+        entry.attempt_id = id
+        id
       end
 
       # Detect unexpected transport close (stdio process exit, HTTP EOF)
@@ -399,7 +423,12 @@ module Hcode
             break unless entry.client == client
             if client.rpc.closed?
               entry.status = ServerStatus::Failed
-              entry.error = "MCP server \"#{entry.name}\" closed unexpectedly"
+              stderr = client.stderr_tail
+              entry.error = if stderr.empty?
+                              "MCP server \"#{entry.name}\" closed unexpectedly"
+                            else
+                              "MCP server \"#{entry.name}\" closed unexpectedly\n#{stderr}"
+                            end
               close_client(entry)
               rebuild_reports
               break
@@ -412,7 +441,10 @@ module Hcode
       # so the agent can drive the OAuth flow through the model.
       private def register_auth_tool(entry : InternalEntry) : Nil
         url = entry.config.url || ""
-        tool = McpAuthTool.new(entry.name, url, self, @home_dir)
+        tool = McpAuthTool.new(entry.name, url, self, @home_dir,
+          oauth_client_id: entry.config.oauth_client_id,
+          oauth_client_secret: entry.config.oauth_client_secret,
+          oauth_scopes: entry.config.oauth_scopes)
         entry.tools = [tool.as(Tools::Tool)]
         register_entry_tools(entry)
       end
@@ -482,15 +514,20 @@ module Hcode
 
       private def needs_auth_like?(ex : Exception, config : McpServerConfig) : Bool
         return false if config.token_env
+        # Skip the OAuth flow when the server already has a static Authorization
+        # header — the server uses header-based auth, not OAuth. Mirrors JS
+        # `shouldMarkNeedsAuth` (`connection-manager.ts:389`).
+        return false if config.headers.any? { |k, _| k.downcase == "authorization" }
         msg = ex.message || ""
         msg.includes?("401") || msg.downcase.includes?("unauthorized")
       end
 
-      private def format_error(ex : Exception) : String
+      private def format_error(ex : Exception, entry : InternalEntry? = nil) : String
         msg = ex.message || ex.class.to_s
         # Append stderr tail if available from a stdio client.
-        if client = @entries.values.find(&.status.failed?).try(&.client)
-          # Best-effort: no stderr surface on Client yet.
+        if entry && (client = entry.client) && !client.stderr_tail.empty?
+          tail = client.stderr_tail
+          msg = "#{msg}\n#{tail}" unless tail.empty?
         end
         msg
       end

@@ -78,6 +78,18 @@ module Hcode
           b = ToolNaming.proxy_name("server", ("b" * 80))
           a.should_not eq(b)
         end
+
+        it "collapses underscore runs so __ separator stays unambiguous" do
+          # Server name with underscores must not collide with the __ separator.
+          proxy = ToolNaming.proxy_name("my__server", "tool")
+          split = ToolNaming.split(proxy)
+          split.should eq({"my_server", "tool"})
+        end
+
+        it "sanitizes names with consecutive underscores" do
+          proxy = ToolNaming.proxy_name("a___b", "c____d")
+          proxy.should eq("mcp__a_b__c_d")
+        end
       end
 
       # --------------------------------------------------------------------
@@ -229,6 +241,52 @@ module Hcode
             FileUtils.rm_r(home) rescue nil
           end
         end
+
+        it "resolves relative stdio cwd against the file directory" do
+          home = File.join(Dir.tempdir, "hcode-mcp-cwd-#{Random::Secure.hex(8)}")
+          subdir = File.join(home, "subproject")
+          Dir.mkdir_p(subdir)
+          begin
+            File.write(File.join(subdir, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "srv": {
+                    "command": "node",
+                    "args": ["srv.js"],
+                    "cwd": "./workspace"
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.read_mcp_json_file(File.join(subdir, "mcp.json"))
+            s = servers.first
+            s.cwd.should eq(File.join(subdir, "workspace"))
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
+        end
+
+        it "keeps absolute stdio cwd as-is" do
+          home = File.join(Dir.tempdir, "hcode-mcp-abs-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          abs = File.join(home, "absdir")
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "srv": {
+                    "command": "node",
+                    "cwd": #{abs.inspect}
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.read_mcp_json_file(File.join(home, "mcp.json"))
+            servers.first.cwd.should eq(abs)
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
+        end
       end
 
       # --------------------------------------------------------------------
@@ -313,6 +371,32 @@ module Hcode
           res.text.should contain("res-text")
         end
 
+        it "handles resource_link as a URL reference, not inline blob" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(p : JSON::Any) {
+            JSON.parse(%({"content":[{"type":"resource_link","uri":"https://example.com/img.png","mimeType":"image/png"}]}))
+          }
+          client = Client.new("test", t, JsonRpcClient.new(t))
+          client.connect
+          res = client.call_tool("rl", JSON.parse("{}"))
+          res.text.should contain("https://example.com/img.png")
+          res.text.should_not contain("data:image/png;base64,")
+        end
+
+        it "captures negotiated protocol version from initialize" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) {
+            JSON.parse(%({"protocolVersion":"2025-03-26","capabilities":{}}))
+          }
+          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          client = Client.new("test", t, JsonRpcClient.new(t))
+          client.negotiated_version.should be_nil
+          client.connect
+          client.negotiated_version.should eq("2025-03-26")
+        end
+
         it "decodes resource blob as data URI" do
           t = SmartLoopback.new
           t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
@@ -366,6 +450,21 @@ module Hcode
           res = client.call_tool("legacy", JSON.parse("{}"))
           res.text.should contain("key")
           res.text.should contain("val")
+        end
+
+        it "defaults non-object inputSchema to empty object" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(p : JSON::Any) {
+            JSON.parse(%({"tools":[{"name":"bad","description":"d","inputSchema":null},{"name":"arr","description":"d","inputSchema":[1,2]},{"name":"ok","description":"d","inputSchema":{"type":"object"}}]}))
+          }
+          client = Client.new("test", t, JsonRpcClient.new(t))
+          client.connect
+          defs = client.list_tools
+          defs.size.should eq(3)
+          defs[0].input_schema.to_json.should eq("{}")
+          defs[1].input_schema.to_json.should eq("{}")
+          defs[2].input_schema["type"].to_s.should eq("object")
         end
       end
 
@@ -627,28 +726,35 @@ module Hcode
         it "wraps media-only output in mcp_tool_result tags" do
           text = "data:image/png;base64,iVBOR"
           result = Output.post_process(text, "mcp__srv__screenshot")
-          result.should contain("<mcp_tool_result name=\"mcp__srv__screenshot\">")
-          result.should contain("</mcp_tool_result>")
+          result[:text].should contain("<mcp_tool_result name=\"mcp__srv__screenshot\">")
+          result[:text].should contain("</mcp_tool_result>")
         end
 
         it "does not wrap when text accompanies media" do
           text = "Here is the image:\ndata:image/png;base64,iVBOR"
           result = Output.post_process(text, "mcp__srv__tool")
-          result.should_not contain("<mcp_tool_result")
+          result[:text].should_not contain("<mcp_tool_result")
         end
 
         it "truncates text exceeding the 100k char budget" do
           text = "a" * (Output::MAX_OUTPUT_CHARS + 1000)
           result = Output.post_process(text, "mcp__srv__chatty")
-          result.size.should be <= Output::MAX_OUTPUT_CHARS + 200
-          result.should contain("[Output truncated")
+          result[:text].size.should be <= Output::MAX_OUTPUT_CHARS + 200
+          result[:text].should contain("[Output truncated")
+          result[:truncated].should be_true
         end
 
         it "drops oversized binary parts" do
           huge = "data:image/png;base64," + ("A" * (Output::MAX_BINARY_PART_CHARS + 100))
           result = Output.post_process(huge, "mcp__srv__img")
-          result.should contain("[binary dropped:")
-          result.should_not contain("data:image/png;base64,AAAA")
+          result[:text].should contain("[binary dropped:")
+          result[:text].should_not contain("data:image/png;base64,AAAA")
+          result[:truncated].should be_true
+        end
+
+        it "returns truncated=false for small text" do
+          result = Output.post_process("hello world", "mcp__srv__t")
+          result[:truncated].should be_false
         end
       end
 
@@ -663,6 +769,29 @@ module Hcode
           m.connect_all([cfg], Tools::Registry.new, blocking: true)
           m.status_text.should contain("⊘")
           m.status_text.should contain("off")
+        end
+      end
+
+      # --------------------------------------------------------------------
+      # Proxy tool: truncated flag propagation (fix 8)
+      # --------------------------------------------------------------------
+      describe McpProxyTool do
+        it "propagates truncated flag on oversized output" do
+          t = SmartLoopback.new
+          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(p : JSON::Any) {
+            JSON.parse(%({"tools":[{"name":"chatty","description":"d","inputSchema":{"type":"object"}}]}))
+          }
+          t.handlers["tools/call"] = ->(p : JSON::Any) {
+            JSON.parse(%({"content":[{"type":"text","text":"#{("a" * (Output::MAX_OUTPUT_CHARS + 500))}"}]}))
+          }
+          client = Client.new("srv", t, JsonRpcClient.new(t))
+          proxy = McpProxyTool.new(
+            "mcp__srv__chatty", "srv", "chatty", "d",
+            JSON.parse(%({"type":"object"})), client)
+
+          r = proxy.execute(JSON.parse("{}"))
+          r.truncated?.should be_true
         end
       end
 

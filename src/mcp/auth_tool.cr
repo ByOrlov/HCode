@@ -19,12 +19,24 @@ module Hcode
     class McpAuthTool < Tools::Tool
       AUTH_TOOL_NAME = "authenticate"
 
+      @home_dir : String
+      @oauth_client_id : String?
+      @oauth_client_secret : String?
+      @oauth_scopes : Array(String)
+      @captured_auth_url : String? = nil
+
       def initialize(server_name : String, server_url : String,
-                     manager : Manager, home_dir : String)
+                     manager : Manager, home_dir : String,
+                     oauth_client_id : String? = nil,
+                     oauth_client_secret : String? = nil,
+                     oauth_scopes : Array(String) = [] of String)
         @server_name = server_name
         @server_url = server_url
         @manager = manager
         @home_dir = home_dir
+        @oauth_client_id = oauth_client_id
+        @oauth_client_secret = oauth_client_secret
+        @oauth_scopes = oauth_scopes
       end
 
       def name : String
@@ -47,8 +59,12 @@ module Hcode
       end
 
       def execute(input : JSON::Any) : Tools::ToolResult
+        @captured_auth_url = nil
         result = OAuth.authorize(@server_url, @server_name, @home_dir,
-          client_id: nil, client_secret: nil, scopes: nil) do |auth_url|
+          client_id: @oauth_client_id,
+          client_secret: @oauth_client_secret,
+          scopes: @oauth_scopes.empty? ? nil : @oauth_scopes) do |auth_url|
+          @captured_auth_url = auth_url
           STDERR.puts "[MCP] OAuth authorization required for '#{@server_name}':"
           STDERR.puts "  #{auth_url}"
         end
@@ -59,8 +75,12 @@ module Hcode
           "MCP server \"#{@server_name}\" authenticated successfully. " \
           "The real MCP tools have replaced this synthetic authenticate tool.")
       rescue ex
+        url_hint = ""
+        if url = @captured_auth_url
+          url_hint = "\n\nAuthorization URL (may still be valid): #{url}"
+        end
         Tools::ToolResult.error(
-          "OAuth flow for MCP server \"#{@server_name}\" did not complete: #{ex.message}")
+          "OAuth flow for MCP server \"#{@server_name}\" did not complete: #{ex.message}#{url_hint}")
       end
     end
   end

@@ -135,15 +135,24 @@ module Hcode
         read_mcp_json_file(File.join(home_dir, "mcp.json"))
       end
 
-      # Parse a specific mcp.json file by full path.
+      # Parse a specific mcp.json file by full path. Relative stdio `cwd`
+      # values are resolved against the file's directory, mirroring JS
+      # `normalizeStdioCwd`.
       def self.read_mcp_json_file(path : String) : Array(McpServerConfig)
         return [] of McpServerConfig unless File.exists?(path)
         data = JSON.parse(File.read(path))
+        base_dir = File.dirname(path)
         servers = data["mcpServers"]?.try(&.as_h?) || {} of String => JSON::Any
         servers.map do |name, spec|
-          from_any_json(name, spec.as_h)
+          cfg = from_any_json(name, spec.as_h)
+          # Resolve relative stdio cwd against the file's directory.
+          if cfg.stdio? && (cwd = cfg.cwd) && !Path.new(cwd).absolute?
+            cfg.cwd = File.expand_path(cwd, base_dir)
+          end
+          cfg
         end
       rescue ex
+        STDERR.puts "[MCP] Failed to parse #{path}: #{ex.message}"
         [] of McpServerConfig
       end
 

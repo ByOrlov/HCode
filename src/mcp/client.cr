@@ -18,6 +18,7 @@ module Hcode
       getter rpc : JsonRpcClient
       @transport : Transport
       @initialized = false
+      @negotiated_version : String? = nil
 
       def initialize(config : McpServerConfig, override_token : String? = nil)
         @name = config.name
@@ -41,7 +42,14 @@ module Hcode
             "version" => JSON::Any.new(client_version),
           } of String => JSON::Any),
         } of String => JSON::Any)
-        rpc.call("initialize", params, timeout)
+        init_result = rpc.call("initialize", params, timeout)
+        # Capture the server's negotiated protocol version. We do not fail on
+        # mismatch — servers may legitimately negotiate an older version — but
+        # the information is available for diagnostics via `negotiated_version`.
+        if v = init_result["protocolVersion"]?
+          version = v.to_s
+          @negotiated_version = version unless version.empty?
+        end
         rpc.notify("notifications/initialized")
         @initialized = true
       end
@@ -50,10 +58,18 @@ module Hcode
         result = rpc.call("tools/list", nil, timeout)
         tools = result["tools"]?.try(&.as_a?) || [] of JSON::Any
         tools.map do |t|
+          # Validate inputSchema is a JSON object; default to {} when not,
+          # mirroring JS `assertMcpInputSchema` (`types.ts:97-104`).
+          raw_schema = t["inputSchema"]?
+          schema = if raw_schema && raw_schema.as_h?
+                     raw_schema
+                   else
+                     JSON.parse("{}")
+                   end
           ToolDefinition.new(
             t["name"]?.try(&.to_s) || "",
             t["description"]?.try(&.to_s) || "",
-            t["inputSchema"]? || JSON.parse("{}"),
+            schema,
           )
         end
       end
@@ -68,12 +84,27 @@ module Hcode
         decode_result(result)
       end
 
+      # Snapshot of stderr from a stdio transport (last ~50 lines). Returns an
+      # empty string for non-stdio transports. Used by the Manager to enrich
+      # failure messages.
+      def stderr_tail : String
+        t = @transport
+        return "" unless t.is_a?(StdioTransport)
+        t.stderr_tail
+      end
+
       def close : Nil
         rpc.close
       end
 
       def initialized? : Bool
         @initialized
+      end
+
+      # The protocol version the server reported during `initialize`. Nil before
+      # connect or when the server omitted the field.
+      def negotiated_version : String?
+        @negotiated_version
       end
 
       # Fold the raw `tools/call` content blocks into a single string. Text
@@ -106,7 +137,7 @@ module Hcode
             mime = block["mimeType"]?.try(&.to_s) || "audio/mpeg"
             data = block["data"]?.try(&.to_s) || ""
             parts << data_uri(mime, data)
-          when "resource", "resource_link"
+          when "resource"
             resource = block["resource"]? || block
             uri = resource["uri"]?.try(&.to_s) || "resource"
             mime = resource["mimeType"]?.try(&.to_s) || "text/plain"
@@ -116,6 +147,16 @@ module Hcode
               parts << data_uri(mime, blob.to_s)
             else
               parts << "[resource: #{uri}]"
+            end
+          when "resource_link"
+            # resource_link is a URL reference (not an inline blob). Emit the
+            # URI so the model can fetch it; mirrors JS `output.ts:137-158`.
+            uri = block["uri"]?.try(&.to_s) || ""
+            mime = block["mimeType"]?.try(&.to_s) || "application/octet-stream"
+            if uri.empty?
+              parts << "[resource_link: no uri]"
+            else
+              parts << "[resource_link: #{uri} (#{mime})]"
             end
           else
             parts << block.to_s
