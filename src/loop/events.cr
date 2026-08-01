@@ -20,6 +20,10 @@ module Hcode
       SubagentProgress
       SubagentCompleted
       SubagentFailed
+      # An unexpected Crystal exception escaped a turn. Carries the formatted
+      # exception (class, message, backtrace) so the TUI can render it as a
+      # red exception block instead of letting the interface crumble.
+      Exception
     end
 
     class Event
@@ -132,6 +136,34 @@ module Hcode
         e.text = text
         e.is_error = true
         e
+      end
+
+      # Format a Crystal exception (class + message + backtrace) as a single
+      # string for the UI to render red. Emitted by the loop-level interceptor
+      # in `Agent#run_turn` so every unexpected exception is surfaced as an
+      # ordinary message and the turn ends gracefully.
+      def self.exception(ex : Exception) : Event
+        e = new(EventType::Exception)
+        e.text = format_exception(ex)
+        e.is_error = true
+        e
+      end
+
+      private def self.format_exception(ex : Exception) : String
+        String.build do |s|
+          s << ex.class << ": " << ex.message.to_s
+          # ex.backtrace can itself raise NilAssertionError on exceptions that
+          # were constructed but never raised (no call stack captured).
+          begin
+            bt = ex.backtrace
+            unless bt.nil? || bt.empty?
+              s << '\n'
+              bt.each { |line| s << "  " << line << '\n' }
+            end
+          rescue
+            # No backtrace available — class + message is enough.
+          end
+        end
       end
 
       # Emitted exactly once at the end of a turn (whether it completed

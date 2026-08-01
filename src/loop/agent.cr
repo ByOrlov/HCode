@@ -1,6 +1,7 @@
 require "./tool_batch"
 require "./retry"
 require "../tools/swarm_mode"
+require "../exception_handler"
 
 module Hcode
   module Loop
@@ -76,31 +77,35 @@ module Hcode
         # is tried at most once per turn.
         @overflow_recovery.reset
 
-        @context.add_user(prompt)
-        on_event.call(Event.user_message(prompt))
-
         total_usage = LLM::Usage.new
         steps = 0
         sys_prompt = system_prompt
         cancelled = false
         return_value : TurnResult? = nil
 
-        # UserPromptSubmit hook: a block decision replaces the prompt with
-        # an injected system message so the model sees why it was rejected.
-        if engine = @hooks
-          if block = engine.trigger_block("UserPromptSubmit", prompt)
-            @context.add_injection("[Prompt blocked by hook: #{block.reason}]")
-            on_event.call(Event.info("Prompt blocked by UserPromptSubmit hook: #{block.reason}"))
-            on_event.call(Event.turn_end(false))
-            return TurnResult.new("blocked", 0, total_usage)
-          end
-        end
-
-        # Surface the active/paused/blocked goal once per turn so the model
-        # knows the lifecycle context. Ported from `injection/goal.ts`.
-        inject_goal_reminder
-
+        # The begin/ensure wraps the ENTIRE turn body (including context setup
+        # and injection) so turn_end is guaranteed no matter where an exception
+        # fires. Without this coverage, a failure in add_user/inject_goal_reminder
+        # left @busy true and never emitted turn_end, locking the TUI.
         begin
+          @context.add_user(prompt)
+          on_event.call(Event.user_message(prompt))
+
+          # UserPromptSubmit hook: a block decision replaces the prompt with
+          # an injected system message so the model sees why it was rejected.
+          if engine = @hooks
+            if block = engine.trigger_block("UserPromptSubmit", prompt)
+              @context.add_injection("[Prompt blocked by hook: #{block.reason}]")
+              on_event.call(Event.info("Prompt blocked by UserPromptSubmit hook: #{block.reason}"))
+              on_event.call(Event.turn_end(false))
+              return TurnResult.new("blocked", 0, total_usage)
+            end
+          end
+
+          # Surface the active/paused/blocked goal once per turn so the model
+          # knows the lifecycle context. Ported from `injection/goal.ts`.
+          inject_goal_reminder
+
           loop do
             @abort_controller.throw_if_aborted!
 
@@ -162,6 +167,16 @@ module Hcode
           end
         rescue ex : UserCancellationError
           cancelled = true
+          raise ex
+        rescue ex : Exception
+          # Loop-level interceptor for every non-cancellation exception: report
+          # it to the crash collector and surface it to the UI as a red exception
+          # message, then re-raise so callers (subagents, headless) keep their
+          # existing failure contract. The `ensure` below always emits turn_end,
+          # so the TUI resets to idle and the user can keep typing instead of the
+          # interface crumbling on an unexpected error.
+          ExceptionHandler.report_and_notify(ex, "agent turn")
+          on_event.call(Event.exception(ex))
           raise ex
         ensure
           @busy = false

@@ -55,30 +55,42 @@ module Hcode
     # Crystal cannot kill fibers). This mirrors the JS
     # `raceExecuteWithGraceTimeout` semantics where the timer is armed on
     # `signal.addEventListener('abort', …)`, not at tool start.
+    #
+    # Unexpected (non-cancellation) exceptions from the tool are captured and
+    # re-raised on the caller's fiber so the loop-level interceptor can surface
+    # them to the UI, instead of being silently swallowed as error results.
     def self.execute_tool(abort_controller : AbortController,
                           grace_timeout : Time::Span = GRACE_TIMEOUT_SECONDS.seconds,
                           &block : -> ToolResult) : ToolResult
-      channel = Channel(ToolResult?).new
+      # Internal channel payload: either a result or an exception to re-raise.
+      channel = Channel({ToolResult?, Exception?}).new
 
       spawn do
-        result = begin
-          block.call
+        result, exc = begin
+          {block.call, nil}
         rescue ex : UserCancellationError
-          Tools::ToolResult.error("Cancelled: #{ex.reason}")
+          {Tools::ToolResult.error("Cancelled: #{ex.reason}"), nil}
         rescue ex
-          Tools::ToolResult.error("Execution failed: #{ex.message}")
+          {nil, ex}
         end
 
         begin
-          channel.send(result)
+          channel.send({result, exc})
         rescue Channel::ClosedError
         end
       end
 
+      handle = ->(payload : {ToolResult?, Exception?}) : ToolResult do
+        if exc = payload[1]
+          raise exc
+        end
+        payload[0] || Tools::ToolResult.error("No result")
+      end
+
       if abort_controller.aborted?
         select
-        when result = channel.receive
-          return result || Tools::ToolResult.error("No result")
+        when payload = channel.receive
+          return handle.call(payload)
         when timeout(grace_timeout)
           channel.close
           return Tools::ToolResult.error(
@@ -88,13 +100,13 @@ module Hcode
       else
         loop do
           select
-          when result = channel.receive
-            return result || Tools::ToolResult.error("No result")
+          when payload = channel.receive
+            return handle.call(payload)
           when timeout(ABORT_POLL_INTERVAL)
             if abort_controller.aborted?
               select
-              when result = channel.receive
-                return result || Tools::ToolResult.error("No result")
+              when payload = channel.receive
+                return handle.call(payload)
               when timeout(grace_timeout)
                 channel.close
                 return Tools::ToolResult.error(

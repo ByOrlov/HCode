@@ -355,6 +355,50 @@ describe Hcode::Loop::Agent do
       File.delete("/tmp/hcode-plan-block.txt") rescue nil
     end
   end
+
+  # The loop-level exception interceptor: when a tool raises an unexpected
+  # Crystal exception mid-turn, the loop catches it, emits an Exception event
+  # (so the TUI can render it red), then re-raises. Crucially, turn_end is
+  # always emitted so the TUI resets to idle and the user can keep typing —
+  # instead of the interface crumbling.
+  it "surfaces a tool exception as an Exception event and still emits turn_end" do
+    provider = Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::ToolCallPart.new("c1", "Boom", %({}))] of Hcode::LLM::MessagePart,
+        stop_reason: "tool_use",
+      ),
+    ])
+    memory = Hcode::Context::Memory.new
+    memory.max_context_tokens = 131_072
+    tools = Hcode::Tools::Registry.new
+    tools.register(BoomTool.new)
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+
+    events = [] of Hcode::Loop::Event
+    # The exception is re-raised so callers keep their failure contract.
+    expect_raises(Exception, "kaboom from BoomTool") do
+      agent.run_turn("trigger boom", nil) { |e| events << e }
+    end
+
+    # An Exception event was emitted with the formatted exception text.
+    exc_events = events.select(&.type.exception?)
+    exc_events.size.should eq(1)
+    exc_events.first.text.should contain("BoomTool")
+    exc_events.first.text.should contain("kaboom from BoomTool")
+
+    # turn_end was still emitted (in the ensure block), so the TUI resets.
+    turn_ends = events.select(&.type.turn_end?)
+    turn_ends.size.should eq(1)
+
+    # turn_end comes after the Exception event in the stream.
+    exc_idx = events.index(&.type.exception?).not_nil!
+    te_idx = events.index(&.type.turn_end?).not_nil!
+    te_idx.should be > exc_idx
+
+    # The agent is no longer busy after the turn.
+    agent.busy?.should be_false
+  end
 end
 
 # Mock provider wrapper that records every message list handed to `chat`,
@@ -383,5 +427,26 @@ private class RecordingProvider < Hcode::LLM::Provider
            &block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
     @captured << messages.map(&.dup)
     @inner.chat(messages, tools, system_prompt, aborted?) { |p| block.call(p) }
+  end
+end
+
+# Test tool that raises an unexpected Crystal exception on every call. Used to
+# verify the loop-level exception interceptor: the exception is surfaced as an
+# Exception event and turn_end still fires so the TUI does not crumble.
+private class BoomTool < Hcode::Tools::Tool
+  def name : String
+    "Boom"
+  end
+
+  def description : String
+    "Always raises an exception — for tests."
+  end
+
+  def parameters : JSON::Any
+    JSON.parse(%({"type":"object","properties":{},"additionalProperties":false}))
+  end
+
+  def execute(input : JSON::Any) : Hcode::Tools::ToolResult
+    raise Exception.new("kaboom from BoomTool")
   end
 end

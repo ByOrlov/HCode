@@ -1063,6 +1063,11 @@ module Hcode
           @messages << Message.new("error", event.text)
           @spinner.stop
           @status = ""
+        when .exception?
+          msg = Message.new("exception", event.text)
+          @messages << msg
+          @spinner.stop
+          @status = ""
         when .turn_end?
           # Turn finished (normal, errored, or cancelled). Reset busy state
           # and drain the next queued message if any. The TUI is the single
@@ -3198,6 +3203,19 @@ module Hcode
             else
               lines << "#{dc}  #{l}#{r}"
             end
+          end
+          lines << ""
+        when "exception"
+          # A Crystal exception caught by the loop interceptor. Rendered as a
+          # red exception block so the user sees what blew up and can continue
+          # typing instead of the TUI crumbling. First line is the class +
+          # message; the rest is the backtrace (dimmed).
+          ec = ANSI.color(@theme.colors.error, nil)
+          dc = ANSI.color(@theme.colors.dim, nil)
+          r = ANSI.reset
+          lines << "#{ec}💥 Exception#{r}"
+          msg.content.split('\n').each_with_index do |l, idx|
+            lines << "#{dc}  #{l}#{r}" unless l.empty?
           end
           lines << ""
         when "status"

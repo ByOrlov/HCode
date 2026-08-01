@@ -335,6 +335,38 @@ describe Hcode::TUI::App do
     app = Hcode::TUI::App.new
     app.@help_panel.visible?.should be_false
   end
+
+  # The loop-level exception interceptor emits Event.exception when a tool or
+  # the provider blows up mid-turn. The TUI must render it as a red exception
+  # block so the user sees what failed and can keep typing — instead of the
+  # interface crumbling. This is the visual half of the BoomTool loop test in
+  # spec/loop/agent_spec.cr.
+  it "renders an exception event as a red exception block" do
+    app = Hcode::TUI::App.new
+
+    # Simulate the exact event the loop interceptor emits (Event.exception
+    # formats class + message + backtrace into a single multi-line string).
+    app.on_event(Hcode::Loop::Event.exception(
+      Exception.new("kaboom from BoomTool")
+    ))
+
+    # An exception message landed in the transcript.
+    exc_msg = app.@messages.find { |m| m.role == "exception" }
+    exc_msg.should_not be_nil
+    exc_msg.not_nil!.content.should contain("kaboom from BoomTool")
+
+    # The spinner stopped — the TUI is back in an idle state.
+    app.@spinner.active?.should be_false
+
+    # Render it and verify the block visually: a red header line, the
+    # exception class + message, and one line per rendered entry (the
+    # renderer invariant: no embedded newlines).
+    rendered = app.render_message(exc_msg.not_nil!, 80)
+    text = rendered.map { |l| app_strip_ansi(l) }.join("\n")
+    text.should contain("💥 Exception")
+    text.should contain("kaboom from BoomTool")
+    rendered.each { |l| l.should_not contain("\n") }
+  end
 end
 
 describe Hcode::TUI::HelpPanel do

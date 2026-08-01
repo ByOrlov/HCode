@@ -7,6 +7,11 @@ module Hcode
       property content : String
       property is_error : Bool
       property display : Tools::ToolDisplay? = nil
+      # An unexpected exception raised inside the fiber. When non-nil, the
+      # caller must re-raise it on the main fiber so the loop-level interceptor
+      # can surface it to the UI. UserCancellationError is NOT carried here —
+      # it is reported as a normal cancelled result below.
+      property exception : Exception? = nil
 
       def initialize(@index : Int32, @tool_call_id : String,
                      @content : String, @is_error : Bool, @display : Tools::ToolDisplay? = nil)
@@ -69,6 +74,15 @@ module Hcode
           result = channel.receive
           results_by_index[result.index] = result
           on_event.call(Event.tool_result(result.tool_call_id, result.content, result.is_error, result.display))
+        end
+
+        # Re-raise the first unexpected exception on the main fiber so the
+        # loop-level interceptor surfaces it to the UI. Fibers swallow
+        # unhandled exceptions, so we capture and propagate explicitly.
+        results_by_index.each_value do |r|
+          if exc = r.exception
+            raise exc
+          end
         end
 
         assemble_results(tool_calls, planned, results_by_index)
@@ -183,7 +197,12 @@ module Hcode
         rescue ex : UserCancellationError
           channel.send(ToolBatchResult.new(pc.index, tc.id, "Cancelled: #{ex.reason}", true))
         rescue ex
-          channel.send(ToolBatchResult.new(pc.index, tc.id, "Execution failed: #{ex.message}", true))
+          # Capture the exception so the caller re-raises it on the main fiber
+          # — the loop-level interceptor surfaces it as a red exception message
+          # instead of silently swallowing it as an error tool result.
+          r = ToolBatchResult.new(pc.index, tc.id, "Execution failed: #{ex.message}", true)
+          r.exception = ex
+          channel.send(r)
         end
       end
 
