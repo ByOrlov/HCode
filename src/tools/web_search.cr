@@ -266,8 +266,70 @@ module Hcode
         end
       end
 
+      def initialize(@provider : WebSearchProvider?)
+      end
+
       def get_web_search_provider : WebSearchProvider?
         @provider
+      end
+    end
+
+    # Z.AI / Zhipu web search provider — calls the Z.AI web search REST API
+    # (`POST {endpoint}/web_search` with `search_engine` + `search_query`).
+    # Works with both PaaS (`api/paas/v4`) and coding plan
+    # (`api/coding/paas/v4`) endpoints.
+    #
+    # Response wire format:
+    #   { "search_result": [{ "title":"...", "link":"...", "content":"..." }] }
+    class ZaiWebSearchProvider < WebSearchProvider
+      @endpoint : String
+      @api_key : String
+      @transport : HttpTransport
+
+      def initialize(@endpoint : String, api_key : String,
+                     transport : HttpTransport? = nil)
+        @endpoint = @endpoint.rstrip('/')
+        @api_key = api_key.strip
+        @transport = transport || HttpTransport::RealHttpTransport.new(->(uri : URI) { HTTP::Client.new(uri) })
+      end
+
+      def search(query : String,
+                 tool_call_id : String? = nil,
+                 signal : AbortController? = nil) : Array(WebSearchResult)
+        body_json = %({"search_engine":"search_std","search_query":#{query.to_json}})
+
+        headers = HTTP::Headers.new
+        headers["Authorization"] = "Bearer #{@api_key}"
+        headers["Content-Type"] = "application/json"
+
+        uri = URI.parse(@endpoint)
+        response = @transport.request("POST", uri, headers, body_json)
+        status = response.status_code
+        detail = response.body
+
+        if status == 401
+          raise Exception.new("Z.AI search request failed: HTTP 401 (auth/unauthorized). #{detail}".strip)
+        elsif status != 200
+          raise Exception.new("Z.AI search request failed: HTTP #{status}. #{detail}".strip)
+        end
+
+        parse_results(response.body)
+      end
+
+      def parse_results(body : String) : Array(WebSearchResult)
+        json = JSON.parse(body)
+        raw = json["search_result"]?.try(&.as_a?) || [] of JSON::Any
+        raw.map do |item|
+          title = string_or(item["title"]?, "")
+          url = string_or(item["link"]?, "")
+          snippet = string_or(item["content"]?, "")
+          WebSearchResult.new(title, url, snippet)
+        end
+      end
+
+      private def string_or(v : JSON::Any?, fallback : String) : String
+        return fallback if v.nil?
+        v.to_s
       end
     end
   end

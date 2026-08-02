@@ -330,6 +330,13 @@ module Hcode
       # below. Interactive runs connect in the background so a slow server
       # never blocks the TUI; headless runs block so tools are ready.
       merged_mcp = config.mcp_servers + plugin_mcp_servers
+      # Auto-config provider-specific MCP servers (e.g. Z.AI web search).
+      # Skip entries whose URL already exists in manual/plugin config.
+      auto_mcp = config.auto_mcp_servers
+      existing_urls = Set(String).new
+      merged_mcp.each { |c| (u = c.url) && existing_urls << u }
+      auto_mcp.reject! { |c| c.url.try { |u| existing_urls.includes?(u) } || false }
+      merged_mcp = merged_mcp + auto_mcp
       mcp_manager = Mcp::Manager.new(home)
       mcp_manager.register_from_cache(merged_mcp, tools,
         active_provider: config.provider_name, blocking: prompt ? true : false)
@@ -451,6 +458,7 @@ module Hcode
           endpoint: config.zai_endpoint,
           api_key: config.zai_api_key,
           provider_label: "zai",
+          builtin_web_search: true,
         )
       when "zai-coding-plan"
         if config.zai_api_key.empty?
@@ -462,6 +470,7 @@ module Hcode
           endpoint: config.zai_coding_plan_endpoint,
           api_key: config.zai_api_key,
           provider_label: "zai-coding-plan",
+          builtin_web_search: true,
         )
       when "ollama"
         endpoint = config.ollama_endpoint || LLM::OllamaProvider::DEFAULT_ENDPOINT

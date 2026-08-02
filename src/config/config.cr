@@ -350,6 +350,14 @@ module Hcode
         File.exists?(path)
       end
 
+      # Provider-specific MCP servers generated from the active provider's
+      # credentials. Currently empty — Z.AI web search is handled via the
+      # provider's built-in `web_search` tool (injected in ZaiProvider), not
+      # through a standalone MCP server.
+      def auto_mcp_servers : Array(Mcp::McpServerConfig)
+        [] of Mcp::McpServerConfig
+      end
+
       private def self.parse_hooks_array(arr : Array(JSON::Any)?) : Array(Hooks::HookDef)
         return [] of Hooks::HookDef unless arr
         arr.map do |entry|

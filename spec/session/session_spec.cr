@@ -119,6 +119,51 @@ describe Hcode::Session::Index do
     end
   end
 
+  it "hides empty sessions (no messages) by default" do
+    home = temp_home
+    begin
+      ws = Hcode::Session::Index.workspace_id("/repo")
+      # A session with a real prompt.
+      full = File.join(home, ".hcode", "sessions", ws, "full0001dead")
+      Dir.mkdir_p(full)
+      File.write(File.join(full, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"hello"}}))
+      File.write(File.join(full, "state.json"), Hcode::Session::StateMeta.new("full0001dead").to_json)
+
+      # A session with only an assistant message.
+      replied = File.join(home, ".hcode", "sessions", ws, "reply002beef")
+      Dir.mkdir_p(replied)
+      File.write(File.join(replied, "wire.jsonl"), %({"type":"assistant.text","data":{"content":"hi"}}))
+      File.write(File.join(replied, "state.json"), Hcode::Session::StateMeta.new("reply002beef").to_json)
+
+      # An empty wire.jsonl (created but never used).
+      empty1 = File.join(home, ".hcode", "sessions", ws, "empty003cafe")
+      Dir.mkdir_p(empty1)
+      File.write(File.join(empty1, "wire.jsonl"), "")
+      File.write(File.join(empty1, "state.json"), Hcode::Session::StateMeta.new("empty003cafe").to_json)
+
+      # A wire.jsonl with only bookkeeping (no real conversation event).
+      empty2 = File.join(home, ".hcode", "sessions", ws, "empty004babe")
+      Dir.mkdir_p(empty2)
+      File.write(File.join(empty2, "wire.jsonl"), %({"type":"context.apply_compaction","data":{"summary":"x"}}))
+      File.write(File.join(empty2, "state.json"), Hcode::Session::StateMeta.new("empty004babe").to_json)
+
+      idx = Hcode::Session::Index.new(home)
+      ids = idx.list.map(&.id)
+      ids.should contain("full0001dead")
+      ids.should contain("reply002beef")
+      ids.should_not contain("empty003cafe")
+      ids.should_not contain("empty004babe")
+
+      # include_empty surfaces them all.
+      idx.list(include_empty: true).size.should eq(4)
+
+      # get finds an empty session by id regardless of the filter.
+      idx.get("empty003cafe").try(&.id).should eq("empty003cafe")
+    ensure
+      FileUtils.rm_rf(home)
+    end
+  end
+
   it "finds a session by id across layouts" do
     home = temp_home
     begin
@@ -185,10 +230,10 @@ describe Hcode::Session::Lifecycle do
 
       lc.archive(id)
       lc.index.list.size.should eq(0)
-      lc.index.list(include_archived: true).size.should eq(1)
+      lc.index.list(include_archived: true, include_empty: true).size.should eq(1)
 
       lc.restore(id)
-      lc.index.list.size.should eq(1)
+      lc.index.list(include_empty: true).size.should eq(1)
     ensure
       FileUtils.rm_rf(home)
     end

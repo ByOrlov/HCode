@@ -107,6 +107,15 @@ describe Hcode::Config::Config do
     end
   end
 
+  describe "#auto_mcp_servers" do
+    it "returns empty for all providers (web search is built-in)" do
+      config = Hcode::Config::Config.new
+      config.provider_name = "zai-coding-plan"
+      config.zai_api_key = "test-key"
+      config.auto_mcp_servers.should be_empty
+    end
+  end
+
   describe "JSON round-trip" do
     it "parses nil-able fields from JSON" do
       json = <<-JSON

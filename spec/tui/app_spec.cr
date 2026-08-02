@@ -23,73 +23,6 @@ def help_strip_ansi(str : String) : String
 end
 
 describe Hcode::TUI::App do
-  it "renders a step summary when older thinking/tool blocks are merged" do
-    app = Hcode::TUI::App.new
-    app.keep_recent_steps = 2
-
-    app.add_message("user", "hello")
-
-    3.times do |i|
-      app.on_event(Hcode::Loop::Event.thinking_delta("thinking #{i}"))
-      app.on_event(Hcode::Loop::Event.text_delta("text #{i}"))
-    end
-
-    app.@messages.count { |m| m.role == "thinking" }.should eq(2)
-    summary = app.@messages.find { |m| m.role == "step_summary" }
-    summary.should_not be_nil
-    summary.not_nil!.thinking_count.should eq(1)
-    summary.not_nil!.tool_count.should eq(0)
-  end
-
-  it "keeps the most recent steps visible after merging" do
-    app = Hcode::TUI::App.new
-    app.keep_recent_steps = 2
-
-    app.add_message("user", "hello")
-
-    4.times do |i|
-      app.on_event(Hcode::Loop::Event.thinking_delta("thought #{i}"))
-      app.on_event(Hcode::Loop::Event.text_delta("text #{i}"))
-    end
-
-    visible_thinking = app.@messages.select { |m| m.role == "thinking" }.map(&.content)
-    visible_thinking.size.should eq(2)
-    visible_thinking.should eq(["thought 2", "thought 3"])
-
-    summary = app.@messages.find { |m| m.role == "step_summary" }.not_nil!
-    summary.thinking_count.should eq(2)
-  end
-
-  it "merges mixed thinking and tool blocks" do
-    app = Hcode::TUI::App.new
-    app.keep_recent_steps = 2
-
-    app.add_message("user", "hello")
-
-    app.on_event(Hcode::Loop::Event.thinking_delta("plan"))
-    app.on_event(Hcode::Loop::Event.text_delta("t1"))
-
-    app.on_event(Hcode::Loop::Event.tool_call_start("c1", "Glob", %({"pattern":"*.cr"})))
-    app.on_event(Hcode::Loop::Event.tool_result("c1", "a.cr", false))
-
-    app.on_event(Hcode::Loop::Event.thinking_delta("plan again"))
-    app.on_event(Hcode::Loop::Event.text_delta("t2"))
-
-    app.on_event(Hcode::Loop::Event.tool_call_start("c2", "Read", %({"filePath":"a.cr"})))
-    app.on_event(Hcode::Loop::Event.tool_result("c2", "content", false))
-
-    app.on_event(Hcode::Loop::Event.thinking_delta("final plan"))
-    app.on_event(Hcode::Loop::Event.text_delta("t3"))
-
-    summary = app.@messages.find { |m| m.role == "step_summary" }
-    summary.should_not be_nil
-    summary.not_nil!.thinking_count.should eq(2)
-    summary.not_nil!.tool_count.should eq(1)
-
-    visible_steps = app.@messages.count { |m| m.role == "thinking" || m.role == "tool" }
-    visible_steps.should eq(2)
-  end
-
   it "routes parallel tool results to the correct messages" do
     app = Hcode::TUI::App.new
 
@@ -108,68 +41,6 @@ describe Hcode::TUI::App do
     bash.should_not be_nil
     glob.not_nil!.tool_result.should eq("a.cr")
     bash.not_nil!.tool_result.should eq("hi")
-  end
-
-  it "starts a fresh turn summary after a new user message" do
-    app = Hcode::TUI::App.new
-    app.keep_recent_steps = 1
-
-    app.add_message("user", "first")
-    2.times do |i|
-      app.on_event(Hcode::Loop::Event.thinking_delta("t#{i}"))
-      app.on_event(Hcode::Loop::Event.text_delta("x"))
-    end
-
-    app.add_message("user", "second")
-    2.times do |i|
-      app.on_event(Hcode::Loop::Event.thinking_delta("s#{i}"))
-      app.on_event(Hcode::Loop::Event.text_delta("y"))
-    end
-
-    summaries = app.@messages.select { |m| m.role == "step_summary" }
-    summaries.size.should eq(2)
-  end
-
-  it "renders the summary line in dim text" do
-    app = Hcode::TUI::App.new
-    summary = Hcode::TUI::Message.new("step_summary", "")
-    summary.thinking_count = 3
-    summary.tool_count = 2
-
-    rendered = app.render_message(summary, 80).map { |l| app_strip_ansi(l) }
-    text = rendered.join("\n")
-    text.should contain("thinking 3 times")
-    text.should contain("call 2 tools")
-  end
-
-  it "reads the keep threshold from the environment" do
-    old = ENV["HCODE_TUI_KEEP_RECENT_STEPS"]?
-    ENV["HCODE_TUI_KEEP_RECENT_STEPS"] = "5"
-    begin
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps.should eq(5)
-    ensure
-      if old
-        ENV["HCODE_TUI_KEEP_RECENT_STEPS"] = old
-      else
-        ENV.delete("HCODE_TUI_KEEP_RECENT_STEPS")
-      end
-    end
-  end
-
-  it "falls back to the default for invalid environment values" do
-    old = ENV["HCODE_TUI_KEEP_RECENT_STEPS"]?
-    ENV["HCODE_TUI_KEEP_RECENT_STEPS"] = "not-a-number"
-    begin
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps.should eq(Hcode::TUI::App::DEFAULT_KEEP_RECENT_STEPS)
-    ensure
-      if old
-        ENV["HCODE_TUI_KEEP_RECENT_STEPS"] = old
-      else
-        ENV.delete("HCODE_TUI_KEEP_RECENT_STEPS")
-      end
-    end
   end
 end
 
@@ -464,103 +335,6 @@ describe Hcode::TUI::HelpPanel do
     body.should contain("of")
   end
 
-  # Fix 4 regression: cross-turn trim. Older turns (>keep_recent_turns)
-  # collapse their thinking/tool blocks into a single step_summary so the
-  # @messages array does not grow linearly across long sessions — see
-  # plans/TOOLS-LEAKS.md §B1.
-  describe "cross-turn trim (Fix 4)" do
-    it "collapses thinking/tool blocks in turns older than keep_recent_turns" do
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps = 100   # disable within-turn trim
-      app.keep_recent_turns = 2
-
-      # 5 turns, each with a tool block. Bash (not Read) so consecutive
-      # calls don't get batched into a single read_group entry.
-      5.times do |i|
-        app.add_message("user", "u#{i}")
-        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo #{i}"})))
-        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "content #{i}", false))
-        app.add_message("assistant", "a#{i}")
-      end
-
-      msgs = app.@messages
-
-      # The three oldest turns (u0, u1, u2) must now each have a single
-      # step_summary right after the user message and no surviving tool
-      # blocks. The last 2 turns (u3, u4) keep their tool messages intact.
-      index_of_user = ->(s : String) { msgs.index { |m| m.role == "user" && m.content == s } }
-
-      ["u0", "u1", "u2"].each do |u|
-        i = index_of_user.call(u)
-        i.should_not be_nil
-        msgs[i.not_nil! + 1].role.should eq("step_summary")
-        u_num = u[1].to_i
-        msgs.any? { |m| m.role == "tool" && m.tool_result == "content #{u_num}" }.should be_false
-      end
-
-      ["u3", "u4"].each do |u|
-        u_num = u[1].to_i
-        msgs.any? { |m| m.role == "tool" && m.tool_result == "content #{u_num}" }.should be_true
-      end
-    end
-
-    it "folds counts from pre-existing step_summary when re-collapsing" do
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps = 1   # aggressive within-turn trim
-      app.keep_recent_turns = 1
-
-      # Build two old turns with multiple Bash calls each — within-turn
-      # trim will already produce a step_summary; cross-turn trim then
-      # should still see and preserve those counts (no double counting,
-      # no lost counts).
-      2.times do |i|
-        app.add_message("user", "u#{i}")
-        3.times do |j|
-          app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}#{j}", "Bash", %({"command":"echo"})))
-          app.on_event(Hcode::Loop::Event.tool_result("c#{i}#{j}", "r", false))
-        end
-      end
-      app.add_message("user", "current")  # current turn
-
-      msgs = app.@messages
-      u0 = msgs.index { |m| m.role == "user" && m.content == "u0" }
-      u0.should_not be_nil
-      summary = msgs[u0.not_nil! + 1]
-      summary.role.should eq("step_summary")
-      summary.tool_count.should eq(3)
-    end
-
-    it "does nothing when total turns <= keep_recent_turns" do
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps = 100
-      app.keep_recent_turns = 50
-
-      3.times do |i|
-        app.add_message("user", "u#{i}")
-        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo"})))
-        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "r", false))
-      end
-
-      app.@messages.count(&.role.==("tool")).should eq(3)
-      app.@messages.count(&.role.==("step_summary")).should eq(0)
-    end
-
-    it "can be disabled via keep_recent_turns = 0" do
-      app = Hcode::TUI::App.new
-      app.keep_recent_steps = 100
-      app.keep_recent_turns = 0
-
-      10.times do |i|
-        app.add_message("user", "u#{i}")
-        app.on_event(Hcode::Loop::Event.tool_call_start("c#{i}", "Bash", %({"command":"echo"})))
-        app.on_event(Hcode::Loop::Event.tool_result("c#{i}", "r", false))
-      end
-
-      app.@messages.count(&.role.==("step_summary")).should eq(0)
-      app.@messages.count(&.role.==("tool")).should eq(10)
-    end
-  end
-
   # Regression tests for the TUI_BUGS.md fixes (see TUI_FIXES.md).
   describe "TUI_BUGS fixes" do
     # BUG #2: wrap_text used .size (codepoints), so CJK text (1 codepoint =
@@ -597,7 +371,7 @@ describe Hcode::TUI::HelpPanel do
       # Inject a long CJK line that a renderer would emit wider than cols.
       app.add_message("user", "あ" * 60)
       cols = 20
-      new_lines, _ = app.build_rendered_lines(cols)
+      new_lines, _, _ = app.build_rendered_lines(cols)
       new_lines.each do |l|
         Hcode::TUI::CharWidth.visible_width(l).should be <= cols
       end
@@ -606,7 +380,7 @@ describe Hcode::TUI::HelpPanel do
     it "build_rendered_lines ends every line with an SGR reset" do
       app = Hcode::TUI::App.new
       app.add_message("user", "hello")
-      new_lines, _ = app.build_rendered_lines(80)
+      new_lines, _, _ = app.build_rendered_lines(80)
       new_lines.each do |l|
         l.should end_with(Hcode::TUI::ANSI.reset)
       end
@@ -710,7 +484,7 @@ describe Hcode::TUI::App do
     it "is visible on a fresh app" do
       app = Hcode::TUI::App.new
       app.@show_welcome.should be_true
-      lines, _ = app.build_rendered_lines(80)
+      lines, _, _ = app.build_rendered_lines(80)
       lines.any?(&.includes?("Welcome")).should be_true
     end
 
@@ -718,7 +492,7 @@ describe Hcode::TUI::App do
       app = Hcode::TUI::App.new
       app.add_message("user", "hello")
       app.@show_welcome.should be_true
-      lines, _ = app.build_rendered_lines(80)
+      lines, _, _ = app.build_rendered_lines(80)
       lines.any?(&.includes?("Welcome")).should be_true
     end
 
@@ -734,7 +508,7 @@ describe Hcode::TUI::App do
       app = Hcode::TUI::App.new
       5.times { |i| app.add_message("user", "message #{i}") }
       app.@show_welcome.should be_true
-      lines, _ = app.build_rendered_lines(80)
+      lines, _, _ = app.build_rendered_lines(80)
       lines.any?(&.includes?("Welcome")).should be_true
     end
 
@@ -760,7 +534,7 @@ describe Hcode::TUI::App do
     it "uses the white colour for the border in normal mode" do
       app = Hcode::TUI::App.new
       app.plan_mode = false
-      lines, _ = app.build_rendered_lines(40)
+      lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
       joined.should contain("\e[38;5;255m")
       joined.should_not contain("\e[38;5;180m")
@@ -769,7 +543,7 @@ describe Hcode::TUI::App do
     it "tints the border yellow when plan mode is on" do
       app = Hcode::TUI::App.new
       app.plan_mode = true
-      lines, _ = app.build_rendered_lines(40)
+      lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
       joined.should contain("\e[38;5;180m")
     end
@@ -777,7 +551,7 @@ describe Hcode::TUI::App do
     it "shows the plan mode placeholder and no system message" do
       app = Hcode::TUI::App.new
       app.plan_mode = true
-      lines, _ = app.build_rendered_lines(40)
+      lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
       # Placeholder shown inside the input box.
       app_strip_ansi(joined).should contain("Send a message... (Plan mode)")

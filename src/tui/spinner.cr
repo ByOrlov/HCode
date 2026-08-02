@@ -3,6 +3,10 @@ module Hcode
     class Spinner
       FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+      # Animated bullet for running Bash commands: pulses ● → • → ⋅ → • → …
+      # 4 frames, ~250ms each (3 ticks × ~80ms).
+      BASH_BULLET_FRAMES = ["\u25cf", "\u2022", "\u22c5", "\u2022"]
+
       @frame : Int32 = 0
       @active : Bool = false
       @last_update : Time::Span = Time.monotonic

@@ -8,18 +8,24 @@ module Hcode
       DEFAULT_ENDPOINT = "https://api.z.ai/api/paas/v4"
 
       property provider_label : String
+      # When true, injects Z.AI's built-in `web_search` tool into every chat
+      # completions request so the model can search the web transparently.
+      # Covered by the GLM Coding Plan quota (no separate PaaS balance needed).
+      property? builtin_web_search : Bool = false
 
       def initialize(model : String = DEFAULT_MODEL,
                      endpoint : String = DEFAULT_ENDPOINT,
                      api_key : String = "",
                      @provider_label : String = "zai",
                      temperature : Float64? = nil,
-                     max_tokens : Int32? = nil)
+                     max_tokens : Int32? = nil,
+                     builtin_web_search : Bool = false)
         super(model, endpoint, api_key, temperature, max_tokens)
         # Z.AI / Zhipu (GLM) is OpenAI-compatible: it speaks the top-level
         # `reasoning_effort` string for reasoning control, not the Moonshot
         # `thinking` object. `off`/`on` have no wire encoding here.
         @thinking_wire = ThinkingWire::ReasoningEffort
+        @builtin_web_search = builtin_web_search
       end
 
       def name : String
@@ -28,6 +34,18 @@ module Hcode
 
       def token : String
         @api_key
+      end
+
+      def build_request(messages : Array(Message), tools : Array(ToolDefinition)?) : ChatRequest
+        request = super
+        if @builtin_web_search
+          # Z.AI built-in web_search tool — the model searches internally and
+          # returns results in its response, no client-side tool_call needed.
+          current = request.extra_tools || [] of JSON::Any
+          current << JSON.parse(%({"type":"web_search","web_search":{"enable":true,"search_result":true}}))
+          request.extra_tools = current
+        end
+        request
       end
     end
   end

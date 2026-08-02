@@ -499,6 +499,11 @@ module Hcode
       # in a single response. Without it some backends default to one call per
       # turn, which serialises multi-file reads.
       property parallel_tool_calls : Bool?
+      # Provider-specific built-in tool definitions (e.g. Z.AI's
+      # `{"type":"web_search","web_search":{"enable":true}}`) appended to the
+      # `tools` array on the wire. Unlike `tools`, these are not function-call
+      # tools that the client executes — the model uses them internally.
+      property extra_tools : Array(JSON::Any)?
 
       def initialize(@model : String, @messages : Array(Message),
                      @tools : Array(ToolDefinition)? = nil,
@@ -507,7 +512,8 @@ module Hcode
                      @max_tokens : Int32? = nil,
                      @max_completion_tokens : Int32? = nil,
                      @prompt_cache_key : String? = nil,
-                     @parallel_tool_calls : Bool? = nil)
+                     @parallel_tool_calls : Bool? = nil,
+                     @extra_tools : Array(JSON::Any)? = nil)
       end
 
       # Disable any previously applied thinking hint. Provider-specific effort
@@ -527,9 +533,16 @@ module Hcode
                 @messages.each(&.to_wire_json(json))
               end
             end
-            if t = @tools
+            tools = @tools
+            extra = @extra_tools
+            has_tools = tools && !tools.not_nil!.empty?
+            has_extra = extra && !extra.not_nil!.empty?
+            if has_tools || has_extra
               json.field "tools" do
-                t.to_json(json)
+                json.array do
+                  tools.try(&.each(&.to_json(json)))
+                  extra.try(&.each(&.to_json(json)))
+                end
               end
             end
             json.field "stream", @stream

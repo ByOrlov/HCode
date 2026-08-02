@@ -126,9 +126,6 @@ module Hcode
       property? expanded : Bool = false
       property step : Int32 = 0
       property read_group : Array(ReadGroupEntry)?
-      # Used only by `role == "step_summary"` messages.
-      property thinking_count : Int32 = 0
-      property tool_count : Int32 = 0
       # Plan-box: when a tool result carries an ExitPlanMode plan (approved,
       # auto-approved, or rejected), the plan body is lifted out of the raw
       # result text and rendered as a bordered box — mirrors TS PlanBoxComponent.
@@ -206,14 +203,6 @@ module Hcode
       STATUS_BULLET             = "● "
       ASSISTANT_BULLET          = "💬 "
       USER_BULLET               = "👤 "
-      DEFAULT_KEEP_RECENT_STEPS = 30
-      KEEP_RECENT_STEPS_ENV     = "HCODE_TUI_KEEP_RECENT_STEPS"
-      # Cross-turn trimming: turns older than this count are collapsed into
-      # a single `step_summary` per turn (thinking/tool counts only). Caps
-      # linear growth of `@messages` in long sessions — see
-      # plans/TOOLS-LEAKS.md §B1. Env: HCODE_TUI_KEEP_RECENT_TURNS.
-      DEFAULT_KEEP_RECENT_TURNS = 50
-      KEEP_RECENT_TURNS_ENV     = "HCODE_TUI_KEEP_RECENT_TURNS"
 
       @terminal : Terminal
       @input : Input
@@ -225,6 +214,7 @@ module Hcode
       @previous_viewport_top : Int32 = 0
       @hardware_cursor_row : Int32 = 0
       @max_lines_rendered : Int32 = 0
+      @prev_active_start : Int32 = 0
       @last_cols : Int32 = 0
       @last_rows : Int32 = 0
       @cursor_line : Int32 = 0
@@ -271,8 +261,6 @@ module Hcode
       @current_step : Int32 = 0
       @step_tool_count : Int32 = 0
       @pending_read_group : Message? = nil
-      property keep_recent_steps : Int32 = DEFAULT_KEEP_RECENT_STEPS
-      property keep_recent_turns : Int32 = DEFAULT_KEEP_RECENT_TURNS
 
       # Command state
       @show_command_hints : Bool = false
@@ -475,8 +463,6 @@ module Hcode
         @usage_panel = UsagePanel.new(@theme)
         @work_dir = Dir.current
         @git_branch = detect_git_branch
-        @keep_recent_steps = read_keep_recent_steps
-        @keep_recent_turns = read_keep_recent_turns
         # Wire the notification dispatcher into a StatusTracker. The tracker
         # lives on the App so UI transitions (start_turn, turn_end, approval)
         # can drive it directly.
@@ -702,7 +688,6 @@ module Hcode
             @messages << Message.new("assistant", @streaming_text)
             @streaming_text = ""
           end
-          @spinner.stop
           @step_tool_count += 1
 
           if event.tool_name == "Read" && (group = @pending_read_group) && group.step == @current_step
@@ -757,7 +742,6 @@ module Hcode
           @streaming_tool = nil
           @status = thinking_status
           inject_plan_if_any(event.text)
-          merge_turn_steps
         when .info?
           @status = event.text
           # Compaction start message ("Context near limit, triggering compaction...")
@@ -2272,24 +2256,24 @@ module Hcode
         cols = @terminal.cols
         rows = @terminal.rows
 
-        new_lines, editor_content_line = build_rendered_lines(cols)
+        new_lines, editor_content_line, active_start = build_rendered_lines(cols)
 
         output = IO::Memory.new
         output << "\e[?2026h" # Begin synchronized update
 
         size_changed = cols != @last_cols || rows != @last_rows
-        content_shrunk = new_lines.size < @max_lines_rendered
 
-        if @first_render || size_changed || content_shrunk
+        if @first_render || size_changed
           full_render(output, new_lines, rows)
         else
-          diff_render(output, new_lines, rows)
+          diff_render(output, new_lines, rows, active_start)
         end
 
         position_cursor(output, new_lines.size, editor_content_line)
         output << "\e[?2026l" # End synchronized update
 
         @previous_lines = new_lines
+        @prev_active_start = active_start
         @last_cols = cols
         @last_rows = rows
         @cursor_line = new_lines.size
@@ -2297,14 +2281,14 @@ module Hcode
         output.to_s
       end
 
-      def build_rendered_lines(cols : Int32) : {Array(String), Int32}
+      def build_rendered_lines(cols : Int32) : {Array(String), Int32, Int32}
         new_lines = [] of String
 
         # Full-screen modal takeovers (tasks browser) replace the entire
         # layout — mirrors TS container-swap mount of TasksBrowserApp.
         if @tasks_browser.visible?
           @tasks_browser.rows = @terminal.rows
-          return {@tasks_browser.render(cols), 0}
+          return {@tasks_browser.render(cols), 0, 0}
         end
 
         if @show_welcome
@@ -2316,12 +2300,26 @@ module Hcode
           new_lines.concat(render_message(msg, cols))
         end
 
+        # Everything above this point is the LOG zone — append-only, never
+        # rewritten. Everything below is the ACTIVE zone — repainted every
+        # frame. See TUI_ZONES.md.
+        active_start = new_lines.size
+
         unless @streaming_thinking.empty?
           new_lines.concat(render_live_thinking(cols))
         end
 
         unless @streaming_text.empty?
           new_lines.concat(render_message(Message.new("assistant", @streaming_text), cols))
+        end
+
+        # Pending tool calls (no result yet) live in the active zone — they
+        # migrate to the log zone once their result arrives. See TUI_ZONES.md.
+        @messages.each do |m|
+          if m.role == "tool" && m.tool_name && m.tool_result.nil? &&
+             m.read_group.nil? && m.swarm_members.empty?
+            new_lines.concat(render_running_tool(m, cols))
+          end
         end
 
         if @spinner.active? && @streaming_thinking.empty?
@@ -2419,7 +2417,7 @@ module Hcode
         truncate_render_lines(new_lines, cols)
         apply_line_resets(new_lines)
 
-        {new_lines, editor_start + 1}
+        {new_lines, editor_start + 1, active_start}
       end
 
       # Truncate each rendered line to `cols` visible columns. Uses the ASCII
@@ -2464,99 +2462,115 @@ module Hcode
         @first_render = false
       end
 
-      private def diff_render(output : IO::Memory, new_lines : Array(String), rows : Int32) : Nil
-        prev_size = @previous_lines.size
+      private def diff_render(output : IO::Memory, new_lines : Array(String), rows : Int32, active_start : Int32) : Nil
         new_size = new_lines.size
+        prev_size = @previous_lines.size
 
-        # Defensive shrink guard: if the new content is shorter than what we
-        # last committed to the screen, the diff path's tail-clearing only
-        # runs for the trailing changed region and can leave phantom rows.
-        # Bail to a full repaint so @max_lines_rendered is reset cleanly.
-        if new_size < @max_lines_rendered
-          full_render(output, new_lines, rows)
-          return
+        viewport_top = {0, new_size - rows}.max
+        prev_vt = {0, prev_size - rows}.max
+
+        # ── 1. Scroll: viewport moved down (content exceeded visible area) ──
+        # Only scroll when the viewport_top actually increased — i.e. content
+        # grew beyond the terminal height. If content fits in the screen, no
+        # scroll is needed even if new lines were added.
+        scroll_delta = viewport_top - prev_vt
+        if scroll_delta > 0
+          hw_screen_row = @hardware_cursor_row - prev_vt
+          hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
+          move_to_bottom = rows - 1 - hw_screen_row
+          output << "\e[#{move_to_bottom}B" if move_to_bottom > 0
+          output << "\r\n" * scroll_delta
+          @hardware_cursor_row = viewport_top + {rows, new_size - viewport_top}.min - 1
         end
+
+        # ── 2. Find changed lines — only from the previous active-zone boundary ──
+        # Lines above @prev_active_start are committed log and never change.
+        # New log lines (log grew) appear between @prev_active_start and
+        # active_start; the active zone is [active_start, new_size).
+        visible_end = {new_size, viewport_top + rows}.min
+        scan_start = {@prev_active_start, viewport_top}.max
 
         first_changed = -1
         last_changed = -1
-
-        max_lines = {prev_size, new_size}.max
-        max_lines.times do |i|
+        (scan_start...visible_end).each do |i|
           old_line = i < prev_size ? @previous_lines[i] : ""
-          new_line = i < new_size ? new_lines[i] : ""
-          if old_line != new_line
+          if old_line != new_lines[i]
             first_changed = i if first_changed < 0
             last_changed = i
           end
         end
 
-        if new_size > prev_size
-          first_changed = prev_size if first_changed < 0
-          last_changed = {last_changed, new_size - 1}.max
+        # If content grew but all new lines are above the scan window
+        # (scrolled past), still repaint the last visible line.
+        if first_changed < 0 && new_size > prev_size && visible_end > scan_start
+          first_changed = {prev_size, scan_start}.max
+          last_changed = visible_end - 1
         end
 
+        # When content shrank, lines below the merge point shifted up.
+        # Force a rewrite of everything from first_changed to the end so
+        # the editor box and footer are repainted at their new positions.
+        if new_size < prev_size && first_changed >= 0
+          last_changed = visible_end - 1
+        end
+
+        # ── 3. No visible changes ──
         if first_changed < 0
-          # No lines changed; keep the hardware cursor where position_cursor
-          # left it, just update the viewport bookkeeping in case the terminal
-          # dimensions changed.
-          buffer_length = {rows, new_size}.max
-          @previous_viewport_top = {0, buffer_length - rows}.max
+          if new_size < prev_size && new_size < viewport_top + rows
+            # Content shrank: clear stale rows below new content.
+            target = new_size - 1 - @hardware_cursor_row
+            if target > 0
+              output << "\e[#{target}B"
+            elsif target < 0
+              output << "\e[#{-target}A"
+            end
+            output << "\e[1B\e[J\e[1A" if new_size < viewport_top + rows
+            @hardware_cursor_row = {0, new_size - 1}.max
+          end
+          @previous_viewport_top = viewport_top
           @max_lines_rendered = {@max_lines_rendered, new_size}.max
           return
         end
 
-        if first_changed < @previous_viewport_top
-          full_render(output, new_lines, rows)
-          return
-        end
-
-        prev_viewport_top = @previous_viewport_top
-        prev_viewport_bottom = prev_viewport_top + rows - 1
-
-        if first_changed > prev_viewport_bottom
-          current_screen_row = @hardware_cursor_row - prev_viewport_top
-          move_to_bottom = rows - 1 - current_screen_row
-          output << "\e[#{move_to_bottom}B" if move_to_bottom > 0
-          scroll = first_changed - prev_viewport_bottom
-          output << "\r\n" * scroll
-          prev_viewport_top += scroll
-          @hardware_cursor_row = first_changed
-        end
-
-        line_diff = first_changed - @hardware_cursor_row
-        if line_diff > 0
-          output << "\e[#{line_diff}B"
-        elsif line_diff < 0
-          output << "\e[#{-line_diff}A"
+        # ── 4. Move cursor to first_changed (screen-relative) ──
+        # Use cursor-up/down which never scroll the terminal.
+        target_screen_row = first_changed - viewport_top
+        hw_screen_row = @hardware_cursor_row - viewport_top
+        hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
+        row_diff = target_screen_row - hw_screen_row
+        if row_diff > 0
+          output << "\e[#{row_diff}B"
+        elsif row_diff < 0
+          output << "\e[#{-row_diff}A"
         end
         output << "\r"
 
-        render_end = {last_changed, new_size - 1}.min
+        # ── 5. Rewrite changed lines ──
+        # Use \e[1B (cursor down, no scroll) instead of \r\n between lines
+        # — \r\n at the bottom row would scroll the terminal unexpectedly.
+        render_end = {last_changed, visible_end - 1}.min
         (first_changed..render_end).each do |i|
-          output << "\r\n" if i > first_changed
+          output << "\r\e[1B" if i > first_changed
           output << "\e[2K"
           output << new_lines[i]
         end
 
         final_cursor_row = render_end
 
-        if render_end < new_size - 1
-          move_down = new_size - 1 - render_end
-          output << "\e[#{move_down}B"
-          final_cursor_row = new_size - 1
-        end
-
-        if new_size < prev_size
-          extra = prev_size - new_size
-          extra.times do
-            output << "\r\n\e[2K"
+        # ── 6. Clear leftover rows if content shrank ──
+        # Use \e[J (erase to end of screen) — never \r\n, which would scroll
+        # the terminal and corrupt the scrollback.
+        if new_size < prev_size && new_size < viewport_top + rows
+          if render_end < new_size - 1
+            move_down = new_size - 1 - render_end
+            output << "\e[#{move_down}B"
+            final_cursor_row = new_size - 1
           end
-          output << "\e[#{extra}A" if extra > 0
+          output << "\e[1B\e[J\e[1A"
         end
 
         @hardware_cursor_row = final_cursor_row
-        buffer_length = {rows, new_size}.max
-        @previous_viewport_top = {0, buffer_length - rows}.max
+        @previous_viewport_top = viewport_top
         @max_lines_rendered = {@max_lines_rendered, new_size}.max
       end
 
@@ -2637,6 +2651,10 @@ module Hcode
               lines.concat(render_read_group(group, name, false, cols))
             else
               has_result = !msg.tool_result.nil?
+              # Pending tool calls (no result yet) are rendered in the active
+              # zone, not here — the log is append-only. Once the result
+              # arrives the complete entry appears below. See TUI_ZONES.md.
+              return lines unless has_result
               lines << tool_header(name, msg.tool_args, msg.tool_result, has_result, msg.is_error)
               if args = msg.tool_args
                 # The header already shows the key argument for most tools;
@@ -2707,8 +2725,6 @@ module Hcode
           lines << ""
         when "thinking"
           lines.concat(render_thinking_block(msg.content, msg.expanded?, cols))
-        when "step_summary"
-          lines.concat(render_step_summary(msg))
         when "plan_box"
           lines.concat(render_plan_box(msg, cols))
         when "compaction"
@@ -3540,185 +3556,10 @@ module Hcode
         return if @streaming_thinking.empty?
         @messages << Message.new("thinking", @streaming_thinking)
         @streaming_thinking = ""
-        merge_turn_steps
       end
 
       private def visible_len(s : String) : Int32
         CharWidth.visible_width(s)
-      end
-
-      # Collapse older intermediate thinking/tool blocks within the current turn
-      # into a single muted summary line, keeping the most recent N steps visible.
-      # Mirrors the TypeScript TUI's `mergeCurrentTurnSteps`.
-      private def merge_turn_steps : Nil
-        merge_within_current_turn
-        merge_old_turns
-      end
-
-      private def merge_within_current_turn : Nil
-        keep = @keep_recent_steps
-        return if keep <= 0
-
-        # Find the start of the current turn (the most recent user message).
-        turn_start = -1
-        i = @messages.size - 1
-        while i >= 0
-          if @messages[i].role == "user"
-            turn_start = i
-            break
-          end
-          i -= 1
-        end
-        return if turn_start < 0
-
-        step_indices = [] of Int32
-        summary_idx = -1
-
-        (turn_start + 1...@messages.size).each do |idx|
-          case @messages[idx].role
-          when "thinking", "tool"
-            step_indices << idx
-          when "step_summary"
-            summary_idx = idx
-          end
-        end
-
-        total = step_indices.size
-        return if total <= keep
-
-        merge_count = total - keep
-        to_merge = step_indices.first(merge_count)
-
-        thinking = 0
-        tool = 0
-        to_merge.each do |idx|
-          case @messages[idx].role
-          when "thinking" then thinking += 1
-          when "tool"     then tool += 1
-          end
-        end
-
-        # Delete from the end toward the start so indices remain valid.
-        to_merge.reverse.each { |idx| @messages.delete_at(idx) }
-
-        if summary_idx >= 0
-          # Existing summary is always right after the user message, before the
-          # blocks we just removed, so its index is unchanged. Message is a struct,
-          # so we must reassign the updated value back into the array.
-          summary = @messages[summary_idx]
-          summary.thinking_count += thinking
-          summary.tool_count += tool
-          @messages[summary_idx] = summary
-        else
-          summary = Message.new("step_summary", "")
-          summary.thinking_count = thinking
-          summary.tool_count = tool
-          @messages.insert(turn_start + 1, summary)
-        end
-      end
-
-      # Cross-turn trim: collapse every turn older than `keep_recent_turns`
-      # into a single `step_summary` line, freeing the retained tool/thinking
-      # payloads (tool previews already cap at ~1 KB each, but over hundreds
-      # of turns this still adds up — see plans/TOOLS-LEAKS.md §B1). Non-step
-      # messages (assistant text, status, plan boxes) are preserved.
-      private def merge_old_turns : Nil
-        keep_turns = @keep_recent_turns
-        return if keep_turns <= 0
-
-        user_indices = [] of Int32
-        @messages.each_with_index do |m, idx|
-          user_indices << idx if m.role == "user"
-        end
-        return if user_indices.size <= keep_turns
-
-        # Build (user_idx, next_user_idx) ranges for the turns we collapse
-        # (all except the last `keep_turns`). Process in REVERSE so the
-        # deletions/insertions inside a turn don't invalidate the ranges
-        # of the still-to-process (earlier) turns.
-        collapse_count = user_indices.size - keep_turns
-        ranges = [] of {Int32, Int32}
-        collapse_count.times do |i|
-          u_idx = user_indices.unsafe_fetch(i)
-          n_idx = i + 1 < user_indices.size ? user_indices.unsafe_fetch(i + 1) : @messages.size
-          ranges << {u_idx, n_idx}
-        end
-
-        ranges.reverse_each do |user_idx, next_user_idx|
-          thinking = 0
-          tool = 0
-          to_delete = [] of Int32
-
-          (user_idx + 1...next_user_idx).each do |i|
-            msg = @messages[i]
-            case msg.role
-            when "thinking"
-              thinking += 1
-              to_delete << i
-            when "tool"
-              tool += 1
-              to_delete << i
-            when "step_summary"
-              # Fold any pre-existing summary's counts into the fresh one.
-              thinking += msg.thinking_count
-              tool += msg.tool_count
-              to_delete << i
-            end
-          end
-
-          next if to_delete.empty?
-
-          to_delete.reverse.each { |i| @messages.delete_at(i) }
-
-          summary = Message.new("step_summary", "")
-          summary.thinking_count = thinking
-          summary.tool_count = tool
-          @messages.insert(user_idx + 1, summary)
-        end
-      end
-
-      private def render_step_summary(msg : Message) : Array(String)
-        lines = [] of String
-        parts = [] of String
-
-        if msg.thinking_count > 0
-          t = msg.thinking_count == 1 ? "time" : "times"
-          parts << "thinking #{msg.thinking_count} #{t}"
-        end
-
-        if msg.tool_count > 0
-          t = msg.tool_count == 1 ? "tool" : "tools"
-          parts << "call #{msg.tool_count} #{t}"
-        end
-
-        unless parts.empty?
-          lines << ""
-          lines << "#{ANSI.color(@theme.colors.dim, nil)}\u2026 #{parts.join(", ")}#{ANSI.reset}"
-        end
-
-        lines
-      end
-
-      private def read_keep_recent_steps : Int32
-        raw = ENV[KEEP_RECENT_STEPS_ENV]?
-        return DEFAULT_KEEP_RECENT_STEPS unless raw
-
-        value = raw.to_i?
-        return DEFAULT_KEEP_RECENT_STEPS unless value
-        return DEFAULT_KEEP_RECENT_STEPS if value < 0
-
-        value
-      end
-
-      private def read_keep_recent_turns : Int32
-        raw = ENV[KEEP_RECENT_TURNS_ENV]?
-        return DEFAULT_KEEP_RECENT_TURNS unless raw
-
-        value = raw.to_i?
-        return DEFAULT_KEEP_RECENT_TURNS unless value
-        return DEFAULT_KEEP_RECENT_TURNS if value < 0
-
-        value
       end
 
       private def detect_git_branch : String
@@ -4016,6 +3857,45 @@ module Hcode
           s << after unless after.empty?
           s << ANSI.reset
         end
+      end
+
+      # Render a pending (in-flight) tool call for the ACTIVE zone. Mirrors
+      # `tool_header` for the no-result case but replaces the static bullet
+      # with an animated spinner, so the user sees live progress. The body
+      # preview (e.g. the Bash command) matches what the log entry will show
+      # once the result arrives.
+      private def render_running_tool(msg : Message, cols : Int32) : Array(String)
+        lines = [] of String
+        name = msg.tool_name
+        return lines unless name
+
+        # Pulsing circle animation ● → • → ⋅ → •, advancing every 3 ticks
+        # (~250ms). Matches the settled `●` bullet the log entry will show
+        # once the result arrives.
+        bullet_frame = Spinner::BASH_BULLET_FRAMES[(@spin_phase // 3) % Spinner::BASH_BULLET_FRAMES.size]
+        pc = ANSI.color(@theme.colors.primary, nil)
+        tc = ANSI.color(@theme.colors.text, nil)
+        dc = ANSI.color(@theme.colors.dim, nil)
+        r = ANSI.reset
+
+        if name == "Bash"
+          lines << "#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
+        else
+          verb = Hcode.t("tools.using")
+          key_arg = extract_key_argument(name, msg.tool_args)
+          tool_label = "#{pc}#{ANSI.bold}#{name}#{r}"
+          arg_str = key_arg ? "#{dc} (#{key_arg})#{r}" : ""
+          lines << "#{tc}#{bullet_frame}#{r} #{verb} #{tool_label}#{arg_str}"
+        end
+
+        if args = msg.tool_args
+          key_arg = extract_key_argument(name, args)
+          if name == "Bash" || key_arg.nil?
+            tool_preview(name, args).each { |l| lines << "#{dc}  #{l}#{r}" }
+          end
+        end
+
+        lines
       end
 
       private def tool_header(name : String, args : String?, tool_result : String?,

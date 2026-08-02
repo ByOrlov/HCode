@@ -74,6 +74,12 @@ namespace :mock do
   end
 end
 
+desc "Build and run mock-hcode (simulated 100-tool LLM output for render testing)"
+task :mockrun do
+  sh "crystal build bin/mock_hcode.cr -o bin/mock-hcode --warnings none --no-color"
+  sh "./bin/mock-hcode"
+end
+
 desc "Remove build artifacts"
 task :clean do
   rm_f "hcode"

@@ -39,6 +39,10 @@ module Hcode
       property preview : String = ""  # first user prompt (truncated)
       property workspace_id : String = ""
       property? legacy : Bool = false
+      # True when the wire log has no real conversation events (no user
+      # prompt, no assistant text, no tool calls/results). Such sessions
+      # are skipped by the session selector's smart filter.
+      property? empty : Bool = false
 
       def initialize(@id : String, @path : String, @wire_path : String)
       end
@@ -91,8 +95,11 @@ module Hcode
       end
 
       # List sessions, optionally scoped to one workspace. By default
-      # archived sessions are hidden. Newest first (by updated_at).
-      def list(ws_id : String? = nil, include_archived : Bool = false) : Array(SessionEntry)
+      # archived sessions are hidden and sessions without any messages are
+      # hidden too (the smart filter — empty sessions only clutter the
+      # picker). Newest first (by updated_at).
+      def list(ws_id : String? = nil, include_archived : Bool = false,
+               include_empty : Bool = false) : Array(SessionEntry)
         entries = [] of SessionEntry
 
         if ws_id
@@ -113,14 +120,17 @@ module Hcode
           scan_legacy(entries)
         end
 
-        result = include_archived ? entries : entries.reject(&.archived?)
+        result = entries
+        result = result.reject(&.archived?) unless include_archived
+        result = result.reject(&.empty?) unless include_empty
         result.sort_by! { |e| -e.updated_at.to_unix }
       end
 
       # Find a session by id across every workspace + legacy. Returns the
-      # first match (session ids are globally unique random hex).
+      # first match (session ids are globally unique random hex). Looks at
+      # every session regardless of archived / empty state.
       def get(session_id : String) : SessionEntry?
-        list(include_archived: true).find { |e| e.id == session_id }
+        list(include_archived: true, include_empty: true).find { |e| e.id == session_id }
       end
 
       # Most recently updated session, optionally within one workspace.
@@ -182,6 +192,7 @@ module Hcode
         end
 
         entry.preview = first_prompt(wire)
+        entry.empty = !has_messages?(wire)
         entry
       end
 
@@ -204,6 +215,32 @@ module Hcode
         state
       rescue ex : JSON::ParseException
         nil
+      end
+
+      # Whether the wire log contains any real conversation event: a user
+      # prompt/steer, assistant text, or a tool call/result. Sessions that
+      # only hold bookkeeping (or are truly empty) are considered empty and
+      # hidden from the picker. Early-exits on the first match.
+      private def has_messages?(wire : String) : Bool
+        File.each_line(wire) do |line|
+          next if line.strip.empty?
+          begin
+            parsed = JSON.parse(line)
+          rescue JSON::ParseException
+            next
+          end
+          case parsed["type"]?
+          when "turn.prompt", "turn.steer"
+            return true if parsed["data"]?.try(&.["prompt"]?).try(&.to_s.presence)
+          when "assistant.text"
+            return true if parsed["data"]?.try(&.["content"]?).try(&.to_s.presence)
+          when "tool.call", "tool.result"
+            return true
+          end
+        end
+        false
+      rescue File::Error
+        false
       end
 
       private def first_prompt(wire : String) : String
