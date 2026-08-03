@@ -118,10 +118,18 @@ module Hcode
         loop do
           buf = uninitialized UInt8[256]
           slice = buf.to_slice
-          bytes_read = STDIN.read(slice)
+          bytes_read = read_stdin_chunk(slice)
           break if bytes_read <= 0
           @buffer.concat(slice[0, bytes_read].to_a)
         end
+      end
+
+      private def read_stdin_chunk(slice : Bytes) : Int32
+        {% if flag?(:win32) %}
+          STDIN.read(slice)
+        {% else %}
+          LibC.read(STDIN.fd, slice.to_unsafe, slice.size).to_i32
+        {% end %}
       end
 
       private def parse_buffer : Nil
