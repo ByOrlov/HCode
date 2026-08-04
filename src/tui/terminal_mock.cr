@@ -119,13 +119,17 @@ module Hcode
         @screen.dup
       end
 
-      # Scrollback + visible grid (truncated to the last row touched by a
-      # write/clear/newline) — the full logical transcript of every row that
-      # has appeared on screen. Equivalent to the old single `output` array;
-      # use this (or its `output` alias) in zone assertions.
+      # Scrollback + visible grid. Trailing blank rows are stripped so that
+      # cleared rows below the active zone do not appear in the logical
+      # transcript. This mirrors the new blank-free rendering model.
       def visible_rows : Array(String)
         return @scrollback.dup if @max_touched < 0
         last = {@max_touched, @rows - 1}.min
+        # Strip rows that were cleared below the active zone.
+        while last >= 0 && @screen[last].empty?
+          last -= 1
+        end
+        return @scrollback.dup if last < 0
         @scrollback + @screen[0..last]
       end
 

@@ -5,143 +5,67 @@ require "../../src/tui/terminal_mock"
 require "../../src/tui/active_zone"
 
 describe Hcode::TUI::ActiveZone do
-  it "growing: draws exactly the zone lines and no blank padding" do
+  it "draws the active lines at the current cursor position" do
     zone = Hcode::TUI::ActiveZone.new
-    zone.set(["l0", "l1", "l2"] of String)
-    mock = Hcode::TUI::TerminalMock.new
+    mock = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
 
-    zone.render(mock, available_rows: 24)
+    visible = zone.render(mock, ["l0", "l1", "l2"] of String, available_rows: 10, prev_visible: 0)
 
+    visible.should eq(3)
     mock.output.should eq(["l0", "l1", "l2"])
-    zone.height_log.should eq([3])
-    zone.height.should eq(3)
-    zone.trailing_blanks.should eq(0)
   end
 
-  it "shrinking: pads blank rows for the height difference (10 -> 8 = 2 blanks)" do
+  it "tail-clips to available_rows when the zone is taller" do
     zone = Hcode::TUI::ActiveZone.new
-    zone.set((0...10).map { |i| "x#{i}" })
-    mock = Hcode::TUI::TerminalMock.new
-    zone.render(mock, available_rows: 24) # prev frame: 10 visible
-    zone.prev_height.should eq(10)
-    zone.trailing_blanks.should eq(0)
+    mock = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
 
-    zone.set((0...8).map { |i| "y#{i}" })
-    mock2 = Hcode::TUI::TerminalMock.new
-    mock2.cursor_row.should eq(0) # fresh mock
-    zone.render(mock2, available_rows: 24) # now 8 → pad 2
+    lines = (0...15).map { |i| "z#{i}" }.to_a
+    visible = zone.render(mock, lines, available_rows: 5, prev_visible: 0)
 
-    # 8 content rows + 2 blank rows.
-    mock2.output.should eq(["y0", "y1", "y2", "y3", "y4", "y5", "y6", "y7", "", ""])
-    zone.height_log.should eq([10, 8])
-    zone.trailing_blanks.should eq(2)
-    zone.shift_available?.should be_true
+    visible.should eq(5)
+    # Bottom 5 lines are drawn: z10..z14
+    mock.output.should eq((10...15).map { |i| "z#{i}" }.to_a)
   end
 
-  it "clamps drawing to available_rows when the zone is taller than viewport" do
+  it "clears rows left over from a taller previous frame" do
     zone = Hcode::TUI::ActiveZone.new
-    zone.set((0...15).map { |i| "z#{i}" })
-    mock = Hcode::TUI::TerminalMock.new
-    zone.render(mock, available_rows: 5)
+    mock = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
 
-    # First 5 rows drawn (A1 at top); tail z5..z14 clipped.
-    mock.output.should eq(["z0", "z1", "z2", "z3", "z4"])
-    zone.height_log.last.should eq(5)
+    zone.render(mock, ["a", "b", "c", "d", "e"] of String, available_rows: 10, prev_visible: 0)
+    mock.output.should eq(["a", "b", "c", "d", "e"])
+
+    mock2 = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
+    visible = zone.render(mock2, ["a", "b"] of String, available_rows: 10, prev_visible: 5)
+
+    visible.should eq(2)
+    mock2.output.should eq(["a", "b"])
   end
 
-  it "blank padding is clamped to the viewport" do
+  it "does not clear rows when the zone grew or stayed the same" do
     zone = Hcode::TUI::ActiveZone.new
-    zone.set((0...5).map { |i| "a#{i}" })
-    mock = Hcode::TUI::TerminalMock.new
-    zone.render(mock, available_rows: 5) # prev visible 5
+    mock = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
 
-    zone.set((0...2).map { |i| "b#{i}" })
-    mock2 = Hcode::TUI::TerminalMock.new
-    # available_rows smaller than prev_visible: padding limited to available(3) - visible(2) = 1 blank.
-    zone.render(mock2, available_rows: 3)
+    zone.render(mock, ["a", "b"] of String, available_rows: 10, prev_visible: 0)
+    mock.output.should eq(["a", "b"])
 
-    mock2.output.should eq(["b0", "b1", ""])
-    zone.height_log.last.should eq(2)
-    zone.trailing_blanks.should eq(1)
+    mock2 = Hcode::TUI::TerminalMock.new(rows: 10, cols: 80)
+    visible = zone.render(mock2, ["a", "b", "c", "d"] of String, available_rows: 10, prev_visible: 2)
+
+    visible.should eq(4)
+    mock2.output.should eq(["a", "b", "c", "d"])
   end
 
-  it "height_log is capped" do
+  it "handles an empty active zone after a non-empty one" do
     zone = Hcode::TUI::ActiveZone.new
-    20.times do
-      zone.set(["only"] of String)
-      zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    end
-    zone.height_log.size.should eq(Hcode::TUI::ActiveZone::HEIGHT_LOG_CAP)
-  end
+    mock = Hcode::TUI::TerminalMock.new(rows: 5, cols: 80)
 
-  it "reset clears state, height log, and trailing blanks" do
-    zone = Hcode::TUI::ActiveZone.new
-    zone.set(["a", "b"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
+    zone.render(mock, ["x"] of String, available_rows: 5, prev_visible: 0)
+    mock.output.should eq(["x"])
 
-    zone.reset
-    zone.height.should eq(0)
-    zone.height_log.should be_empty
-    zone.prev_height.should eq(0)
-    zone.trailing_blanks.should eq(0)
-  end
+    mock2 = Hcode::TUI::TerminalMock.new(rows: 5, cols: 80)
+    visible = zone.render(mock2, [] of String, available_rows: 5, prev_visible: 1)
 
-  it "consume_blank decrements trailing_blanks" do
-    zone = Hcode::TUI::ActiveZone.new
-    zone.set((0...4).map { |i| "a#{i}" })
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-
-    zone.set(["a0"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    zone.trailing_blanks.should eq(3)
-    zone.shift_available?.should be_true
-
-    zone.consume_blank
-    zone.trailing_blanks.should eq(2)
-    zone.consume_blank
-    zone.trailing_blanks.should eq(1)
-    zone.consume_blank
-    zone.trailing_blanks.should eq(0)
-    zone.shift_available?.should be_false
-
-    # Does not go below 0
-    zone.consume_blank
-    zone.trailing_blanks.should eq(0)
-  end
-
-  it "growth consumes trailing blanks" do
-    zone = Hcode::TUI::ActiveZone.new
-    zone.set((0...5).map { |i| "a#{i}" })
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-
-    # Shrink to 2 → 3 blanks
-    zone.set(["a0", "a1"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    zone.trailing_blanks.should eq(3)
-
-    # Grow to 4 → consumes 2 blanks
-    zone.set((0...4).map { |i| "b#{i}" })
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    zone.trailing_blanks.should eq(1)
-  end
-
-  it "visible == prev_visible keeps trailing_blanks unchanged" do
-    zone = Hcode::TUI::ActiveZone.new
-    zone.set(["a0", "a1", "a2"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-
-    # Shrink to 1 → 2 blanks
-    zone.set(["a0"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    zone.trailing_blanks.should eq(2)
-
-    # Consume 1 (simulating a log push shift)
-    zone.consume_blank
-    zone.trailing_blanks.should eq(1)
-
-    # Render same size → trailing_blanks unchanged
-    zone.set(["c0"] of String)
-    zone.render(Hcode::TUI::TerminalMock.new, available_rows: 24)
-    zone.trailing_blanks.should eq(1)
+    visible.should eq(0)
+    mock2.output.should be_empty
   end
 end

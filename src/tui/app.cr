@@ -211,14 +211,16 @@ module Hcode
       @theme : Theme
       @messages : Array(Message) = [] of Message
       # Last fully rendered frame (log + active combined). Kept for the
-      # `/memory` profiler (`render_buffer_*`) and to compute the previous
-      # total height for scroll math. Per-zone state lives in the zones below.
+      # `/memory` profiler (`render_buffer_*`).
       @previous_lines : Array(String) = [] of String
+      # Previous-frame geometry / scroll state for incremental rendering.
       @previous_viewport_top : Int32 = 0
+      @prev_log_count : Int32 = 0
+      @prev_active_visible : Int32 = 0
       @hardware_cursor_row : Int32 = 0
-      # The two render zones (see `docs/TUI_ZONES.md`). LogZone is the
-      # append-only immutable history (only an emission cursor is stored);
-      # ActiveZone holds the repainted region's state and a height log.
+      # The two render zones (see `docs/TUI_ZONES.md`). LogZone tracks which
+      # finalized log lines have already been emitted; ActiveZone is a stateless
+      # renderer that paints the transient region at the bottom of the screen.
       @log_zone : LogZone = LogZone.new
       @active_zone : ActiveZone = ActiveZone.new
       @last_cols : Int32 = 0
@@ -286,6 +288,10 @@ module Hcode
       @show_command_hints : Bool = false
       @command_hints : Array(CommandInfo) = [] of CommandInfo
       @command_hint_selected : Int32 = 0
+      @command_hint_scroll : Int32 = 0
+      # Maximum number of slash-command hints rendered at once. The list scrolls
+      # when there are more matches, keeping the selection always visible.
+      COMMAND_HINT_MAX = 10
       @export_path : String?
       @on_compact : (-> Nil)?
       @on_clear : (-> Nil)?
@@ -620,10 +626,9 @@ module Hcode
         @streaming_thinking = ""
         @streaming_tool = nil
         @current_step = 0
-        # History was rebuilt from scratch — reset both zones so the next frame
-        # does a full repaint and the emission cursor / height log restart.
+        # History was rebuilt from scratch — reset the log emission cursor and
+        # force a full repaint on the next frame.
         @log_zone.reset
-        @active_zone.reset
         @first_render = true
         invalidate_log_cache!
 
@@ -1219,6 +1224,7 @@ module Hcode
             @on_cancel.try(&.call)
           elsif !@editor.empty?
             @editor.clear
+            update_command_hints
           end
         when .paste?
           if text = key.text
@@ -1476,12 +1482,30 @@ module Hcode
             @show_command_hints = true
             @command_hints = matches
             @command_hint_selected = {@command_hint_selected, matches.size - 1}.min
+            @command_hint_scroll = 0
           else
             @show_command_hints = false
           end
         else
           @show_command_hints = false
         end
+      end
+
+      # Compute the visible window [start, count) for command hints, mirroring
+      # `SelectList#visible_window`: adjust `@command_hint_scroll` so the
+      # selected row is always on screen.
+      private def command_hint_window : {Int32, Int32}
+        size = @command_hints.size
+        return {0, 0} if size == 0
+        mv = {COMMAND_HINT_MAX, size}.min
+        if @command_hint_selected < @command_hint_scroll
+          @command_hint_scroll = @command_hint_selected
+        elsif @command_hint_selected >= @command_hint_scroll + mv
+          @command_hint_scroll = {@command_hint_selected - mv + 1, 0}.max
+        end
+        max_offset = {size - mv, 0}.max
+        @command_hint_scroll = {@command_hint_scroll, max_offset}.min
+        {@command_hint_scroll, mv}
       end
 
       private def handle_external_editor : Nil
@@ -2353,41 +2377,9 @@ module Hcode
         do_render(port)
       end
 
-      # Drive the real `full_render`/`incremental_render` path with caller-
-      # supplied zone lines, bypassing `build_rendered_lines_split`. Used by
-      # zone-behaviour tests that need controlled content while still
-      # exercising the actual scroll/shift/cursor-tracking logic.
-      # Pre-compute the active-zone blank layout for this frame: plan
-      # shrink/growth blanks (trailing, below the content) and shift (consume
-      # blanks for new log lines). Must run BEFORE the full/incremental
-      # decision so `viewport_top` stays stable when the zone shrinks.
-      private def prepare_frame(log_lines : Array(String), active_lines : Array(String), rows : Int32) : Int32
-        available_rows = {rows - 2, 1}.max
-
-        # Shift FIRST: consume blanks left from the previous frame for new log
-        # lines. Must run before plan() so the current frame's shrink-created
-        # blanks are not consumed by this frame's own log push.
-        new_log_count = log_lines.size - @log_zone.flushed
-        shifts = {new_log_count, @active_zone.available_blanks}.min
-        shifts.times { @active_zone.consume_blank }
-
-        # Then plan: compute blanks for this frame's shrink/growth.
-        @active_zone.set(active_lines)
-        @active_zone.plan(available_rows)
-
-        log_lines.size + active_lines.size
-      end
-
-      # Cap how many NEW log lines are revealed to the renderer per frame. The
-      # bound is the actual visible space below the active zone (`rows - active`),
-      # not just `rows - 2`: every new log line must land inside the visible
-      # viewport so it is written exactly where it belongs. If the chunk exceeds
-      # the visible capacity, some new lines fall above the viewport (into the
-      # scrollback region) before they have been emitted — LogZone#flush then
-      # writes them at screen row 0, overwriting real content and leaving the
-      # active zone stranded mid-log. When lines are held back, `dirty!` is set
-      # so the render loop re-renders and drains the rest. Returns a (possibly
-      # truncated) array — never mutates the caller's.
+      # Cap how many NEW log lines are flushed in a single frame. The chunk is
+      # the remaining space after the active zone so that the throttled frame
+      # fits inside the viewport without scrolling.
       private def throttle_log(log_lines : Array(String), active_lines : Array(String), rows : Int32) : Array(String)
         chunk = {rows - active_lines.size, 1}.max
         reveal = @log_zone.reveal_limit(log_lines.size, chunk)
@@ -2399,16 +2391,12 @@ module Hcode
       def render_zones(port : TerminalPort, log_lines : Array(String), active_lines : Array(String)) : Nil
         cols = port.cols
         rows = port.rows
+
         log_lines = throttle_log(log_lines, active_lines, rows)
         total = log_lines.size + active_lines.size
 
-        size_changed = cols != @last_cols || rows != @last_rows
-        effective_total = prepare_frame(log_lines, active_lines, rows)
-        viewport_top = {0, effective_total - rows}.max
-
         port.begin_frame
-        if @first_render || size_changed || @log_zone.shrank?(log_lines.size) ||
-           viewport_top < @previous_viewport_top
+        if @first_render
           full_render(port, log_lines, active_lines, rows)
         else
           incremental_render(port, log_lines, active_lines, rows)
@@ -2439,26 +2427,19 @@ module Hcode
         apply_line_resets(log_lines)
         apply_line_resets(active_lines)
 
-        total = log_lines.size + active_lines.size
-
-        size_changed = cols != @last_cols || rows != @last_rows
-        effective_total = prepare_frame(log_lines, active_lines, rows)
-        viewport_top = {0, effective_total - rows}.max
-
         port.begin_frame
-        if @first_render || size_changed || @log_zone.shrank?(log_lines.size) ||
-           viewport_top < @previous_viewport_top
+        if @first_render
           full_render(port, log_lines, active_lines, rows)
         else
           incremental_render(port, log_lines, active_lines, rows)
         end
-        position_cursor(port, total, editor_content_line)
+        position_cursor(port, log_lines, active_lines, editor_content_line)
         port.end_frame
 
         @previous_lines = log_lines + active_lines
         @last_cols = cols
         @last_rows = rows
-        @cursor_line = total
+        @cursor_line = log_lines.size + active_lines.size
       end
 
       # Test-compatible view of a frame: returns the merged frame lines, the
@@ -2612,13 +2593,23 @@ module Hcode
           active_lines.concat(render_editor_box(cols))
 
           if @show_command_hints && @command_hints.size > 0
-            @command_hints.each_with_index do |hint, i|
+            start, count = command_hint_window
+            if start > 0
+              active_lines << "#{ANSI.color(@theme.colors.dim, nil)}    ↑ #{start} more#{ANSI.reset}"
+            end
+            count.times do |rel|
+              i = start + rel
+              hint = @command_hints[i]
               usage_part = hint.usage.empty? ? "" : " #{ANSI.color(@theme.colors.dim, nil)}#{hint.usage}#{ANSI.reset}"
               if i == @command_hint_selected
                 active_lines << "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}  → #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               else
                 active_lines << "#{ANSI.color(@theme.colors.dim, nil)}    #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               end
+            end
+            remaining = @command_hints.size - (start + count)
+            if remaining > 0
+              active_lines << "#{ANSI.color(@theme.colors.dim, nil)}    ↓ #{remaining} more#{ANSI.reset}"
             end
           end
         end
@@ -2631,7 +2622,8 @@ module Hcode
 
         if @debug_zones
           rows = @terminal.rows
-          total = log_lines.size + active_lines.size
+          active_zone_size = active_lines.size + 1
+          total = log_lines.size + active_zone_size
           pending = log_lines.size - @log_zone.flushed
           active_lines << String.build do |s|
             s << ANSI.color(@theme.colors.dim, nil)
@@ -2639,7 +2631,7 @@ module Hcode
             s << "LogZone: #{@log_zone.flushed}/#{log_lines.size}"
             s << (pending > 0 ? " (pending: #{pending})" : "")
             s << ", "
-            s << "ActiveZone: #{active_lines.size}, "
+            s << "ActiveZone: #{active_zone_size}, "
             s << "RenderQuery: #{@render_pending} (#{@render_ms}ms), "
             s << "Cache: #{@log_cache_dirty ? "dirty" : "hit"}"
             s << ", "
@@ -2687,49 +2679,45 @@ module Hcode
         # \e[3J would clear the scrollback buffer — never use it in the main
         # screen buffer, it destroys the user's terminal scroll history.
         port.cursor_home
-        first = true
-        log_lines.each do |line|
-          port.newline unless first
+        (log_lines + active_lines).each_with_index do |line, i|
+          port.newline if i > 0
           port.clear_line
           port.write(line)
-          first = false
-        end
-        active_lines.each do |line|
-          port.newline unless first
-          port.clear_line
-          port.write(line)
-          first = false
         end
         port.clear_below
+
         total = log_lines.size + active_lines.size
+        viewport_top = {0, total - rows}.max
+        active_visible = Math.min(active_lines.size, rows)
+
         @hardware_cursor_row = {0, total - 1}.max
-        @previous_viewport_top = {0, {rows, total}.max - rows}.max
+        @previous_viewport_top = viewport_top
+        @prev_log_count = log_lines.size
+        @prev_active_visible = active_visible
         # A full repaint commits every line to the terminal — realign the log
-        # emission cursor and seed the active-zone height baseline so the next
-        # incremental frame detects a shrink correctly (a full repaint paints
-        # the zone but bypasses ActiveZone#render, so we record the visible
-        # height here instead).
+        # emission cursor so the next incremental frame starts from a known state.
         @log_zone.reset
         @log_zone.mark_flushed(log_lines.size)
-        @active_zone.set(active_lines)
-        viewport_top = {0, total - rows}.max
-        log_visible = {0, {log_lines.size - viewport_top, rows}.min}.max
-        @active_zone.seed_baseline(rows - log_visible)
         @first_render = false
       end
 
-      # Incremental repaint driven by the two zones. The orchestrator handles
-      # the terminal mechanics (scroll into scrollback, cursor positioning);
-      # `LogZone` tracks which log lines are new, `ActiveZone` rewrites the
-      # repainted region in place (clamped to the viewport, padding blank rows
-      # when it shrank). See `docs/TUI_ZONES.md`.
+      # Incremental repaint driven by the two zones. The active zone is painted
+      # at the bottom of the visible area every frame; freed rows are cleared
+      # with \e[J. There is no manual blank/scroll simulation.
       private def incremental_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
         total = log_lines.size + active_lines.size
         viewport_top = {0, total - rows}.max
         prev_vt = @previous_viewport_top
-
-        # ── 1. Scroll: viewport moved down (content exceeded visible area) ──
         scroll_delta = viewport_top - prev_vt
+
+        # The terminal cannot scroll back up on its own. If the viewport shrank
+        # (e.g. a tall modal was dismissed), the only safe option is a full repaint.
+        if scroll_delta < 0 || log_lines.size < @prev_log_count
+          full_render(port, log_lines, active_lines, rows)
+          return
+        end
+
+        # ── 1. Scroll the terminal up if the viewport moved down ──
         if scroll_delta > 0
           hw_screen_row = @hardware_cursor_row - prev_vt
           hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
@@ -2739,36 +2727,37 @@ module Hcode
           @hardware_cursor_row = viewport_top + {rows, total - viewport_top}.min - 1
         end
 
-        # ── 2. Write new log lines in place ──
-        # Shift (consuming blanks for new log lines) was done in prepare_frame;
-        # here we only position the cursor to the first unflushed log row and
-        # let LogZone emit from its internal cursor. LogZone indexes by
-        # @flushed, so the full array must be passed (not a sub-slice).
+        # ── 2. Write any new log lines ──
         new_log_count = log_lines.size - @log_zone.flushed
         if new_log_count > 0
           write_from = {@log_zone.flushed, viewport_top}.max
           move_cursor_to(port, write_from, viewport_top, rows)
           emitted = @log_zone.flush(port, log_lines)
-          @hardware_cursor_row += emitted
+          @hardware_cursor_row = write_from + emitted
         else
           @log_zone.mark_flushed(log_lines.size)
         end
 
-        # ── 3. Render the active zone in place ──
-        active_start = log_lines.size
-        move_cursor_to(port, {active_start, viewport_top}.max, viewport_top, rows)
-        # Intentional hardcoded cap: the active zone must never exceed the
-        # viewport (the editable slice of the terminal buffer). `rows - 2` keeps
-        # ≥2 log rows visible above it so the zone never occupies the whole
-        # screen; if it did, a visual tear would appear when reading history
-        # because the active zone would overwrite content past the viewport's
-        # bottom edge. This is a deliberate design constraint, not a leftover.
-        available_rows = {rows - 2, 1}.max
-        @active_zone.render(port, available_rows)
-        painted = @active_zone.last_painted
-        @hardware_cursor_row = active_start + (painted > 0 ? painted - 1 : 0)
+        # ── 3. Render the active zone anchored at the bottom of the viewport ──
+        active_visible = Math.min(active_lines.size, rows)
+        active_start = total - active_visible
+        move_cursor_to(port, active_start, viewport_top, rows)
+        prev_active_visible = @prev_active_visible
+        @prev_active_visible = @active_zone.render(
+          port, active_lines, rows, prev_active_visible
+        )
+        # After render the real cursor is either on the last content row, or,
+        # if the zone shrank and clear_below was issued, one row below it.
+        @hardware_cursor_row = if active_visible == 0
+                                 active_start
+                               elsif prev_active_visible > active_visible
+                                 active_start + active_visible
+                               else
+                                 active_start + active_visible - 1
+                               end
 
         @previous_viewport_top = viewport_top
+        @prev_log_count = log_lines.size
       end
 
       # Move the hardware cursor to an absolute content row (screen-relative),
@@ -2786,43 +2775,64 @@ module Hcode
         @hardware_cursor_row = viewport_top + target_screen
       end
 
-      private def position_cursor(port : TerminalPort, new_size : Int32, editor_content_line : Int32) : Nil
+      private def position_cursor(
+        port : TerminalPort,
+        log_lines : Array(String),
+        active_lines : Array(String),
+        editor_content_line : Int32,
+      ) : Nil
         if @exit_confirm
           port.carriage_return
           return
         end
+
+        rows = port.rows
+        total = log_lines.size + active_lines.size
+        viewport_top = @previous_viewport_top
 
         # No editor is rendered while the help overlay is open — park the
         # hardware cursor on the panel's last line and leave it hidden. The
         # next non-help render restores normal positioning.
         if @help_panel.visible?
           port.hide_cursor
-          target_row = {new_size - 1, 0}.max
-          row_delta = target_row - @hardware_cursor_row
+          target_row = {total - 1, 0}.max
+          target_screen = {0, {target_row - viewport_top, rows - 1}.min}.max
+          row_delta = target_screen - (@hardware_cursor_row - viewport_top)
           port.cursor_down(row_delta) if row_delta > 0
           port.cursor_up(-row_delta) if row_delta < 0
           port.carriage_return
-          @hardware_cursor_row = target_row
+          @hardware_cursor_row = viewport_top + target_screen
           return
         end
 
         port.show_cursor
 
-        return if new_size <= 0
+        return if active_lines.empty?
 
-        # Position the hardware cursor in SCREEN coordinates. The editor's
-        # visual cursor row/col (set during `render_editor_box`) plus the
-        # editor's content-line anchor give an absolute content row; subtracting
-        # the viewport top converts it to a screen row. Clamping the target to
-        # [0, rows-1] keeps the hardware cursor synced with the rendered block
-        # cursor even when the editor is scrolled/clipped.
-        rows = port.rows
-        viewport_top = @previous_viewport_top
-        editor_content_row = editor_content_line + @editor.cursor_visual_row
-        target_screen = editor_content_row - viewport_top
-        hw_screen = @hardware_cursor_row - viewport_top
-        target_screen = {0, {target_screen, rows - 1}.min}.max
-        hw_screen = {0, {hw_screen, rows - 1}.min}.max
+        # The editor lives inside the active zone. Figure out where the active
+        # zone actually starts on screen, accounting for tail-clipping when the
+        # zone is taller than the viewport.
+        active_visible = Math.min(active_lines.size, rows)
+        active_skip = active_lines.size - active_visible
+        active_start = total - active_visible
+
+        editor_start = editor_content_line - log_lines.size - 1
+        # +1 because cursor_visual_row is relative to the first editor content
+        # row, while editor_start points at the box top border.
+        editor_row = active_start + (editor_start - active_skip) + 1 + @editor.cursor_visual_row
+
+        # Clamp to the visible active zone so the hardware cursor never drifts
+        # below the rendered block cursor.
+        editor_row = {
+          active_start,
+          {
+            editor_row,
+            active_start + active_visible - 1,
+          }.min,
+        }.max
+
+        target_screen = {0, {editor_row - viewport_top, rows - 1}.min}.max
+        hw_screen = {0, {@hardware_cursor_row - viewport_top, rows - 1}.min}.max
 
         row_delta = target_screen - hw_screen
         port.cursor_down(row_delta) if row_delta > 0

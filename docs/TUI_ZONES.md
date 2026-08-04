@@ -27,8 +27,8 @@ lifecycle rules:
 ├──────────────────────────────────────┤
 │  ACTIVE ZONE (repainted every frame) │   Finite set of lines (5–15).
 │  ⠹ Running Edit...                   │   Only this region is ever
-│  ● streaming text...                 │   diffed and rewritten with
-│  ┌──────────────────────────────┐    │   cursor moves + \e[2K.
+│  ● streaming text...                 │   rewritten with cursor moves
+│  ┌──────────────────────────────┐    │   + \e[2K / \e[J.
 │  │ editor input                │    │
 │  └──────────────────────────────┘    │
 └──────────────────────────────────────┘
@@ -73,40 +73,101 @@ to the log:
 | `tool_call_start` | (nothing) | Spinner/status updated |
 | `turn_end` | (nothing) | Spinner stopped, status cleared |
 
-After each transition, the active zone is rewritten from scratch (its
-content fully changed), while the log simply grew by appending. No
+After each transition, the active zone is rewritten from scratch. No
 already-written log line is ever modified.
 
 ## Rendering algorithm
 
+Inputs per frame:
+
+- `log_lines` — finalized lines that should be visible above the active zone.
+- `active_lines` — transient lines that form the active zone.
+- `rows` — terminal height.
+
 ```
-render(new_lines, rows):
-  active_height = size of active zone (spinner + streaming + editor)
-  log_height    = new_lines.size - active_height
-  active_start  = log_height
-
-  # The active zone is always at the bottom of the visible area.
-  # Lines above it are log lines that scrolled into the terminal buffer.
-
-  # 1. Scroll the terminal so that the active zone bottom aligns
-  #    with the terminal's last row.
-  scroll_delta = max(0, new_lines.size - prev_lines.size)
-  if scroll_delta > 0:
-    move cursor to bottom row of visible area
-    emit \r\n * scroll_delta
-
-  # 2. Diff only the active zone [active_start, new_lines.size)
-  #    against the previous active zone.
-  first_changed = first index in [active_start, new_lines.size) where
-                  new_lines[i] != prev_lines[i]
-  last_changed  = last such index
-
-  # 3. Move cursor to first_changed (relative to current cursor position)
-  #    and rewrite changed lines with \e[2K + new content.
-
-  # 4. If active zone shrank (fewer lines than before), clear the
-  #    leftover rows below it with \e[J (no \r\n — never scroll here).
+total         = log_lines.size + active_lines.size
+viewport_top  = max(0, total - rows)
+active_visible = min(active_lines.size, rows)
+active_start  = total - active_visible
 ```
+
+### Full render
+
+Used on the first frame, after a resize, or whenever the viewport moves up
+(`viewport_top` decreased). It is the only safe way to recover a consistent
+screen state because the terminal cannot scroll down on its own.
+
+```
+cursor_home
+for each line in log_lines + active_lines:
+    newline               # except before the first line
+    clear_line            # \e[2K
+    write(line)
+clear_below               # \e[J — erase leftover rows from a taller previous frame
+
+hardware_cursor_row = max(0, total - 1)
+prev_viewport_top   = viewport_top
+prev_log_count    = log_lines.size
+prev_active_visible = active_visible
+log_zone.reset
+log_zone.mark_flushed(log_lines.size)
+```
+
+`\e[2J` (full-screen erase) is intentionally avoided — it blanks the entire
+visible area before new content is written and causes flicker. Rewriting in
+place with `\e[K` / `\e[J` never produces a fully blank frame. `\e[3J` is also
+avoided because it destroys the user's scrollback history.
+
+### Incremental render
+
+Used on every subsequent frame. It performs three small, independent steps:
+
+1. **Scroll up if the viewport moved down.**
+
+   ```
+   scroll_delta = viewport_top - prev_viewport_top
+   if scroll_delta > 0:
+       move cursor to the bottom row of the visible area
+       emit \r\n * scroll_delta
+       hardware_cursor_row = viewport_top + min(rows, total - viewport_top) - 1
+   ```
+
+2. **Emit any new log lines.**
+
+   The log zone tracks how many log lines have already been flushed
+   (`log_zone.flushed`). Only the delta is written:
+
+   ```
+   new_log_count = log_lines.size - log_zone.flushed
+   if new_log_count > 0:
+       write_from = max(log_zone.flushed, viewport_top)
+       move cursor to write_from
+       emitted = log_zone.flush(port, log_lines)
+       hardware_cursor_row = write_from + emitted
+   else:
+       log_zone.mark_flushed(log_lines.size)
+   ```
+
+   To avoid pushing the active zone off-screen in a single frame, the log
+   throttle caps each flush to:
+
+   ```
+   chunk = max(1, rows - active_lines.size)
+   ```
+
+3. **Repaint the active zone at the bottom.**
+
+   ```
+   move cursor to active_start
+   visible = active_zone.render(port, active_lines, rows, prev_active_visible)
+   prev_active_visible = visible
+   update hardware_cursor_row based on whether the zone shrank
+   ```
+
+   `ActiveZone#render` always draws from the current cursor row downward. If
+   `active_lines.size > rows` it draws only the bottom `rows` lines
+   (tail-clipping). If `prev_active_visible > visible` it issues `clear_below`
+   after the new content to erase the stale rows below.
 
 ## Why this eliminates scroll bugs
 
@@ -114,11 +175,11 @@ render(new_lines, rows):
    rewritten, so no duplicates or corrupted content appears when scrolling up.
 2. **Active zone is always visible** — all cursor moves are relative to the
    bottom of the visible area and stay within a small range (5–15 lines).
-3. **No full-array diff** — only the active zone is compared, so
-   `merge_turn_steps` or message finalization cannot trigger a false
-   "everything changed" repaint.
-4. **No high-water mark or viewport tracking** — the program does not track
-   where the terminal's scrollback starts; it only knows the active zone is
-   at the bottom and the log grows above it.
-5. **Scroll is natural** — growth is handled by `\r\n` at the bottom row,
-   which is standard terminal scroll behavior. No artificial scroll logic.
+3. **No full-array diff** — the active zone is fully repainted every frame
+   with `\e[2K`, so `merge_turn_steps` or message finalization cannot trigger
+   a false "everything changed" repaint.
+4. **No manual blank/scroll simulation** — freed rows are simply erased with
+   `\e[J`; the terminal handles real scrolling via `\r\n` at the bottom row.
+5. **Only three numbers track the previous frame** — `prev_viewport_top`,
+   `prev_log_count`, and `prev_active_visible`. There is no height history,
+   no blank counter, and no consume/shift state to desynchronize.

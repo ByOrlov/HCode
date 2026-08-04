@@ -7,6 +7,7 @@ require "../../src/tui/markdown"
 require "../../src/tui/select_list"
 require "../../src/tui/diff"
 require "../../src/tui/help_panel"
+require "../../src/tui/terminal_mock"
 require "../../src/tui/app"
 
 def app_strip_ansi(str : String) : String
@@ -626,30 +627,27 @@ describe Hcode::TUI::App do
 
     # Regression: when the active zone shrinks (e.g. the editor box was tall
     # because of wrapped long text, then the text was cleared), the leftover
-    # rows below the new zone bottom must be cleared. ActiveZone tracks each
-    # frame's visible height in a log and, when the new height is smaller than
-    # the previous one, pads blank rows (\e[2K) for the difference so no stale
-    # content lingers.
+    # rows below the new zone bottom must be cleared.
     it "clears stale rows when the active zone shrinks" do
       app = Hcode::TUI::App.new
       app.@terminal.set_size(40, 24)
+      mock = Hcode::TUI::TerminalMock.new(rows: 24, cols: 80)
 
       # Frame 1: tall editor box (long text wraps to many rows).
       app.@editor.set("x" * 200)
-      app.build_render_output
-      tall = app.@active_zone.height_log.last
+      app.render_to(mock)
+      tall = mock.visible_rows.size
 
       # Frame 2: short editor box (text cleared → single placeholder row).
       app.@editor.clear
-      output = app.build_render_output
+      app.render_to(mock)
+      short = mock.visible_rows.size
 
-      short = app.@active_zone.height_log.last
       short.should be < tall
 
-      # The active zone emitted more line-clears than its new height — the
-      # excess are the blank padding rows that wipe the stale taller frame.
-      drawn = output.scan("\e[2K").size
-      drawn.should be > short
+      # All rows below the new content must be blank.
+      content_end = mock.visible_rows.size
+      mock.screen[content_end..].each { |row| row.should eq("") }
     end
   end
 end
