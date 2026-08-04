@@ -24,6 +24,7 @@ module Hcode
       property temperature : Float64? = nil
       property proxy : String? = nil
       property language : String? = nil
+      property debug_zones : Bool = false
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
       property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
@@ -145,6 +146,7 @@ module Hcode
 
         if ui = root["ui"]?.try(&.as_h?)
           config.language = ui["language"]?.try(&.as_s?)
+          config.debug_zones = ui["debug_zones"]?.try(&.as_bool?) || false
         end
 
         if notif = root["notifications"]?.try(&.as_h?)
@@ -272,6 +274,7 @@ module Hcode
                 if lang = @language
                   json.field("language", lang)
                 end
+                json.field("debug_zones", @debug_zones)
               end
             end
 

@@ -162,6 +162,20 @@ describe Hcode::Config::Config do
         File.delete(path) rescue nil
       end
     end
+
+    it "round-trips the debug_zones ui flag" do
+      config = Hcode::Config::Config.new
+      config.debug_zones = true
+
+      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      begin
+        config.save(path)
+        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        reloaded.debug_zones.should be_true
+      ensure
+        File.delete(path) rescue nil
+      end
+    end
   end
 end
 

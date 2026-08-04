@@ -514,6 +514,16 @@ module Hcode
           when chunk = chunks.receive?
             break if chunk.nil?
             block.call(chunk)
+            # Abort can be set by the main loop fiber between chunks (via
+            # Fiber.yield in the chat callback). Check immediately instead of
+            # waiting for the timeout branch — during fast streaming (thinking
+            # deltas arriving <100ms apart) the timeout never fires, so without
+            # this check ESC/Ctrl+C would be ignored until the stream pauses.
+            if aborted?.call
+              chunks.close
+              active.close!
+              raise AbortedError.new
+            end
           when timeout(100.milliseconds)
             if aborted?.call
               chunks.close

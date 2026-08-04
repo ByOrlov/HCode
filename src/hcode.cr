@@ -127,6 +127,11 @@ require "./tui/undo_dialog"
 require "./tui/tasks_browser"
 require "./tui/setup_controller"
 require "./tui/command_controller"
+require "./tui/terminal_port"
+require "./tui/terminal_mock"
+require "./tui/ansi_terminal_port"
+require "./tui/log_zone"
+require "./tui/active_zone"
 require "./tui/app"
 require "./tui/diff"
 require "./tui/usage_panel"
@@ -728,6 +733,7 @@ module Hcode
       app.max_context_tokens = agent.context.max_context_tokens
       app.home = home
       app.work_dir = work_dir
+      app.debug_zones = config.debug_zones
 
       # Wire subagent lifecycle events from the runners into the TUI so the
       # swarm progress panel animates live. Each event is routed to
@@ -1121,6 +1127,11 @@ module Hcode
       end
       app.on_language_change = ->(lang : String) do
         config.language = lang
+        config.save
+        nil
+      end
+      app.on_debug_zones_change = ->(on : Bool) do
+        config.debug_zones = on
         config.save
         nil
       end

@@ -42,6 +42,71 @@ describe Hcode::TUI::App do
     glob.not_nil!.tool_result.should eq("a.cr")
     bash.not_nil!.tool_result.should eq("hi")
   end
+
+  # Regression: on_event must render synchronously via render_now so every
+  # state change is drawn before the next event is processed. Without this,
+  # a tool_call_start + tool_result arriving between two main-loop iterations
+  # would skip the active zone entirely and jump straight to the log.
+  #
+  # This test verifies the state transitions that render_now makes visible:
+  # after tool_call_start, the tool is pending (active zone); after
+  # tool_result, it has migrated to the log zone. The @dirty flag is checked
+  # to confirm on_event processes events (sets dirty=true at the end).
+  it "tool transitions through active zone before log" do
+    app = Hcode::TUI::App.new
+
+    # tool_call_start → tool is pending (no result), goes to active zone.
+    app.on_event(Hcode::Loop::Event.tool_call_start("c1", "Read", %({"path":"f.ts"})))
+    tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
+    tool.should_not be_nil
+    tool.not_nil!.tool_result.should be_nil
+
+    # build_rendered_lines places it in the active zone (after log_lines).
+    lines, _editor_line, log_size = app.build_rendered_lines(80)
+    active_lines = lines[log_size..]
+    active_stripped = active_lines.map { |l| app_strip_ansi(l) }
+    active_stripped.join('\n').should contain("Using")
+
+    # tool_result → tool now has result, goes to log zone.
+    app.on_event(Hcode::Loop::Event.tool_result("c1", "content", false))
+    tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
+    tool.not_nil!.tool_result.should eq("content")
+
+    # build_rendered_lines now places it in the log zone.
+    lines2, _editor_line2, log_size2 = app.build_rendered_lines(80)
+    log_lines2 = lines2[0...log_size2]
+    active_lines2 = lines2[log_size2..]
+    log_stripped = log_lines2.map { |l| app_strip_ansi(l) }
+    log_stripped.join('\n').should contain("Used")
+    # Active zone should NOT contain the completed tool.
+    active_stripped2 = active_lines2.map { |l| app_strip_ansi(l) }
+    active_stripped2.join('\n').should_not contain("Using Read")
+  end
+
+  it "on_event sets dirty after processing" do
+    app = Hcode::TUI::App.new
+    app.on_event(Hcode::Loop::Event.step_begin(0))
+    app.@dirty.should be_true
+  end
+
+  # Regression: assistant_text delivered without preceding text_delta must still
+  # be committed to the transcript. Otherwise a large finalized block (e.g. a
+  # plan) emitted straight into the Log zone would silently disappear.
+  it "finalizes assistant_text into the log zone even without streaming deltas" do
+    app = Hcode::TUI::App.new
+    plan = (1..30).map { |i| "#{i}. plan line" }.join("\n")
+
+    app.on_event(Hcode::Loop::Event.assistant_text(plan))
+
+    app.@messages.size.should eq(1)
+    app.@messages[0].role.should eq("assistant")
+    app.@messages[0].content.should eq(plan)
+
+    lines, _editor_line, log_size = app.build_rendered_lines(80)
+    active_lines = lines[log_size..]
+    active_stripped = active_lines.map { |l| app_strip_ansi(l) }
+    active_stripped.join('\n').should_not contain("plan line")
+  end
 end
 
 describe Hcode::TUI::SelectList do
@@ -557,6 +622,34 @@ describe Hcode::TUI::App do
       app_strip_ansi(joined).should contain("Send a message... (Plan mode)")
       # No transcript system message is pushed on toggle.
       app.@messages.none? { |m| m.role == "system" && m.content.includes?("Plan mode") }.should be_true
+    end
+
+    # Regression: when the active zone shrinks (e.g. the editor box was tall
+    # because of wrapped long text, then the text was cleared), the leftover
+    # rows below the new zone bottom must be cleared. ActiveZone tracks each
+    # frame's visible height in a log and, when the new height is smaller than
+    # the previous one, pads blank rows (\e[2K) for the difference so no stale
+    # content lingers.
+    it "clears stale rows when the active zone shrinks" do
+      app = Hcode::TUI::App.new
+      app.@terminal.set_size(40, 24)
+
+      # Frame 1: tall editor box (long text wraps to many rows).
+      app.@editor.set("x" * 200)
+      app.build_render_output
+      tall = app.@active_zone.height_log.last
+
+      # Frame 2: short editor box (text cleared → single placeholder row).
+      app.@editor.clear
+      output = app.build_render_output
+
+      short = app.@active_zone.height_log.last
+      short.should be < tall
+
+      # The active zone emitted more line-clears than its new height — the
+      # excess are the blank padding rows that wipe the stale taller frame.
+      drawn = output.scan("\e[2K").size
+      drawn.should be > short
     end
   end
 end

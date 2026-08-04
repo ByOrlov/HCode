@@ -1,9 +1,13 @@
 build
+build_release
 clean
 mock:components:input
 mock:default
 mock:markdown
 mock:thinking
 mock:thinking_tools
+mockrun
 run
+run:default
+run:release
 spec

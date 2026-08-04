@@ -20,6 +20,14 @@ module Hcode
       property fg_color : Int32 = 252
       property accent_color : Int32 = 75
 
+      # Visual cursor position within the rendered editor box — set by the
+      # rendering layer (App#render_editor_box) during layout, read by the
+      # cursor-positioning layer. Row is 0-based within the editor's content
+      # rows (excluding the top border); col is the visible column offset
+      # from the content start on that row.
+      property cursor_visual_row : Int32 = 0
+      property cursor_visual_col : Int32 = 0
+
       def initialize(@placeholder : String = "")
       end
 

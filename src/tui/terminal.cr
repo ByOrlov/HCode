@@ -83,6 +83,10 @@ module Hcode
       getter cols : Int32
       getter rows : Int32
 
+      # Used by tests to control terminal dimensions without a real tty.
+      def set_size(@cols : Int32, @rows : Int32) : Nil
+      end
+
       def raw! : Nil
         return if @raw
 

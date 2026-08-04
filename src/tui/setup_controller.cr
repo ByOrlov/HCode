@@ -15,6 +15,7 @@ module Hcode
           Hcode.t("ui.setup_welcome"))
         @status = Hcode.t("ui.setup_status")
         open_setup_provider_selector
+        invalidate_log_cache!
         @dirty = true
       end
 

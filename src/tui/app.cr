@@ -210,20 +210,20 @@ module Hcode
       @spinner : Spinner
       @theme : Theme
       @messages : Array(Message) = [] of Message
+      # Last fully rendered frame (log + active combined). Kept for the
+      # `/memory` profiler (`render_buffer_*`) and to compute the previous
+      # total height for scroll math. Per-zone state lives in the zones below.
       @previous_lines : Array(String) = [] of String
       @previous_viewport_top : Int32 = 0
       @hardware_cursor_row : Int32 = 0
-      @max_lines_rendered : Int32 = 0
-      @prev_active_start : Int32 = 0
+      # The two render zones (see `docs/TUI_ZONES.md`). LogZone is the
+      # append-only immutable history (only an emission cursor is stored);
+      # ActiveZone holds the repainted region's state and a height log.
+      @log_zone : LogZone = LogZone.new
+      @active_zone : ActiveZone = ActiveZone.new
       @last_cols : Int32 = 0
       @last_rows : Int32 = 0
       @cursor_line : Int32 = 0
-      # Cursor position within the editor box, resolved against the soft-wrapped
-      # layout (computed in `render_editor_box`, read in `position_cursor`).
-      # `visual_row` is the 0-based content row; `visual_col` is the visible
-      # column offset from the content start on that row.
-      @editor_cursor_visual_row : Int32 = 0
-      @editor_cursor_visual_col : Int32 = 0
       @first_render : Bool = true
       @streaming_text : String = ""
       @streaming_thinking : String = ""
@@ -252,6 +252,26 @@ module Hcode
       @spin_phase : Int32 = 0
       @dirty : Bool = true
       @last_render : Time::Span = Time.monotonic
+      # Serializes rendering across fibers. STDOUT writes can yield to the
+      # scheduler (when the kernel write buffer is full), so without this guard
+      # the main render loop and the event/render_now path interleave separate
+      # ANSI frames and corrupt the screen.
+      @render_mutex = Mutex.new
+      # Render-pressure counters: events received since the last completed
+      # render and the last measured render duration. On large chats every
+      # event triggers a full rebuild of all messages, so a high pending
+      # count indicates the event fiber is outpacing the renderer.
+      @render_pending : Int32 = 0
+      @render_ms : Int64 = 0
+      # Cached rendered lines for the log zone. Log-zone messages are immutable
+      # once finalized, so their rendered output is cached here and only
+      # rebuilt when @messages changes or terminal width changes. During
+      # streaming (text_delta / thinking_delta) the cache is NOT invalidated —
+      # only the active zone is re-rendered — making each streaming frame O(1)
+      # instead of O(N). See docs/TUI_ZONES.md.
+      @log_lines_cache : Array(String) = [] of String
+      @log_cache_dirty : Bool = true
+      @log_cache_cols : Int32 = 0
       # True while at least one swarm/agent subagent is running — drives the
       # 80ms animation tick independently of @agent_busy so progress bars
       # keep moving even when the parent turn is in a tool-call gap.
@@ -322,6 +342,8 @@ module Hcode
       @session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
       @session_picker_mode : Symbol = :resume
       @show_welcome : Bool = true
+      property? debug_zones : Bool = false
+      property on_debug_zones_change : (Bool -> Nil)? = nil
       @session_id : String = ""
       @work_dir : String = ""
       @additional_dirs : Array(String) = [] of String
@@ -555,6 +577,7 @@ module Hcode
 
       def add_message(role : String, content : String) : Nil
         @messages << Message.new(role, content)
+        invalidate_log_cache!
       end
 
       def dirty! : Nil
@@ -597,6 +620,12 @@ module Hcode
         @streaming_thinking = ""
         @streaming_tool = nil
         @current_step = 0
+        # History was rebuilt from scratch — reset both zones so the next frame
+        # does a full repaint and the emission cursor / height log restart.
+        @log_zone.reset
+        @active_zone.reset
+        @first_render = true
+        invalidate_log_cache!
 
         memory.history.each do |cm|
           msg = cm.message
@@ -658,10 +687,12 @@ module Hcode
         end
         @spinner.stop
         @messages << Message.new("status", message)
+        invalidate_log_cache!
         @dirty = true
       end
 
       def on_event(event : Loop::Event) : Nil
+        @render_pending &+= 1
         case event.type
         when .step_begin?
           @current_step = event.step
@@ -676,7 +707,14 @@ module Hcode
           @status = "thinking..."
         when .assistant_text?
           finalize_streaming_thinking
-          unless @streaming_text.empty?
+          if @streaming_text.empty?
+            # Finalized text delivered without preceding deltas (e.g. a plan
+            # block emitted straight into the Log zone). Add it as a complete
+            # assistant message so it never inflates the Active zone.
+            unless event.text.empty?
+              @messages << Message.new("assistant", event.text)
+            end
+          else
             @messages << Message.new("assistant", @streaming_text)
             @streaming_text = ""
           end
@@ -857,12 +895,20 @@ module Hcode
           end
         end
 
-        @dirty = true
-      end
+        # Invalidate the log-zone line cache for any event that may modify
+        # @messages. Streaming events (step_begin, text_delta, thinking_delta,
+        # info) don't touch @messages, so the cache stays valid and those
+        # frames remain O(1).
+        case event.type
+        when .step_begin?, .text_delta?, .thinking_delta?, .info?
+          # No @messages change
+        else
+          invalidate_log_cache!
+        end
 
-      # ------------------------------------------------------------------
-      # Subagent lifecycle event handlers — drive the live swarm grid.
-      # ------------------------------------------------------------------
+        @dirty = true
+        render_now
+      end
 
       # Find the tool-call Message that owns the parent AgentSwarm/Agent
       # tool_call_id and return its index, or nil if it was already trimmed.
@@ -1237,6 +1283,7 @@ module Hcode
         @queue << QueuedMessage.new(text, mode)
         @on_persist_queued.try(&.call("turn.prompt", text)) if persist
         @messages << Message.new("system", "[Queued: #{truncate_preview(text)}]")
+        invalidate_log_cache!
         @dirty = true
       end
 
@@ -1251,11 +1298,16 @@ module Hcode
       # drain path sets it to avoid a duplicate `turn.prompt` record.
       private def start_turn(text : String, persisted : Bool = false) : Nil
         @messages << Message.new("user", text)
+        # The welcome box is part of the Log zone history; do NOT hide it when
+        # the first user message arrives. Removing it shrinks the log and
+        # forces an unnecessary full repaint, besides violating the idea that
+        # the log is append-only.
         @current_step = 0
         @step_tool_count = 0
         @agent_busy = true
         @status = "Thinking..."
         @spinner.start
+        invalidate_log_cache!
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
 
@@ -1546,6 +1598,16 @@ module Hcode
         end
       end
 
+      # `/debugzones`: toggle an overlay showing the current log-zone and
+      # active-zone line counts on the last rendered row, so zone-size
+      # regressions (overflow, wrong split) are visible at a glance.
+      private def toggle_debug_zones : Nil
+        @debug_zones = !@debug_zones
+        @on_debug_zones_change.try(&.call(@debug_zones))
+        state = @debug_zones ? Hcode.t("ui.debugzones_on") : Hcode.t("ui.debugzones_off")
+        @messages << Message.new("system", "#{Hcode.t("commands.debugzones")}: #{state}")
+      end
+
       private def handle_slash_command(input : String) : Nil
         parsed = CommandRegistry.parse(input)
         unless parsed
@@ -1629,6 +1691,8 @@ module Hcode
           cmd_todos(args)
         when "/debug"
           cmd_debug
+        when "/debugzones"
+          toggle_debug_zones
         when "/feedback"
           cmd_feedback(args)
         when "/reload"
@@ -1664,6 +1728,7 @@ module Hcode
         end
 
         @show_command_hints = false
+        invalidate_log_cache!
         @dirty = true
       end
 
@@ -2078,6 +2143,7 @@ module Hcode
           @dirty = true
           @theme = name == "light" ? Theme.light : Theme.dark
           @messages << Message.new("system", Hcode.t("ui.theme_set", name: name))
+          invalidate_log_cache!
         when .escape?
           @theme_list.hide
           @dirty = true
@@ -2245,72 +2311,225 @@ module Hcode
       end
 
       def render : Nil
-        print build_render_output
-        STDOUT.flush
+        @render_mutex.synchronize do
+          t0 = Time.monotonic
+          print build_render_output
+          STDOUT.flush
+          @render_ms = ((Time.monotonic - t0).total_milliseconds + 0.5).to_i64
+          @render_pending = 0
+        end
+      end
+
+      # Synchronous render called from the agent fiber after event processing.
+      # Guarantees every state change is drawn immediately, eliminating the
+      # race between events and the timer-based render loop. Serialization is
+      # provided by @render_mutex inside render(): STDOUT writes can yield to
+      # the scheduler (when the kernel write buffer fills), and the mutex
+      # ensures a concurrent render from the main loop cannot interleave its
+      # frame. Clears @dirty so the main loop's next iteration doesn't
+      # re-render redundantly; leaves @last_render untouched so the 80ms
+      # spinner tick keeps its own timing.
+      private def render_now : Nil
+        return unless @running
+        return if @first_render
+        render
+        @dirty = false
       end
 
       # Build the full ANSI frame string that render() writes to the terminal.
       # Extracted so tests can assert on the raw escape sequences without
       # redirecting STDOUT.
       def build_render_output : String
-        cols = @terminal.cols
-        rows = @terminal.rows
-
-        new_lines, editor_content_line, active_start = build_rendered_lines(cols)
-
-        output = IO::Memory.new
-        output << "\e[?2026h" # Begin synchronized update
-
-        size_changed = cols != @last_cols || rows != @last_rows
-
-        if @first_render || size_changed
-          full_render(output, new_lines, rows)
-        else
-          diff_render(output, new_lines, rows, active_start)
-        end
-
-        position_cursor(output, new_lines.size, editor_content_line)
-        output << "\e[?2026l" # End synchronized update
-
-        @previous_lines = new_lines
-        @prev_active_start = active_start
-        @last_cols = cols
-        @last_rows = rows
-        @cursor_line = new_lines.size
-
-        output.to_s
+        io = IO::Memory.new
+        port = AnsiTerminalPort.new(io, @terminal)
+        do_render(port)
+        io.to_s
       end
 
+      # Render one frame into an arbitrary `TerminalPort` (used by tests that
+      # drive the real render path through `TerminalMock`). Geometry is read
+      # from the port so a fixed-size mock activates the scroll/viewport logic.
+      def render_to(port : TerminalPort) : Nil
+        do_render(port)
+      end
+
+      # Drive the real `full_render`/`incremental_render` path with caller-
+      # supplied zone lines, bypassing `build_rendered_lines_split`. Used by
+      # zone-behaviour tests that need controlled content while still
+      # exercising the actual scroll/shift/cursor-tracking logic.
+      # Pre-compute the active-zone blank layout for this frame: plan
+      # shrink/growth blanks (trailing, below the content) and shift (consume
+      # blanks for new log lines). Must run BEFORE the full/incremental
+      # decision so `viewport_top` stays stable when the zone shrinks.
+      private def prepare_frame(log_lines : Array(String), active_lines : Array(String), rows : Int32) : Int32
+        available_rows = {rows - 2, 1}.max
+
+        # Shift FIRST: consume blanks left from the previous frame for new log
+        # lines. Must run before plan() so the current frame's shrink-created
+        # blanks are not consumed by this frame's own log push.
+        new_log_count = log_lines.size - @log_zone.flushed
+        shifts = {new_log_count, @active_zone.available_blanks}.min
+        shifts.times { @active_zone.consume_blank }
+
+        # Then plan: compute blanks for this frame's shrink/growth.
+        @active_zone.set(active_lines)
+        @active_zone.plan(available_rows)
+
+        log_lines.size + active_lines.size
+      end
+
+      # Cap how many NEW log lines are revealed to the renderer per frame. The
+      # bound is the actual visible space below the active zone (`rows - active`),
+      # not just `rows - 2`: every new log line must land inside the visible
+      # viewport so it is written exactly where it belongs. If the chunk exceeds
+      # the visible capacity, some new lines fall above the viewport (into the
+      # scrollback region) before they have been emitted — LogZone#flush then
+      # writes them at screen row 0, overwriting real content and leaving the
+      # active zone stranded mid-log. When lines are held back, `dirty!` is set
+      # so the render loop re-renders and drains the rest. Returns a (possibly
+      # truncated) array — never mutates the caller's.
+      private def throttle_log(log_lines : Array(String), active_lines : Array(String), rows : Int32) : Array(String)
+        chunk = {rows - active_lines.size, 1}.max
+        reveal = @log_zone.reveal_limit(log_lines.size, chunk)
+        return log_lines if reveal >= log_lines.size
+        @dirty = true if @log_zone.pending?
+        log_lines[0...reveal]
+      end
+
+      def render_zones(port : TerminalPort, log_lines : Array(String), active_lines : Array(String)) : Nil
+        cols = port.cols
+        rows = port.rows
+        log_lines = throttle_log(log_lines, active_lines, rows)
+        total = log_lines.size + active_lines.size
+
+        size_changed = cols != @last_cols || rows != @last_rows
+        effective_total = prepare_frame(log_lines, active_lines, rows)
+        viewport_top = {0, effective_total - rows}.max
+
+        port.begin_frame
+        if @first_render || size_changed || @log_zone.shrank?(log_lines.size) ||
+           viewport_top < @previous_viewport_top
+          full_render(port, log_lines, active_lines, rows)
+        else
+          incremental_render(port, log_lines, active_lines, rows)
+        end
+        port.end_frame
+
+        @previous_lines = log_lines + active_lines
+        @last_cols = cols
+        @last_rows = rows
+        @cursor_line = total
+      end
+
+      private def do_render(port : TerminalPort) : Nil
+        cols = port.cols
+        rows = port.rows
+
+        log_lines, active_lines, editor_content_line = build_rendered_lines_split(cols)
+        # Throttle before any per-line post-processing so truncation, resets and
+        # the active-zone math all operate on the revealed slice. Capture the
+        # full log size first so the editor content line can be re-based.
+        full_log_size = log_lines.size
+        log_lines = throttle_log(log_lines, active_lines, rows)
+        if log_lines.size < full_log_size
+          editor_content_line = editor_content_line - full_log_size + log_lines.size
+        end
+        truncate_render_lines(log_lines, cols)
+        truncate_render_lines(active_lines, cols)
+        apply_line_resets(log_lines)
+        apply_line_resets(active_lines)
+
+        total = log_lines.size + active_lines.size
+
+        size_changed = cols != @last_cols || rows != @last_rows
+        effective_total = prepare_frame(log_lines, active_lines, rows)
+        viewport_top = {0, effective_total - rows}.max
+
+        port.begin_frame
+        if @first_render || size_changed || @log_zone.shrank?(log_lines.size) ||
+           viewport_top < @previous_viewport_top
+          full_render(port, log_lines, active_lines, rows)
+        else
+          incremental_render(port, log_lines, active_lines, rows)
+        end
+        position_cursor(port, total, editor_content_line)
+        port.end_frame
+
+        @previous_lines = log_lines + active_lines
+        @last_cols = cols
+        @last_rows = rows
+        @cursor_line = total
+      end
+
+      # Test-compatible view of a frame: returns the merged frame lines, the
+      # editor content line (absolute), and the active-zone start index. Splits
+      # internally via `build_rendered_lines_split` and applies the same
+      # post-processing (truncate + SGR reset) the renderer does.
       def build_rendered_lines(cols : Int32) : {Array(String), Int32, Int32}
-        new_lines = [] of String
+        log_lines, active_lines, editor_content_line = build_rendered_lines_split(cols)
+        truncate_render_lines(log_lines, cols)
+        truncate_render_lines(active_lines, cols)
+        apply_line_resets(log_lines)
+        apply_line_resets(active_lines)
+        {log_lines + active_lines, editor_content_line, log_lines.size}
+      end
+
+      # Mark the cached log-zone lines as stale. Called whenever @messages is
+      # modified (append, mutation, rebuild) or @show_welcome changes. During
+      # streaming (text_delta / thinking_delta) this is NOT called, so the
+      # cache stays valid and the render is O(1).
+      private def invalidate_log_cache! : Nil
+        @log_cache_dirty = true
+      end
+
+      # Build the frame split into the two render zones (see `docs/TUI_ZONES.md`):
+      # `log_lines` (append-only history) and `active_lines` (the repainted
+      # region). Returns `{log_lines, active_lines, editor_content_line}` where
+      # `editor_content_line` is the absolute (log + active) index of the first
+      # editor content row + 1. Lines are returned raw — truncation and SGR
+      # resets are applied by the caller.
+      def build_rendered_lines_split(cols : Int32) : {Array(String), Array(String), Int32}
+        log_lines = [] of String
+        active_lines = [] of String
 
         # Full-screen modal takeovers (tasks browser) replace the entire
-        # layout — mirrors TS container-swap mount of TasksBrowserApp.
+        # layout — mirrors TS container-swap mount of TasksBrowserApp. They
+        # occupy the active zone only.
         if @tasks_browser.visible?
           @tasks_browser.rows = @terminal.rows
-          return {@tasks_browser.render(cols), 0, 0}
+          active_lines.concat(@tasks_browser.render(cols))
+          return {log_lines, active_lines, 0}
         end
 
-        if @show_welcome
-          new_lines.concat(render_welcome_box(cols))
-          new_lines << ""
+        # ── LOG zone (cached — rebuilt only when @messages or cols change) ──
+        # Finalized messages are immutable, so their rendered lines are cached.
+        # During streaming the cache is not invalidated, making each frame O(1)
+        # instead of O(N). Pending tool calls (no result yet) are skipped here —
+        # they live in the active zone and migrate into the cache once their
+        # result arrives (which sets @log_cache_dirty).
+        if @log_cache_dirty || cols != @log_cache_cols
+          @log_lines_cache.clear
+          if @show_welcome
+            @log_lines_cache.concat(render_welcome_box(cols))
+            @log_lines_cache << ""
+          end
+          @messages.each do |msg|
+            next if msg.role == "tool" && msg.tool_name && msg.tool_result.nil? &&
+                    msg.read_group.nil? && msg.swarm_members.empty?
+            @log_lines_cache.concat(render_message(msg, cols))
+          end
+          @log_cache_dirty = false
+          @log_cache_cols = cols
         end
+        log_lines.concat(@log_lines_cache)
 
-        @messages.each do |msg|
-          new_lines.concat(render_message(msg, cols))
-        end
-
-        # Everything above this point is the LOG zone — append-only, never
-        # rewritten. Everything below is the ACTIVE zone — repainted every
-        # frame. See TUI_ZONES.md.
-        active_start = new_lines.size
-
+        # ── ACTIVE zone (repainted every frame) ──
         unless @streaming_thinking.empty?
-          new_lines.concat(render_live_thinking(cols))
+          active_lines.concat(render_live_thinking(cols))
         end
 
         unless @streaming_text.empty?
-          new_lines.concat(render_message(Message.new("assistant", @streaming_text), cols))
+          active_lines.concat(render_message(Message.new("assistant", @streaming_text), cols))
         end
 
         # Pending tool calls (no result yet) live in the active zone — they
@@ -2318,12 +2537,12 @@ module Hcode
         @messages.each do |m|
           if m.role == "tool" && m.tool_name && m.tool_result.nil? &&
              m.read_group.nil? && m.swarm_members.empty?
-            new_lines.concat(render_running_tool(m, cols))
+            active_lines.concat(render_running_tool(m, cols))
           end
         end
 
         if @spinner.active? && @streaming_thinking.empty?
-          new_lines << String.build do |s|
+          active_lines << String.build do |s|
             s << ANSI.color(@theme.colors.primary, nil)
             s << Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
             s << ANSI.reset
@@ -2335,89 +2554,102 @@ module Hcode
         end
 
         if req = @approval_pending
-          new_lines.concat(render_approval_panel(req, cols))
+          active_lines.concat(render_approval_panel(req, cols))
         end
 
         if @question_dialog.visible?
-          new_lines.concat(@question_dialog.render(cols))
+          active_lines.concat(@question_dialog.render(cols))
         end
 
         if @plan_review_dialog.visible?
-          new_lines.concat(@plan_review_dialog.render(cols))
+          active_lines.concat(@plan_review_dialog.render(cols))
         end
 
         if @undo_dialog.visible?
-          new_lines.concat(@undo_dialog.render(cols))
+          active_lines.concat(@undo_dialog.render(cols))
         end
 
         if @provider_list.visible?
-          new_lines.concat(render_provider_panel(cols))
+          active_lines.concat(render_provider_panel(cols))
         end
 
         if @model_list.visible?
-          new_lines.concat(render_model_panel(cols))
+          active_lines.concat(render_model_panel(cols))
         end
 
         if @session_list.visible?
-          new_lines.concat(render_session_panel(cols))
+          active_lines.concat(render_session_panel(cols))
         end
 
         if @permission_list.visible?
-          new_lines.concat(render_select_panel(@permission_list, cols))
+          active_lines.concat(render_select_panel(@permission_list, cols))
         end
 
         if @effort_list.visible?
-          new_lines.concat(render_select_panel(@effort_list, cols))
+          active_lines.concat(render_select_panel(@effort_list, cols))
         end
 
         if @theme_list.visible?
-          new_lines.concat(render_select_panel(@theme_list, cols))
+          active_lines.concat(render_select_panel(@theme_list, cols))
         end
 
         if todos = current_todos
-          new_lines.concat(render_todo_panel(todos, cols))
+          active_lines.concat(render_todo_panel(todos, cols))
         end
         unless @queue.empty?
-          new_lines.concat(render_queue_pane(cols))
+          active_lines.concat(render_queue_pane(cols))
         end
-        editor_start = new_lines.size
+        editor_start = active_lines.size
         if @help_panel.visible?
           # Modal `/help` replaces the editor — mirrors JS `mountEditorReplacement`.
           # Skip command hints too: the editor (and its autocomplete) is hidden.
-          new_lines.concat(@help_panel.render(cols))
+          active_lines.concat(@help_panel.render(cols))
         elsif @usage_panel.visible?
-          new_lines.concat(@usage_panel.render(cols, @provider_name, @model,
+          active_lines.concat(@usage_panel.render(cols, @provider_name, @model,
             @context_tokens, @max_context_tokens, @context_percent,
             @messages.size, @queue.size))
         else
-          new_lines.concat(render_editor_box(cols))
+          active_lines.concat(render_editor_box(cols))
 
           if @show_command_hints && @command_hints.size > 0
             @command_hints.each_with_index do |hint, i|
               usage_part = hint.usage.empty? ? "" : " #{ANSI.color(@theme.colors.dim, nil)}#{hint.usage}#{ANSI.reset}"
               if i == @command_hint_selected
-                new_lines << "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}  → #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
+                active_lines << "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}  → #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               else
-                new_lines << "#{ANSI.color(@theme.colors.dim, nil)}    #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
+                active_lines << "#{ANSI.color(@theme.colors.dim, nil)}    #{hint.name.ljust(14)} #{hint.description}#{usage_part}#{ANSI.reset}"
               end
             end
           end
         end
 
-        new_lines << render_footer(cols)
+        active_lines << render_footer(cols)
 
         if @exit_confirm
-          new_lines << "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
+          active_lines << "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
         end
 
-        # Defensive barrier mirroring pi-tui `doRender`: truncate every line to
-        # `cols` so no component with an off-by-one in width math can push the
-        # right border past the terminal edge, then guarantee a trailing SGR
-        # reset so an unclosed style can't leak into the next line.
-        truncate_render_lines(new_lines, cols)
-        apply_line_resets(new_lines)
+        if @debug_zones
+          rows = @terminal.rows
+          total = log_lines.size + active_lines.size
+          pending = log_lines.size - @log_zone.flushed
+          active_lines << String.build do |s|
+            s << ANSI.color(@theme.colors.dim, nil)
+            s << "Msgs: #{@messages.size}, "
+            s << "LogZone: #{@log_zone.flushed}/#{log_lines.size}"
+            s << (pending > 0 ? " (pending: #{pending})" : "")
+            s << ", "
+            s << "ActiveZone: #{active_lines.size}, "
+            s << "RenderQuery: #{@render_pending} (#{@render_ms}ms), "
+            s << "Cache: #{@log_cache_dirty ? "dirty" : "hit"}"
+            s << ", "
+            s << "Rows: #{rows} (total: #{total})"
+            s << ANSI.reset
+          end
+        end
 
-        {new_lines, editor_start + 1, active_start}
+        editor_content_line = log_lines.size + editor_start + 1
+        {log_lines, active_lines, editor_content_line}
       end
 
       # Truncate each rendered line to `cols` visible columns. Uses the ASCII
@@ -2426,6 +2658,11 @@ module Hcode
       private def truncate_render_lines(lines : Array(String), cols : Int32) : Nil
         return if cols <= 0
         lines.map_with_index! do |line, _|
+          # Expand tabs to 3 spaces (matching CharWidth.visible_width's tab=3
+          # model) BEFORE measuring/clamping. Without this a raw tab reaches the
+          # terminal, which expands it to the next multiple of 8 — wider than
+          # the 3 columns we budgeted, pushing the right border off its row.
+          line = line.gsub('\t', "   ") if line.includes?('\t')
           w = CharWidth.ascii_visible_width(line, cols) || CharWidth.visible_width(line)
           w > cols ? CharWidth.slice_by_column(line, 0, cols, strict: true) : line
         end
@@ -2440,7 +2677,7 @@ module Hcode
         end
       end
 
-      private def full_render(output : IO::Memory, new_lines : Array(String), rows : Int32) : Nil
+      private def full_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
         # Avoid \e[2J (full-screen erase) — it blanks the entire visible area
         # before any new content is written, causing a visible flicker/"clear"
         # even inside a synchronized update. Instead, go to the home position
@@ -2449,134 +2686,109 @@ module Hcode
         # fully blank frame.
         # \e[3J would clear the scrollback buffer — never use it in the main
         # screen buffer, it destroys the user's terminal scroll history.
-        output << "\e[H"
-        new_lines.each_with_index do |line, i|
-          output << "\r\n" if i > 0
-          output << line
-          output << "\e[0m\e[K"
+        port.cursor_home
+        first = true
+        log_lines.each do |line|
+          port.newline unless first
+          port.clear_line
+          port.write(line)
+          first = false
         end
-        output << "\e[J"
-        @hardware_cursor_row = {0, new_lines.size - 1}.max
-        @max_lines_rendered = new_lines.size
-        @previous_viewport_top = {0, {rows, new_lines.size}.max - rows}.max
+        active_lines.each do |line|
+          port.newline unless first
+          port.clear_line
+          port.write(line)
+          first = false
+        end
+        port.clear_below
+        total = log_lines.size + active_lines.size
+        @hardware_cursor_row = {0, total - 1}.max
+        @previous_viewport_top = {0, {rows, total}.max - rows}.max
+        # A full repaint commits every line to the terminal — realign the log
+        # emission cursor and seed the active-zone height baseline so the next
+        # incremental frame detects a shrink correctly (a full repaint paints
+        # the zone but bypasses ActiveZone#render, so we record the visible
+        # height here instead).
+        @log_zone.reset
+        @log_zone.mark_flushed(log_lines.size)
+        @active_zone.set(active_lines)
+        viewport_top = {0, total - rows}.max
+        log_visible = {0, {log_lines.size - viewport_top, rows}.min}.max
+        @active_zone.seed_baseline(rows - log_visible)
         @first_render = false
       end
 
-      private def diff_render(output : IO::Memory, new_lines : Array(String), rows : Int32, active_start : Int32) : Nil
-        new_size = new_lines.size
-        prev_size = @previous_lines.size
-
-        viewport_top = {0, new_size - rows}.max
-        prev_vt = {0, prev_size - rows}.max
+      # Incremental repaint driven by the two zones. The orchestrator handles
+      # the terminal mechanics (scroll into scrollback, cursor positioning);
+      # `LogZone` tracks which log lines are new, `ActiveZone` rewrites the
+      # repainted region in place (clamped to the viewport, padding blank rows
+      # when it shrank). See `docs/TUI_ZONES.md`.
+      private def incremental_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
+        total = log_lines.size + active_lines.size
+        viewport_top = {0, total - rows}.max
+        prev_vt = @previous_viewport_top
 
         # ── 1. Scroll: viewport moved down (content exceeded visible area) ──
-        # Only scroll when the viewport_top actually increased — i.e. content
-        # grew beyond the terminal height. If content fits in the screen, no
-        # scroll is needed even if new lines were added.
         scroll_delta = viewport_top - prev_vt
         if scroll_delta > 0
           hw_screen_row = @hardware_cursor_row - prev_vt
           hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
           move_to_bottom = rows - 1 - hw_screen_row
-          output << "\e[#{move_to_bottom}B" if move_to_bottom > 0
-          output << "\r\n" * scroll_delta
-          @hardware_cursor_row = viewport_top + {rows, new_size - viewport_top}.min - 1
+          port.cursor_down(move_to_bottom) if move_to_bottom > 0
+          scroll_delta.times { port.newline }
+          @hardware_cursor_row = viewport_top + {rows, total - viewport_top}.min - 1
         end
 
-        # ── 2. Find changed lines — only from the previous active-zone boundary ──
-        # Lines above @prev_active_start are committed log and never change.
-        # New log lines (log grew) appear between @prev_active_start and
-        # active_start; the active zone is [active_start, new_size).
-        visible_end = {new_size, viewport_top + rows}.min
-        scan_start = {@prev_active_start, viewport_top}.max
-
-        first_changed = -1
-        last_changed = -1
-        (scan_start...visible_end).each do |i|
-          old_line = i < prev_size ? @previous_lines[i] : ""
-          if old_line != new_lines[i]
-            first_changed = i if first_changed < 0
-            last_changed = i
-          end
+        # ── 2. Write new log lines in place ──
+        # Shift (consuming blanks for new log lines) was done in prepare_frame;
+        # here we only position the cursor to the first unflushed log row and
+        # let LogZone emit from its internal cursor. LogZone indexes by
+        # @flushed, so the full array must be passed (not a sub-slice).
+        new_log_count = log_lines.size - @log_zone.flushed
+        if new_log_count > 0
+          write_from = {@log_zone.flushed, viewport_top}.max
+          move_cursor_to(port, write_from, viewport_top, rows)
+          emitted = @log_zone.flush(port, log_lines)
+          @hardware_cursor_row += emitted
+        else
+          @log_zone.mark_flushed(log_lines.size)
         end
 
-        # If content grew but all new lines are above the scan window
-        # (scrolled past), still repaint the last visible line.
-        if first_changed < 0 && new_size > prev_size && visible_end > scan_start
-          first_changed = {prev_size, scan_start}.max
-          last_changed = visible_end - 1
-        end
+        # ── 3. Render the active zone in place ──
+        active_start = log_lines.size
+        move_cursor_to(port, {active_start, viewport_top}.max, viewport_top, rows)
+        # Intentional hardcoded cap: the active zone must never exceed the
+        # viewport (the editable slice of the terminal buffer). `rows - 2` keeps
+        # ≥2 log rows visible above it so the zone never occupies the whole
+        # screen; if it did, a visual tear would appear when reading history
+        # because the active zone would overwrite content past the viewport's
+        # bottom edge. This is a deliberate design constraint, not a leftover.
+        available_rows = {rows - 2, 1}.max
+        @active_zone.render(port, available_rows)
+        painted = @active_zone.last_painted
+        @hardware_cursor_row = active_start + (painted > 0 ? painted - 1 : 0)
 
-        # When content shrank, lines below the merge point shifted up.
-        # Force a rewrite of everything from first_changed to the end so
-        # the editor box and footer are repainted at their new positions.
-        if new_size < prev_size && first_changed >= 0
-          last_changed = visible_end - 1
-        end
-
-        # ── 3. No visible changes ──
-        if first_changed < 0
-          if new_size < prev_size && new_size < viewport_top + rows
-            # Content shrank: clear stale rows below new content.
-            target = new_size - 1 - @hardware_cursor_row
-            if target > 0
-              output << "\e[#{target}B"
-            elsif target < 0
-              output << "\e[#{-target}A"
-            end
-            output << "\e[1B\e[J\e[1A" if new_size < viewport_top + rows
-            @hardware_cursor_row = {0, new_size - 1}.max
-          end
-          @previous_viewport_top = viewport_top
-          @max_lines_rendered = {@max_lines_rendered, new_size}.max
-          return
-        end
-
-        # ── 4. Move cursor to first_changed (screen-relative) ──
-        # Use cursor-up/down which never scroll the terminal.
-        target_screen_row = first_changed - viewport_top
-        hw_screen_row = @hardware_cursor_row - viewport_top
-        hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
-        row_diff = target_screen_row - hw_screen_row
-        if row_diff > 0
-          output << "\e[#{row_diff}B"
-        elsif row_diff < 0
-          output << "\e[#{-row_diff}A"
-        end
-        output << "\r"
-
-        # ── 5. Rewrite changed lines ──
-        # Use \e[1B (cursor down, no scroll) instead of \r\n between lines
-        # — \r\n at the bottom row would scroll the terminal unexpectedly.
-        render_end = {last_changed, visible_end - 1}.min
-        (first_changed..render_end).each do |i|
-          output << "\r\e[1B" if i > first_changed
-          output << "\e[2K"
-          output << new_lines[i]
-        end
-
-        final_cursor_row = render_end
-
-        # ── 6. Clear leftover rows if content shrank ──
-        # Use \e[J (erase to end of screen) — never \r\n, which would scroll
-        # the terminal and corrupt the scrollback.
-        if new_size < prev_size && new_size < viewport_top + rows
-          if render_end < new_size - 1
-            move_down = new_size - 1 - render_end
-            output << "\e[#{move_down}B"
-            final_cursor_row = new_size - 1
-          end
-          output << "\e[1B\e[J\e[1A"
-        end
-
-        @hardware_cursor_row = final_cursor_row
         @previous_viewport_top = viewport_top
-        @max_lines_rendered = {@max_lines_rendered, new_size}.max
       end
 
-      private def position_cursor(output : IO::Memory, new_size : Int32, editor_content_line : Int32) : Nil
+      # Move the hardware cursor to an absolute content row (screen-relative),
+      # using cursor-up/down which never scroll the terminal. Updates
+      # `@hardware_cursor_row` to the resulting content row.
+      private def move_cursor_to(port : TerminalPort, content_row : Int32, viewport_top : Int32, rows : Int32) : Nil
+        target_screen = content_row - viewport_top
+        target_screen = {0, {target_screen, rows - 1}.min}.max
+        hw_screen = @hardware_cursor_row - viewport_top
+        hw_screen = {0, {hw_screen, rows - 1}.min}.max
+        diff = target_screen - hw_screen
+        port.cursor_down(diff) if diff > 0
+        port.cursor_up(-diff) if diff < 0
+        port.carriage_return
+        @hardware_cursor_row = viewport_top + target_screen
+      end
+
+      private def position_cursor(port : TerminalPort, new_size : Int32, editor_content_line : Int32) : Nil
         if @exit_confirm
-          output << "\r"
+          port.carriage_return
           return
         end
 
@@ -2584,35 +2796,42 @@ module Hcode
         # hardware cursor on the panel's last line and leave it hidden. The
         # next non-help render restores normal positioning.
         if @help_panel.visible?
-          output << ANSI.hide_cursor
+          port.hide_cursor
           target_row = {new_size - 1, 0}.max
           row_delta = target_row - @hardware_cursor_row
-          output << "\e[#{row_delta}B" if row_delta > 0
-          output << "\e[#{-row_delta}A" if row_delta < 0
-          output << "\r"
+          port.cursor_down(row_delta) if row_delta > 0
+          port.cursor_up(-row_delta) if row_delta < 0
+          port.carriage_return
           @hardware_cursor_row = target_row
           return
         end
 
-        output << ANSI.show_cursor
+        port.show_cursor
 
         return if new_size <= 0
 
-        # Cursor row/col are resolved against the soft-wrapped editor layout by
-        # `render_editor_box` (which may wrap one logical line across several
-        # terminal rows). Falling back to the raw editor cursor would misplace
-        # the hardware cursor whenever the active line wraps.
-        target_row = {editor_content_line + @editor_cursor_visual_row, new_size - 1}.min
-        row_delta = target_row - @hardware_cursor_row
-        if row_delta > 0
-          output << "\e[#{row_delta}B"
-        elsif row_delta < 0
-          output << "\e[#{-row_delta}A"
-        end
+        # Position the hardware cursor in SCREEN coordinates. The editor's
+        # visual cursor row/col (set during `render_editor_box`) plus the
+        # editor's content-line anchor give an absolute content row; subtracting
+        # the viewport top converts it to a screen row. Clamping the target to
+        # [0, rows-1] keeps the hardware cursor synced with the rendered block
+        # cursor even when the editor is scrolled/clipped.
+        rows = port.rows
+        viewport_top = @previous_viewport_top
+        editor_content_row = editor_content_line + @editor.cursor_visual_row
+        target_screen = editor_content_row - viewport_top
+        hw_screen = @hardware_cursor_row - viewport_top
+        target_screen = {0, {target_screen, rows - 1}.min}.max
+        hw_screen = {0, {hw_screen, rows - 1}.min}.max
 
-        editor_text_col = 5 + @editor_cursor_visual_col
-        output << "\r\e[#{editor_text_col}G"
-        @hardware_cursor_row = target_row
+        row_delta = target_screen - hw_screen
+        port.cursor_down(row_delta) if row_delta > 0
+        port.cursor_up(-row_delta) if row_delta < 0
+
+        editor_text_col = 5 + @editor.cursor_visual_col
+        port.carriage_return
+        port.cursor_to_column(editor_text_col)
+        @hardware_cursor_row = viewport_top + target_screen
       end
 
       def render_message(msg : Message, cols : Int32) : Array(String)
@@ -3180,8 +3399,8 @@ module Hcode
           if query.empty?
             body = "#{dc}#{search_placeholder}#{r}"
             lines << build_editor_row(box_w, bc, r, prompt, body)
-            @editor_cursor_visual_row = 0
-            @editor_cursor_visual_col = 0
+            @editor.cursor_visual_row = 0
+            @editor.cursor_visual_col = 0
           else
             render_query_row(box_w, bc, pc, tc, r, prompt, query, lines)
           end
@@ -3201,8 +3420,8 @@ module Hcode
                              end
           body = "#{dc}#{placeholder_text}#{r}"
           lines << build_editor_row(box_w, bc, r, prompt, body)
-          @editor_cursor_visual_row = 0
-          @editor_cursor_visual_col = 0
+          @editor.cursor_visual_row = 0
+          @editor.cursor_visual_col = 0
         else
           cursor_row, cursor_col = @editor.cursor_position
           editor_lines = @editor.text.split('\n')
@@ -3249,7 +3468,7 @@ module Hcode
                 char_at = chunk_text[local]? || " "
                 after = chunk_text[(local + 1)..]? || ""
                 body = "#{tc}#{before}#{r}#{ANSI.color(nil, @theme.colors.primary)}#{char_at}#{r}#{tc}#{after}#{r}"
-                @editor_cursor_visual_col = visible_len(before)
+                @editor.cursor_visual_col = visible_len(before)
                 found_cursor = true
               else
                 body = "#{tc}#{chunk_text}#{r}"
@@ -3260,7 +3479,7 @@ module Hcode
             end
           end
 
-          @editor_cursor_visual_row = found_cursor ? visual_row : 0
+          @editor.cursor_visual_row = found_cursor ? visual_row : 0
         end
 
         lines << "#{bc}╰#{dash}╯#{r}"
@@ -3318,7 +3537,7 @@ module Hcode
             char_at = chunk_text[local]? || " "
             after = chunk_text[(local + 1)..]? || ""
             body = "#{tc}#{before}#{r}#{ANSI.color(nil, @theme.colors.primary)}#{char_at}#{r}#{tc}#{after}#{r}"
-            @editor_cursor_visual_col = visible_len(before)
+            @editor.cursor_visual_col = visible_len(before)
             found_cursor = true
           else
             body = "#{tc}#{chunk_text}#{r}"
@@ -3326,7 +3545,7 @@ module Hcode
           lines << build_editor_row(box_w, bc, r, row_prompt, body)
           visual_row += 1 unless found_cursor
         end
-        @editor_cursor_visual_row = found_cursor ? visual_row : 0
+        @editor.cursor_visual_row = found_cursor ? visual_row : 0
       end
 
       # Build one editor content row padded to exactly `box_w` columns:
@@ -3556,6 +3775,7 @@ module Hcode
         return if @streaming_thinking.empty?
         @messages << Message.new("thinking", @streaming_thinking)
         @streaming_thinking = ""
+        invalidate_log_cache!
       end
 
       private def visible_len(s : String) : Int32

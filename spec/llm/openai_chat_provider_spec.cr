@@ -109,6 +109,26 @@ describe Hcode::LLM::OpenAIChatProvider do
       end
     end
 
+    it "aborts during active streaming (chunks arriving faster than timeout)" do
+      transport = Hcode::MockHttpTransport.new
+      transport.mode = Hcode::MockHttpTransport::Mode::NormalStream
+      transport.stream_lines = Array.new(20) { |i| sse_text_chunk("chunk#{i}") }
+
+      provider = TestProvider.new("m", "http://localhost", transport: transport)
+
+      # Flip the abort flag after the first chunk is processed. Without the
+      # post-chunk abort check, the timeout branch never fires during fast
+      # streaming and the abort is silently ignored.
+      chunk_count = 0
+      abort_flag = ->{ chunk_count >= 1 }
+
+      expect_raises(Hcode::LLM::AbortedError) do
+        provider.chat([Hcode::LLM::Message.user("hi")], nil, aborted?: abort_flag) do
+          chunk_count += 1
+        end
+      end
+    end
+
     it "uses transport for fetch_models (single-shot request)" do
       transport = Hcode::MockHttpTransport.new
       provider = TestProvider.new("m", "http://localhost", transport: transport)
