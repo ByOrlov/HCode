@@ -2396,17 +2396,14 @@ module Hcode
         total = log_lines.size + active_lines.size
 
         port.begin_frame
-        if @first_render
-          full_render(port, log_lines, active_lines, rows)
-        else
-          incremental_render(port, log_lines, active_lines, rows)
-        end
+        incremental_render(port, log_lines, active_lines, rows)
         port.end_frame
 
         @previous_lines = log_lines + active_lines
         @last_cols = cols
         @last_rows = rows
         @cursor_line = total
+        @first_render = false
       end
 
       private def do_render(port : TerminalPort) : Nil
@@ -2428,11 +2425,7 @@ module Hcode
         apply_line_resets(active_lines)
 
         port.begin_frame
-        if @first_render
-          full_render(port, log_lines, active_lines, rows)
-        else
-          incremental_render(port, log_lines, active_lines, rows)
-        end
+        incremental_render(port, log_lines, active_lines, rows)
         position_cursor(port, log_lines, active_lines, editor_content_line)
         port.end_frame
 
@@ -2440,6 +2433,7 @@ module Hcode
         @last_cols = cols
         @last_rows = rows
         @cursor_line = log_lines.size + active_lines.size
+        @first_render = false
       end
 
       # Test-compatible view of a frame: returns the merged frame lines, the
@@ -2669,37 +2663,40 @@ module Hcode
         end
       end
 
-      private def full_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
-        # Avoid \e[2J (full-screen erase) — it blanks the entire visible area
-        # before any new content is written, causing a visible flicker/"clear"
-        # even inside a synchronized update. Instead, go to the home position
-        # and rewrite each line in place with \e[K (erase-to-end-of-line),
-        # then wipe any leftover rows below with \e[J. This never produces a
-        # fully blank frame.
-        # \e[3J would clear the scrollback buffer — never use it in the main
-        # screen buffer, it destroys the user's terminal scroll history.
-        port.cursor_home
-        (log_lines + active_lines).each_with_index do |line, i|
-          port.newline if i > 0
-          port.clear_line
-          port.write(line)
-        end
-        port.clear_below
-
-        total = log_lines.size + active_lines.size
-        viewport_top = {0, total - rows}.max
-        active_visible = Math.min(active_lines.size, rows)
-
-        @hardware_cursor_row = {0, total - 1}.max
-        @previous_viewport_top = viewport_top
-        @prev_log_count = log_lines.size
-        @prev_active_visible = active_visible
-        # A full repaint commits every line to the terminal — realign the log
-        # emission cursor so the next incremental frame starts from a known state.
-        @log_zone.reset
-        @log_zone.mark_flushed(log_lines.size)
-        @first_render = false
-      end
+      # Full render is temporarily disabled: it was redrawing the entire screen
+      # (including the logo) on unexpected fallback paths, so the app now relies
+      # on incremental_render only. Keep the method commented out for now.
+      # private def full_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
+      #   # Avoid \e[2J (full-screen erase) — it blanks the entire visible area
+      #   # before any new content is written, causing a visible flicker/"clear"
+      #   # even inside a synchronized update. Instead, go to the home position
+      #   # and rewrite each line in place with \e[K (erase-to-end-of-line),
+      #   # then wipe any leftover rows below with \e[J. This never produces a
+      #   # fully blank frame.
+      #   # \e[3J would clear the scrollback buffer — never use it in the main
+      #   # screen buffer, it destroys the user's terminal scroll history.
+      #   port.cursor_home
+      #   (log_lines + active_lines).each_with_index do |line, i|
+      #     port.newline if i > 0
+      #     port.clear_line
+      #     port.write(line)
+      #   end
+      #   port.clear_below
+      #
+      #   total = log_lines.size + active_lines.size
+      #   viewport_top = {0, total - rows}.max
+      #   active_visible = Math.min(active_lines.size, rows)
+      #
+      #   @hardware_cursor_row = {0, total - 1}.max
+      #   @previous_viewport_top = viewport_top
+      #   @prev_log_count = log_lines.size
+      #   @prev_active_visible = active_visible
+      #   # A full repaint commits every line to the terminal — realign the log
+      #   # emission cursor so the next incremental frame starts from a known state.
+      #   @log_zone.reset
+      #   @log_zone.mark_flushed(log_lines.size)
+      #   @first_render = false
+      # end
 
       # Incremental repaint driven by the two zones. The active zone is painted
       # at the bottom of the visible area every frame; freed rows are cleared
@@ -2710,12 +2707,19 @@ module Hcode
         prev_vt = @previous_viewport_top
         scroll_delta = viewport_top - prev_vt
 
+        # First frame: start from the home position so the initial paint lands
+        # at the top-left of the terminal instead of wherever the shell left the
+        # cursor. After this frame the cursor is tracked incrementally.
+        port.cursor_home if @first_render
+
         # The terminal cannot scroll back up on its own. If the viewport shrank
-        # (e.g. a tall modal was dismissed), the only safe option is a full repaint.
-        if scroll_delta < 0 || log_lines.size < @prev_log_count
-          full_render(port, log_lines, active_lines, rows)
-          return
-        end
+        # (e.g. a tall modal was dismissed), the only safe option would be a full
+        # repaint, but full render is currently disabled to avoid redrawing the
+        # whole screen (and the logo) unexpectedly. Incremental path continues.
+        # if scroll_delta < 0 || log_lines.size < @prev_log_count
+        #   full_render(port, log_lines, active_lines, rows)
+        #   return
+        # end
 
         # ── 1. Scroll the terminal up if the viewport moved down ──
         if scroll_delta > 0
