@@ -104,6 +104,24 @@ describe Hcode::Tools::Bash do
     result.content.should contain("timed out after 1s")
   end
 
+  it "kills its subprocess promptly when the abort check fires" do
+    bash = Hcode::Tools::Bash.new("/tmp")
+    # Always-aborted: the wait_for_exit poll fires within ~100ms, then the
+    # process is SIGTERM/SIGKILL'd. Previously the bare select left the child
+    # running for the full Loop.execute_tool grace period.
+    bash.abort_check = -> { true }
+
+    started = Time.monotonic
+    result = bash.execute(JSON.parse(%({"command":"sleep 30","timeout":60})))
+    elapsed = Time.monotonic - started
+
+    result.is_error.should be_true
+    result.content.should contain("interrupted by user")
+    # Kill ladder (poll + SIGTERM + SIGKILL grace) should be well under the
+    # 30s sleep — assert a generous ceiling that still catches a regression.
+    (elapsed < 5.seconds).should be_true
+  end
+
   it "rejects an empty command" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":""})))

@@ -149,28 +149,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         spawn { stdout_ch.send(capture(process.output)) }
         spawn { stderr_ch.send(capture(process.error)) }
 
-        status_ch = Channel(Process::Status).new
-        spawn { status_ch.send(process.wait) }
-
-        timed_out = false
-        status : Process::Status
-
-        select
-        when s = status_ch.receive
-          status = s
-        when timeout(timeout_s.seconds)
-          timed_out = true
-          # Two-phase kill: SIGTERM, then SIGKILL after a grace window —
-          # mirrors the JS BackgroundManager kill ladder.
-          process.terminate rescue nil
-          select
-          when s = status_ch.receive
-            status = s
-          when timeout(2.seconds)
-            PROCESS_PORT.force_kill(process)
-            status = status_ch.receive
-          end
-        end
+        status, timed_out, aborted = Tool.wait_for_exit(process, timeout_s, abort_check)
 
         out_cap = stdout_ch.receive
         err_cap = stderr_ch.receive
@@ -179,7 +158,9 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         result = combine_output(out_cap.text, err_cap.text)
         result += OUTPUT_TRUNCATION_SENTINEL if truncated
 
-        if timed_out
+        if aborted
+          ToolResult.error("#{result}\n[interrupted by user]")
+        elsif timed_out
           ToolResult.error("#{result}\n[Command timed out after #{timeout_s}s and was killed]")
         elsif !status.normal_exit?
           ToolResult.error("#{result}\n[killed by signal]")

@@ -38,8 +38,12 @@ module Hcode
 
       # Run `rg` with `args`. Returns the captured stdout/stderr (capped at
       # MAX_OUTPUT_BYTES / MAX_STDERR_BYTES) and an `exit_code`. On timeout the
-      # process is SIGTERM'd, then SIGKILL'd after `SIGTERM_GRACE_S`.
-      def self.run(args : Array(String), *, chdir : String? = nil, timeout_s : Int32 = DEFAULT_TIMEOUT_S) : Result
+      # process is SIGTERM'd, then SIGKILL'd after `SIGTERM_GRACE_S`. When
+      # `aborted?` fires the process is killed the same way so an ESC
+      # interrupt tears the search down immediately.
+      def self.run(args : Array(String), *, chdir : String? = nil,
+                   timeout_s : Int32 = DEFAULT_TIMEOUT_S,
+                   aborted? : -> Bool = -> { false }) : Result
         process = Process.new(
           "rg",
           args,
@@ -69,28 +73,8 @@ module Hcode
           stderr_done.send(nil)
         end
 
-        status_ch = Channel(Process::Status).new
-        spawn { status_ch.send(process.wait) }
-
-        timed_out = false
-        status =
-          select
-          when s = status_ch.receive
-            s
-          when timeout(timeout_s.seconds)
-            timed_out = true
-            begin
-              process.terminate
-            rescue
-            end
-            select
-            when s = status_ch.receive
-              s
-            when timeout(SIGTERM_GRACE_S.seconds)
-              Tool::PROCESS_PORT.force_kill(process)
-              status_ch.receive
-            end
-          end
+        status, timed_out, _aborted = Tool.wait_for_exit(
+          process, timeout_s, aborted?, kill_grace_s: SIGTERM_GRACE_S)
 
         # Drain remaining streams before reading buffers.
         select

@@ -301,14 +301,29 @@ module Hcode
         status_ch = Channel(Process::Status).new
         spawn { status_ch.send(process.wait) }
 
+        deadline = Time.monotonic + DEFAULT_TIMEOUT_S.seconds
         timed_out = false
-        status : Process::Status
+        aborted = false
+        status : Process::Status? = nil
 
-        select
-        when s = status_ch.receive
-          status = s
-        when timeout(DEFAULT_TIMEOUT_S.seconds)
-          timed_out = true
+        loop do
+          select
+          when s = status_ch.receive
+            status = s
+            break
+          when timeout(100.milliseconds)
+            if abort_check.call
+              aborted = true
+              break
+            end
+            if Time.monotonic >= deadline
+              timed_out = true
+              break
+            end
+          end
+        end
+
+        if timed_out || aborted
           begin
             process.terminate
           rescue
@@ -321,6 +336,8 @@ module Hcode
             status = status_ch.receive
           end
         end
+
+        status = status.not_nil!
 
         out_pair = stdout_ch.receive
         err_pair = stderr_ch.receive

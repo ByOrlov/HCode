@@ -275,7 +275,7 @@ module Hcode
       end
 
       private def run_rg(args : Array(String), search_root : String) : RunRg::Result
-        RunRg.run(args, chdir: search_root)
+        RunRg.run(args, chdir: search_root, aborted?: abort_check)
       end
 
       private def split_complete_paths(stdout_text : String, *, truncated_output : Bool) : Array(String)
