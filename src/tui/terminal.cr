@@ -1,9 +1,18 @@
 {% if flag?(:unix) %}
   lib LibCExtra
-    VMIN  = 6
-    VTIME = 5
+    # c_cc indices differ between Linux and macOS/BSD.
+    {% if flag?(:darwin) %}
+      VMIN  = 16
+      VTIME = 17
 
-    TIOCGWINSZ = 0x5413
+      TIOCGWINSZ = 0x40087468_u64
+    {% else %}
+      # Linux values
+      VMIN  = 6
+      VTIME = 5
+
+      TIOCGWINSZ = 0x5413_u64
+    {% end %}
 
     struct Winsize
       ws_row : UInt16
@@ -12,7 +21,7 @@
       ws_ypixel : UInt16
     end
 
-    fun ioctl(fd : Int32, request : UInt32, ...) : Int32
+    fun ioctl(fd : Int32, request : UInt64, ...) : Int32
     fun isatty(fd : Int32) : Int32
   end
 {% end %}
