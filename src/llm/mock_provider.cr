@@ -187,6 +187,126 @@ module Hcode
         ),
       ] of MockStep
 
+      # Plan-review demo: enters plan mode, writes a long (~200-line) plan to
+      # the plan file, then calls ExitPlanMode so the TUI surfaces the
+      # PlanReviewDialog. The Write step targets the sentinel path
+      # `__PLAN_FILE__`, which `MockProvider#chat` substitutes at runtime with
+      # the real plan path from `PlanMode.plan_service` (only known after
+      # EnterPlanMode executes). Use with:
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=plan
+      PLAN_SENTINEL = "__PLAN_FILE__"
+
+      def self.build_plan_content : String
+        b = String::Builder.new
+        b << "# Implement the full-plan viewer feature\n\n"
+        b << "## Goal\n\n"
+        b << "Add a scrollable full-screen plan viewer to the plan-review dialog, "
+        b << "triggered by a `View full plan` action alongside Approve / Revise. "
+        b << "This plan is intentionally long so the scroll behaviour can be exercised.\n\n"
+        b << "## Background\n\n"
+        b << "- `PlanReviewDialog` currently clamps the rendered plan body to 40 lines.\n"
+        b << "- Long plans get truncated, leaving the user unable to read the full plan.\n"
+        b << "- `TasksBrowser` already demonstrates the full-screen takeover pattern.\n\n"
+        b << "## Approach\n\n"
+        b << "Mirror `TasksBrowser`: add a `viewing_full` mode to the dialog that, when "
+        b << "active, the App renders as a full-screen modal in the active zone.\n\n"
+        sections = [
+          {"Investigate the existing dialog", [
+            "Read `src/tui/plan_review_dialog.cr` end to end.",
+            "Read `src/tui/app.cr` render + input routing for the dialog.",
+            "Read `src/tui/tasks_browser.cr` to mirror the takeover pattern.",
+            "Note the ACTIONS list and the number-key hotkey handling.",
+            "Note how `render_plan_body` clamps to 40 lines.",
+          ]},
+          {"Add the viewer state", [
+            "Add `@viewing_full : Bool`, `@full_scroll`, `@full_lines`.",
+            "Add `property rows` and `terminal_width=` set by the App.",
+            "Reset the state in `show` and `hide`.",
+            "Expose `getter? viewing_full`.",
+            "Add `full_viewport` / `full_max_scroll` helpers.",
+          ]},
+          {"Add the action + input", [
+            "Insert `View full plan` at index 0 of ACTIONS.",
+            "Remap execute_action indices (1=Approve, 2=Revise, 3=Reject, 4=Cancel).",
+            "Add `handle_full_view_input` for up/down/pgup/pgdn/home/end/esc/q/j/k.",
+            "Build `@full_lines` lazily when entering the viewer.",
+            "Update the footer hint to `1-5`.",
+          ]},
+          {"Render the viewer", [
+            "Branch `render` to `render_full` when `viewing_full`.",
+            "Render a header with path + (line/total) counter.",
+            "Render the scroll window from `@full_lines`.",
+            "Pad to the footer so short plans don't shift layout.",
+            "Render a footer key-hint line.",
+          ]},
+          {"Wire the App", [
+            "Set rows + terminal_width before handle_input.",
+            "Add a full-screen takeover branch in build_rendered_lines_split.",
+            "Gate the normal active-zone render on `!viewing_full`.",
+            "Verify the build compiles cleanly.",
+            "Run `rake mock:plan` and scroll the viewer end to end.",
+          ]},
+        ] of {String, Array(String)}
+        sections.each_with_index do |(title, steps), si|
+          b << "## Section #{si + 1} — #{title}\n\n"
+          steps.each_with_index do |s, i|
+            b << "#{si + 1}.#{i + 1}. #{s}\n"
+            b << "   - Rationale: keep the change minimal and match surrounding style.\n"
+            b << "   - Risk: low; isolated to the dialog and its App wiring.\n"
+            b << "   - Verification: `crystal build src/hcode.cr` succeeds.\n"
+          end
+          b << "\n"
+        end
+        b << "## Detailed task breakdown\n\n"
+        b << "Each task below maps to one focused commit. Verification is local only.\n\n"
+        24.times do |i|
+          b << "### Task #{i + 1}\n"
+          b << "- Touch only the files listed in the relevant section above.\n"
+          b << "- Keep the diff reviewable: no incidental reformatting.\n"
+          b << "- Update any comment that now describes old behaviour.\n"
+          b << "- Run the build, then run the relevant specs.\n"
+          b << "- If behaviour is user-visible, note it in the commit message.\n\n"
+        end
+        b << "## Out of scope\n\n"
+        b << "- Search-within-plan.\n"
+        b << "- Persisting scroll position across reopens.\n"
+        b << "- Side-by-side option preview.\n\n"
+        b << "## Acceptance criteria\n\n"
+        b << "- [ ] `View full plan` appears in the action list.\n"
+        b << "- [ ] Selecting it opens a full-screen scrollable view.\n"
+        b << "- [ ] All navigation keys work (↑↓, PgUp/PgDn, Home/End, j/k).\n"
+        b << "- [ ] Esc / q returns to the action list.\n"
+        b << "- [ ] The plan body is not truncated to 40 lines.\n"
+        b.to_s
+      end
+
+      PLAN_DEMO_SCRIPT = [
+        MockStep.new(
+          parts: [ToolCallPart.new("m_plan_enter", "EnterPlanMode", %q({}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 300,
+        ),
+        MockStep.new(
+          parts: [ToolCallPart.new(
+            "m_plan_write",
+            "Write",
+            %q({"path":") + PLAN_SENTINEL + %q(","content":") + build_plan_content.gsub('"', "\\\"").gsub('\n', "\\n") + %q("}),
+          )] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 300,
+        ),
+        MockStep.new(
+          parts: [ToolCallPart.new("m_plan_exit", "ExitPlanMode", %q({}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 300,
+        ),
+        MockStep.new(
+          parts: [TextPart.new("Plan submitted for review.")] of MessagePart,
+          stop_reason: "end_turn",
+          text: "Plan submitted for review.",
+        ),
+      ] of MockStep
+
       property model : String
       property script : Array(MockStep)
       @step : Int32 = 0
@@ -203,6 +323,7 @@ module Hcode
         when "markdown"       then MARKDOWN_DEMO_SCRIPT.dup
         when "sudo"           then SUDO_DEMO_SCRIPT.dup
         when "todos"          then TODOS_DEMO_SCRIPT.dup
+        when "plan"           then PLAN_DEMO_SCRIPT.dup
         else                       nil
         end
       end
@@ -224,6 +345,19 @@ module Hcode
         @step = 0
       end
 
+      # Demo-only substitution: the plan demo's Write step targets a sentinel
+      # path because the real plan file path is only known after EnterPlanMode
+      # runs. At chat-time we look it up from the live plan service and patch
+      # the JSON arguments so the Write lands on the actual plan file.
+      private def resolve_tool_arguments(name : String, args : String) : String
+        return args unless name == "Write" && args.includes?(PLAN_SENTINEL)
+        path = Hcode::Tools::PlanMode.plan_service.try(&.status).try(&.path) || ""
+        return args if path.empty?
+        # Linux paths contain no characters that need JSON escaping; a literal
+        # substitution keeps the demo's synthesized JSON valid.
+        args.gsub(PLAN_SENTINEL, path)
+      end
+
       def chat(messages : Array(Message), tools : Array(ToolDefinition)?,
                system_prompt : String? = nil, aborted? : -> Bool = -> { false },
                &block : MessagePart ->) : StepResult
@@ -239,7 +373,14 @@ module Hcode
           when TextPart
             text << part.text
           when ToolCallPart
-            tool_calls << ToolCall.new(part.id, ToolCallFunction.new(part.name, part.arguments))
+            args = resolve_tool_arguments(part.name, part.arguments)
+            resolved = part
+            unless args == part.arguments
+              resolved = ToolCallPart.new(part.id, part.name, args)
+            end
+            tool_calls << ToolCall.new(resolved.id, ToolCallFunction.new(resolved.name, args))
+            block.call(resolved)
+            next
           end
           block.call(part)
         end

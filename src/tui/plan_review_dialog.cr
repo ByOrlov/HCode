@@ -7,7 +7,7 @@ module Hcode
     # (App) owns the blocking channel; this component only emits a
     # `Tools::PlanReviewResult` through a callback and hides.
     class PlanReviewDialog
-      ACTIONS = ["Approve", "Revise", "Reject & Exit", "Cancel"]
+      ACTIONS = ["View full plan", "Approve", "Revise", "Reject & Exit", "Cancel"]
 
       @plan : String = ""
       @path : String?
@@ -27,6 +27,18 @@ module Hcode
       @editing_feedback : Bool = false
       @feedback : String = ""
 
+      # Full-plan viewer: a full-screen scrollable takeover of the plan body.
+      # Entered via the "View full plan" action; Esc/q returns to the action
+      # list. `@full_lines` is the markdown-rendered plan (cached when the
+      # viewer is entered via `render_full_lines`); `@full_scroll` is the top
+      # line index into it.
+      getter? viewing_full : Bool = false
+      @full_lines : Array(String) = [] of String
+      @full_scroll : Int32 = 0
+      # Terminal height, set by the App before each render/input so the viewer
+      # knows its viewport. Mirrors TasksBrowser#rows=.
+      property rows : Int32 = 24
+
       def initialize(@theme : Theme = Theme.dark)
         @markdown = Markdown.new(@theme)
       end
@@ -42,16 +54,24 @@ module Hcode
         @option_selected = nil
         @editing_feedback = false
         @feedback = ""
+        @viewing_full = false
+        @full_scroll = 0
         @visible = true
       end
 
       def hide : Nil
         @visible = false
+        @viewing_full = false
       end
 
       # ── Input ───────────────────────────────────────────────────────
 
       def handle_input(key : KeyEvent) : Nil
+        if @viewing_full
+          handle_full_view_input(key)
+          return
+        end
+
         if @editing_feedback
           handle_feedback_input(key)
           return
@@ -91,6 +111,52 @@ module Hcode
         end
       end
 
+      private def handle_full_view_input(key : KeyEvent) : Nil
+        case key.key
+        when .escape?
+          @viewing_full = false
+          return
+        when .up?
+          @full_scroll = (@full_scroll - 1).clamp(0, full_max_scroll)
+          return
+        when .down?
+          @full_scroll = (@full_scroll + 1).clamp(0, full_max_scroll)
+          return
+        when .page_up?
+          @full_scroll = (@full_scroll - full_viewport).clamp(0, full_max_scroll)
+          return
+        when .page_down?
+          @full_scroll = (@full_scroll + full_viewport).clamp(0, full_max_scroll)
+          return
+        when .home?
+          @full_scroll = 0
+          return
+        when .end?
+          @full_scroll = full_max_scroll
+          return
+        end
+
+        if key.key.char? && (ch = key.char)
+          case ch
+          when 'q', 'Q'
+            @viewing_full = false
+          when 'k'
+            @full_scroll = (@full_scroll - 1).clamp(0, full_max_scroll)
+          when 'j'
+            @full_scroll = (@full_scroll + 1).clamp(0, full_max_scroll)
+          end
+        end
+      end
+
+      # Visible rows available for the plan body inside the full-screen viewer.
+      private def full_viewport : Int32
+        {1, @rows - 4}.max # header (2) + footer hint (1) + trailing pad (1)
+      end
+
+      private def full_max_scroll : Int32
+        {0, @full_lines.size - full_viewport}.max
+      end
+
       private def handle_feedback_input(key : KeyEvent) : Nil
         case key.key
         when .escape?
@@ -125,15 +191,19 @@ module Hcode
 
       private def execute_action(idx : Int32) : Nil
         case idx
-        when 0 # Approve
+        when 0 # View full plan
+          render_full_lines
+          @full_scroll = 0
+          @viewing_full = true
+        when 1 # Approve
           label = @options.try { |opts| opts[@option_cursor]?.try(&.label) }
           emit(Tools::PlanReviewDecision::Approve, selected_label: label)
-        when 1 # Revise
+        when 2 # Revise
           @editing_feedback = true
           @feedback = ""
-        when 2 # Reject & Exit
+        when 3 # Reject & Exit
           emit(Tools::PlanReviewDecision::RejectAndExit)
-        when 3 # Cancel
+        when 4 # Cancel
           emit(Tools::PlanReviewDecision::Dismissed)
         end
       end
@@ -151,6 +221,7 @@ module Hcode
 
       def render(width : Int32) : Array(String)
         return [] of String unless @visible
+        return render_full(width) if @viewing_full
         accent = @theme.colors.primary
         dim = @theme.colors.dim
         text_color = @theme.colors.text
@@ -214,10 +285,64 @@ module Hcode
 
         lines << ""
         hint = @editing_feedback ? "type feedback · Enter submit · Esc cancel" :
-          "↑↓ action · ←/→ option · 1-4 / Enter confirm · Esc cancel"
+          "↑↓ action · ←/→ option · 1-5 / Enter confirm · Esc cancel"
         lines << "#{ANSI.color(dim, nil)}  #{hint}#{ANSI.reset}"
         lines << "#{ANSI.color(accent, nil)}#{"─" * render_width}#{ANSI.reset}"
         lines
+      end
+
+      # Full-screen plan viewer. Rendered as a full-screen takeover by the App
+      # (mirrors TasksBrowser): a header (path + line counter), the scrollable
+      # markdown-rendered plan body, and a footer key-hint. The body is cached
+      # in `@full_lines` (built once on entering the viewer via
+      # `render_full_lines`) so scrolling stays O(viewport).
+      private def render_full(width : Int32) : Array(String)
+        accent = @theme.colors.primary
+        dim = @theme.colors.dim
+        render_width = {1, width}.max
+        rows_now = {1, @rows}.max
+
+        lines = [] of String
+        # Header: separator + title line.
+        lines << "#{ANSI.color(accent, nil)}#{"─" * render_width}#{ANSI.reset}"
+        title = " full plan"
+        if p = @path
+          title += ": #{File.basename(p)}"
+        end
+        total = @full_lines.size
+        shown = {total, full_viewport}.min
+        last_visible = {@full_scroll + shown, total}.min
+        title += "  #{ANSI.color(dim, nil)}(#{last_visible}/#{total})#{ANSI.reset}"
+        lines << "#{ANSI.color(accent, nil)}#{ANSI.bold}#{title}#{ANSI.reset}"
+
+        viewport = full_viewport
+        start = @full_scroll.clamp(0, full_max_scroll)
+        window = @full_lines[start, {viewport, @full_lines.size - start}.min]? || [] of String
+        window.each do |bl|
+          lines << bl
+        end
+        # Pad the body up to the footer so short plans don't shift the layout.
+        while lines.size < rows_now - 1
+          lines << ""
+        end
+
+        # Footer hint.
+        lines << "#{ANSI.color(dim, nil)}  ↑↓/j k scroll · PgUp/PgDn · Home/End · Esc/q back#{ANSI.reset}"
+        lines
+      end
+
+      # Build (or rebuild) the cached full-plan lines. Called when entering the
+      # viewer; body width tracks the terminal so wraps stay consistent while
+      # scrolling.
+      private def render_full_lines : Nil
+        width = {20, @terminal_width - 2}.max
+        @full_lines = render_plan_body(@plan, width)
+      end
+
+      # Terminal width for plan body wrapping. Set by the App alongside `rows`.
+      @terminal_width : Int32 = 80
+      def terminal_width=(v : Int32) : Nil
+        @terminal_width = v
       end
 
       private def render_plan_body(plan : String, width : Int32) : Array(String)

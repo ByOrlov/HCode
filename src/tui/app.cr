@@ -1198,6 +1198,8 @@ module Hcode
         end
 
         if @plan_review_dialog.visible?
+          @plan_review_dialog.rows = @terminal.rows
+          @plan_review_dialog.terminal_width = @terminal.cols
           @plan_review_dialog.handle_input(key)
           @dirty = true
           return
@@ -2650,12 +2652,19 @@ module Hcode
         log_lines = [] of String
         active_lines = [] of String
 
-        # Full-screen modal takeovers (tasks browser) replace the entire
-        # layout — mirrors TS container-swap mount of TasksBrowserApp. They
-        # occupy the active zone only.
+        # Full-screen modal takeovers (tasks browser, plan full-view) replace
+        # the entire layout — mirrors TS container-swap mount. They occupy the
+        # active zone only.
         if @tasks_browser.visible?
           @tasks_browser.rows = @terminal.rows
           active_lines.concat(@tasks_browser.render(cols))
+          return {log_lines, active_lines, 0}
+        end
+
+        if @plan_review_dialog.visible? && @plan_review_dialog.viewing_full?
+          @plan_review_dialog.rows = @terminal.rows
+          @plan_review_dialog.terminal_width = cols
+          active_lines.concat(@plan_review_dialog.render(cols))
           return {log_lines, active_lines, 0}
         end
 
@@ -2719,7 +2728,8 @@ module Hcode
           active_lines.concat(@question_dialog.render(cols))
         end
 
-        if @plan_review_dialog.visible?
+        if @plan_review_dialog.visible? && !@plan_review_dialog.viewing_full?
+          @plan_review_dialog.terminal_width = cols
           active_lines.concat(@plan_review_dialog.render(cols))
         end
 

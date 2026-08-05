@@ -74,6 +74,11 @@ namespace :mock do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos ./hcode --tui-prompt 'mock' --yolo"
   end
 
+  desc "Run TUI with mock provider — long-plan review (EnterPlanMode → Write → ExitPlanMode)"
+  task :plan => :build do
+    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=plan ./hcode --tui-prompt 'mock' --yolo"
+  end
+
   # Simulate a first run with no config so the setup wizard launches. HCODE_HOME
   # is pointed at a throwaway dir inside the project and config.json is wiped
   # first, so the wizard sees an unconfigured state. Writes go to that throwaway
