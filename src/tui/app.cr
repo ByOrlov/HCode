@@ -501,6 +501,7 @@ module Hcode
         @spinner = Spinner.new
         @markdown = Markdown.new(@theme)
         @provider_list = SelectList.new([] of String, @theme)
+        @provider_list.max_visible = 15
         @model_list = SelectList.new([] of String, @theme)
         @model_list.searchable = true
         @model_list.max_visible = 50
@@ -607,6 +608,13 @@ module Hcode
           sleep 20.milliseconds unless key
         end
 
+        # Move the hardware cursor to the bottom row before restoring the
+        # terminal, so the shell prompt lands below the last rendered frame
+        # instead of wherever the editor/list left it. This matters for the
+        # welcome wizard, where ESC exits from an input positioned partway up
+        # the screen and leaves stale content above an awkwardly placed prompt.
+        move_cursor_to_bottom
+
         @terminal.restore!
       end
 
@@ -614,6 +622,17 @@ module Hcode
       # full session transcript to stdout and exiting.
       def restore_terminal : Nil
         @terminal.restore!
+      end
+
+      # Position the hardware cursor on the terminal's last row, column 1. Run
+      # just before restoring the terminal on exit so the restored shell prompt
+      # appears at the bottom of the screen rather than at the row the TUI's
+      # editor/list last painted on.
+      private def move_cursor_to_bottom : Nil
+        return if @terminal.rows <= 0
+        print ANSI.cursor_to(@terminal.rows - 1, 0)
+        print "\r"
+        STDOUT.flush
       end
 
       def add_message(role : String, content : String) : Nil
@@ -4370,22 +4389,29 @@ module Hcode
         dc = ANSI.color(@theme.colors.dim, nil)
         r = ANSI.reset
 
+        # Left vertical bar (rectangle) drawn down the whole running-tool block,
+        # mirroring `render_streaming_text`'s STREAMING_BAR so every active-zone
+        # tool shares the same mutable-region marker. Khaki (logo color).
+        kc = ANSI.color(@theme.colors.logo, nil)
+        lead = "#{kc}#{STREAMING_BAR}#{r} "
+        rest_indent = "  "
+
         if name == "Bash"
           label_color = sudo_command?(msg.tool_args) ? @theme.colors.warning : @theme.colors.primary
           pc = ANSI.color(label_color, nil)
-          lines << "#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
+          lines << "#{lead}#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
         else
           verb = Hcode.t("tools.using")
           key_arg = extract_key_argument(name, msg.tool_args)
           tool_label = "#{pc}#{ANSI.bold}#{name}#{r}"
           arg_str = key_arg ? "#{dc} (#{key_arg})#{r}" : ""
-          lines << "#{tc}#{bullet_frame}#{r} #{verb} #{tool_label}#{arg_str}"
+          lines << "#{lead}#{tc}#{bullet_frame}#{r} #{verb} #{tool_label}#{arg_str}"
         end
 
         if args = msg.tool_args
           key_arg = extract_key_argument(name, args)
           if name == "Bash" || key_arg.nil?
-            tool_preview(name, args).each { |l| lines << "#{dc}  #{l}#{r}" }
+            tool_preview(name, args).each { |l| lines << "#{lead}#{rest_indent}#{dc}#{l}#{r}" }
           end
         end
 
