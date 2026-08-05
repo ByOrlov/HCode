@@ -203,6 +203,16 @@ module Hcode
       STATUS_BULLET             = "● "
       ASSISTANT_BULLET          = "💬 "
       USER_BULLET               = "👤 "
+      # Vertical bar drawn on the left of the streaming assistant block in the
+      # Active zone. Colored khaki (logo color from the theme), it visually
+      # marks the mutable region that is repainted every frame. Finalized text
+      # in the Log zone is clean — no bar.
+      STREAMING_BAR             = "▌"
+      # Lines reserved for the rest of the active zone (spinner, editor box,
+      # footer, etc.) when capping the streaming text window. The streaming
+      # block is mutable and must never scroll into immutable scrollback, so
+      # only the tail within this budget is kept.
+      STREAMING_RESERVE         = 10
 
       @terminal : Terminal
       getter terminal
@@ -2648,7 +2658,7 @@ module Hcode
         end
 
         unless @streaming_text.empty?
-          active_lines.concat(render_message(Message.new("assistant", @streaming_text), cols))
+          active_lines.concat(render_streaming_text(cols))
         end
 
         # Pending tool calls (no result yet) live in the active zone — they
@@ -3112,6 +3122,58 @@ module Hcode
         when "compaction"
           lines.concat(render_compaction_block(msg, cols))
         end
+
+        lines
+      end
+
+      # Render the streaming assistant text in the active zone with a khaki
+      # vertical bar on the left (blockquote style) and a capped window so the
+      # mutable block never overflows into scrollback. Only the tail within the
+      # viewport budget is shown — the rest appears once the message finalizes
+      # and migrates to the Log zone (clean, without the bar).
+      private def render_streaming_text(cols : Int32) : Array(String)
+        lines = [] of String
+        return lines if @streaming_text.empty?
+
+        kc = ANSI.color(@theme.colors.logo, nil) # khaki
+        dc = ANSI.color(@theme.colors.dim, nil)
+        r = ANSI.reset
+        bullet = "#{ANSI.color(@theme.colors.text, nil)}#{ASSISTANT_BULLET}#{ANSI.reset}"
+        # Lead prefix on every line: the khaki bar (1 col) + a gap (1 col).
+        # On the first line the 💬 bullet follows the bar; on the rest a
+        # 3-space indent aligns body text under the bullet (emoji is 2 cols +
+        # 1 trailing space). This keeps a continuous vertical bar down the left
+        # edge of the whole streaming block.
+        lead = "#{kc}#{STREAMING_BAR}#{r} "
+        rest_indent = "   "
+
+        # Render markdown narrower to make room for the lead + bullet/indent.
+        md_lines = @markdown.render(@streaming_text, {cols - 5, 10}.max)
+
+        # Windowing: cap the streaming block so the active zone stays within the
+        # viewport. Streaming content is mutable — it must not scroll into
+        # immutable scrollback. Keep the tail (most recent tokens).
+        rows = @terminal.rows
+        budget = {rows - STREAMING_RESERVE, 3}.max
+        hidden = 0
+        if md_lines.size > budget
+          hidden = md_lines.size - budget
+          md_lines = md_lines[-budget..]
+        end
+
+        if hidden > 0
+          lines << "#{lead}#{dc}↑ #{hidden} lines streaming…#{r}"
+        end
+
+        md_lines.each_with_index do |l, i|
+          body = l.starts_with?("  ") ? l[2..] : l
+          if i == 0
+            lines << "#{lead}#{bullet}#{body}"
+          else
+            lines << "#{lead}#{rest_indent}#{body}"
+          end
+        end
+        lines << ""
 
         lines
       end
