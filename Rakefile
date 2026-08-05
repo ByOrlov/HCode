@@ -63,6 +63,11 @@ namespace :mock do
   task :markdown => :build do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown ./hcode --tui-prompt 'mock' --yolo"
   end
+
+  desc "Run TUI with mock provider — sudo terminal exec demo (requires bin/mocksudo on PATH)"
+  task :mocksudo => :build do
+    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=sudo PATH=#{File.dirname(__FILE__)}/bin:$PATH ./hcode --tui-prompt 'mock' --yolo"
+  end
 end
 
 namespace :mock do

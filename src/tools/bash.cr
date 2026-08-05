@@ -20,6 +20,52 @@ module Hcode
       @session_dir : String?
       @delivery : (String -> Nil)?
 
+      # Sudo permission modes.
+      #   Off     — sudo commands are always disallowed (default).
+      #   Request — ask the user for approval each time a sudo command runs.
+      #   Always  — sudo commands are allowed without asking.
+      enum SudoMode
+        Off
+        Request
+        Always
+      end
+
+      enum SudoApprovalChoice
+        AllowOnce
+        AlwaysAllow
+        Deny
+      end
+
+      @@sudo_mode : SudoMode = SudoMode::Request
+      @@sudo_approval : (String -> SudoApprovalChoice)?
+
+      def self.sudo_mode=(mode : SudoMode) : Nil
+        @@sudo_mode = mode
+      end
+
+      def self.sudo_mode : SudoMode
+        @@sudo_mode
+      end
+
+      def self.sudo_approval=(cb : (String -> SudoApprovalChoice)?) : Nil
+        @@sudo_approval = cb
+      end
+
+      # Injected terminal-exec bridge. When set and a command is detected as
+      # requiring elevated privileges (sudo), the command is routed through this
+      # service instead of the normal piped execution path. nil → sudo commands
+      # fall back to the normal path (stdin closed, sudo will fail with
+      # "a terminal is required to read the password").
+      @@terminal_exec : TerminalExecService?
+
+      def self.terminal_exec=(svc : TerminalExecService?) : Nil
+        @@terminal_exec = svc
+      end
+
+      def self.terminal_exec : TerminalExecService?
+        @@terminal_exec
+      end
+
       def initialize(@work_dir : String = Dir.current,
                      @task_service : TaskService? = nil,
                      @session_dir : String? = nil,
@@ -130,6 +176,18 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
 
         spawn_env = build_env
 
+        # Sudo commands need a real terminal (sudo reads the password from
+        # /dev/tty). Check sudo permission first, then route through
+        # TerminalExecService if available.
+        if sudo_command?(command)
+          unless sudo_allowed?(command)
+            return ToolResult.error("sudo disallowed for agent. Use /sudo always or /sudo request to enable.")
+          end
+          if svc = @@terminal_exec
+            return execute_in_terminal(svc, command, effective_cwd, spawn_env, timeout_s)
+          end
+        end
+
         process = Process.new(
           command,
           shell: true,
@@ -170,6 +228,67 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
           ToolResult.error("#{result}\n[exit code: #{status.exit_code}]")
         else
           ToolResult.success(result.strip)
+        end
+      rescue ex : File::NotFoundError
+        ToolResult.error("Failed to execute command: shell not found")
+      rescue ex : IO::Error
+        ToolResult.error("Failed to execute command: #{ex.message}")
+      rescue ex
+        ToolResult.error("Unexpected error: #{ex.message}")
+      end
+
+      # ------------------------------------------------------------------
+      # Terminal execution (sudo)
+      # ------------------------------------------------------------------
+
+      private def sudo_command?(command : String) : Bool
+        Permission::Danger.detect_command(command) == "elevated privileges"
+      end
+
+      private def sudo_allowed?(command : String) : Bool
+        case @@sudo_mode
+        in SudoMode::Off
+          false
+        in SudoMode::Always
+          true
+        in SudoMode::Request
+          if cb = @@sudo_approval
+            case cb.call(command)
+            in SudoApprovalChoice::AllowOnce
+              true
+            in SudoApprovalChoice::AlwaysAllow
+              @@sudo_mode = SudoMode::Always
+              true
+            in SudoApprovalChoice::Deny
+              false
+            end
+          else
+            false
+          end
+        end
+      end
+
+      private def execute_in_terminal(svc : TerminalExecService, command : String,
+                                      cwd : String, env : Hash(String, String?),
+                                      timeout_s : Int32) : ToolResult
+        result = svc.run(command, cwd, env, timeout_s, abort_check)
+
+        output = result.output
+        truncated = false
+        if output.bytesize > MAX_OUTPUT_BYTES
+          output = output[0, MAX_OUTPUT_BYTES]
+          truncated = true
+        end
+        output += OUTPUT_TRUNCATION_SENTINEL if truncated
+
+        if result.aborted?
+          ToolResult.error("#{output}\n[interrupted by user]")
+        elsif result.timed_out?
+          ToolResult.error("#{output}\n[Command timed out after #{timeout_s}s and was killed]")
+        elsif result.exit_code != 0
+          ToolResult.error("#{output}\n[exit code: #{result.exit_code}]")
+        else
+          ToolResult.success(output.strip)
         end
       rescue ex : File::NotFoundError
         ToolResult.error("Failed to execute command: shell not found")
@@ -503,6 +622,29 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         def initialize(@text : String, @truncated : Bool)
         end
       end
+    end
+
+    # Result of running a command through a real terminal (alt screen).
+    struct TerminalExecResult
+      getter output : String
+      getter exit_code : Int32
+      getter? timed_out : Bool
+      getter? aborted : Bool
+
+      def initialize(@output : String, @exit_code : Int32,
+                     @timed_out : Bool = false, @aborted : Bool = false)
+      end
+    end
+
+    # Bridge for executing commands in a real terminal (alt screen + cooked
+    # termios) so programs that read from /dev/tty (sudo, ssh, …) can prompt
+    # for passwords naturally. The TUI provides a concrete implementation
+    # wired via `Bash.terminal_exec=`. When nil, sudo commands fall back to
+    # the normal piped path (which will fail for password prompts).
+    abstract class TerminalExecService
+      abstract def run(command : String, cwd : String?,
+                       env : Hash(String, String?), timeout_s : Int32?,
+                       aborted? : -> Bool) : TerminalExecResult
     end
   end
 end

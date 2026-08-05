@@ -231,6 +231,27 @@ module Hcode
         end
       end
 
+      private def cmd_sudo(args : String) : Nil
+        arg = args.strip.downcase
+        if arg.empty?
+          open_sudo_selector
+          return
+        end
+        case arg
+        when "off"
+          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Off
+          @messages << Message.new("system", "Sudo mode: off (sudo commands disallowed)")
+        when "request"
+          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Request
+          @messages << Message.new("system", "Sudo mode: request (ask before each sudo command)")
+        when "always"
+          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Always
+          @messages << Message.new("system", "Sudo mode: always (sudo commands allowed)")
+        else
+          @messages << Message.new("error", "Unknown sudo mode: #{args}. Use: off, request, or always.")
+        end
+      end
+
       private def cmd_effort(args : String) : Nil
         if args.empty?
           open_effort_selector

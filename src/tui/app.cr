@@ -205,10 +205,12 @@ module Hcode
       USER_BULLET               = "👤 "
 
       @terminal : Terminal
+      getter terminal
       @input : Input
       @editor : Editor
       @spinner : Spinner
       @theme : Theme
+      getter theme
       @messages : Array(Message) = [] of Message
       # Last fully rendered frame (log + active combined). Kept for the
       # `/memory` profiler (`render_buffer_*`).
@@ -252,6 +254,9 @@ module Hcode
       @queue : Array(QueuedMessage) = [] of QueuedMessage
       @spin_phase : Int32 = 0
       @dirty : Bool = true
+      # When true, a terminal-exec (sudo) session owns the screen — skip TUI
+      # rendering so it doesn't clobber the alt-screen output.
+      property terminal_exec_active : Bool = false
       @last_render : Time::Span = Time.monotonic
       # Serializes rendering across fibers. STDOUT writes can yield to the
       # scheduler (when the kernel write buffer is full), so without this guard
@@ -327,6 +332,11 @@ module Hcode
       # Approval state
       @approval_pending : ApprovalRequest?
       @approval_channel = Channel(Permission::ApprovalChoice).new
+      # Sudo approval popup: a SelectList shown when a sudo command needs
+      # interactive approval. Blocks the agent fiber on this channel.
+      @sudo_approval_list : SelectList
+      @sudo_approval_pending : String? = nil
+      @sudo_approval_channel = Channel(Tools::Bash::SudoApprovalChoice).new
       # Notification subsystem: owns the current agent status and fans every
       # real transition out to the dispatcher. nil when notifications are
       # disabled (no dispatcher wired up) → transitions become no-ops.
@@ -338,6 +348,7 @@ module Hcode
       @permission_list : SelectList
       @effort_list : SelectList
       @theme_list : SelectList
+      @sudo_list : SelectList
       @question_dialog : QuestionDialog
       @plan_review_dialog : PlanReviewDialog
       @undo_dialog : UndoDialog
@@ -482,6 +493,8 @@ module Hcode
         @permission_list = SelectList.new([] of String, @theme)
         @effort_list = SelectList.new([] of String, @theme)
         @theme_list = SelectList.new([] of String, @theme)
+        @sudo_list = SelectList.new([] of String, @theme)
+        @sudo_approval_list = SelectList.new([] of String, @theme)
         @question_dialog = QuestionDialog.new(@theme)
         @plan_review_dialog = PlanReviewDialog.new(@theme)
         @undo_dialog = UndoDialog.new(@theme)
@@ -544,6 +557,14 @@ module Hcode
         end
 
         while @running
+          # When a terminal-exec (sudo) session owns the screen, the TUI must
+          # not read from STDIN — the child process reads password input
+          # directly from /dev/tty (same fd). Skip input + render, just idle.
+          if @terminal_exec_active
+            sleep 50.milliseconds
+            next
+          end
+
           key = @input.read_key
 
           if key
@@ -562,7 +583,7 @@ module Hcode
           # dirty — bypassing the 80ms spinner throttle — so the user sees
           # progressive content updates instead of only the finalized block.
           streaming = !@streaming_thinking.empty? || !@streaming_text.empty?
-          if @dirty && (!@agent_busy || streaming || elapsed >= 80)
+          if @dirty && !@terminal_exec_active && (!@agent_busy || streaming || elapsed >= 80)
             render
             @dirty = @log_zone.pending?
             @last_render = now
@@ -586,6 +607,11 @@ module Hcode
       end
 
       def dirty! : Nil
+        @dirty = true
+      end
+
+      def force_redraw! : Nil
+        @first_render = true
         @dirty = true
       end
 
@@ -1006,6 +1032,23 @@ module Hcode
         end
       end
 
+      SUDO_APPROVAL_OPTIONS = ["Allow once", "Always allow", "Deny"]
+
+      def request_sudo_approval(command : String) : Tools::Bash::SudoApprovalChoice
+        @sudo_approval_pending = command
+        @sudo_approval_list.show("Sudo command requires approval", SUDO_APPROVAL_OPTIONS)
+        @sudo_approval_list.selected = 0
+        @dirty = true
+        @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
+          Hcode.t("ui.approval_required"), "Bash (sudo)"))
+        choice = @sudo_approval_channel.receive
+        @sudo_approval_list.hide
+        @sudo_approval_pending = nil
+        @dirty = true
+        @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
+        choice
+      end
+
       # Launch a structured multi-question prompt. Mirrors TS
       # `reverse-rpc/question-adapter.ts` mounting a QuestionDialogComponent
       # and awaiting the user's answers. Returns the answers map
@@ -1160,6 +1203,16 @@ module Hcode
 
         if @theme_list.visible?
           handle_theme_list_key(key)
+          return
+        end
+
+        if @sudo_list.visible?
+          handle_sudo_list_key(key)
+          return
+        end
+
+        if @sudo_approval_list.visible?
+          handle_sudo_approval_key(key)
           return
         end
 
@@ -1708,6 +1761,8 @@ module Hcode
           cmd_copy
         when "/permission"
           cmd_permission(args)
+        when "/sudo"
+          cmd_sudo(args)
         when "/effort"
           cmd_effort(args)
         when "/plan"
@@ -2092,6 +2147,7 @@ module Hcode
       PERMISSION_MODES = ["manual", "auto", "yolo"]
       EFFORT_LEVELS    = ["off", "low", "medium", "high"]
       THEMES           = ["dark", "light"]
+      SUDO_MODES       = ["request", "always", "off"]
 
       private def open_permission_selector : Nil
         @permission_list.show(Hcode.t("ui.select_permission"), PERMISSION_MODES)
@@ -2175,6 +2231,91 @@ module Hcode
           @theme_list.hide
           @dirty = true
         end
+      end
+
+      private def open_sudo_selector : Nil
+        @sudo_list.show("Select sudo mode", SUDO_MODES)
+        current = Tools::Bash.sudo_mode.to_s.downcase
+        @sudo_list.selected = SUDO_MODES.index(current) || 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_sudo_list_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @sudo_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          mode_str = @sudo_list.current || "request"
+          @sudo_list.hide
+          @dirty = true
+          mode = case mode_str
+                 when "off"     then Tools::Bash::SudoMode::Off
+                 when "always"  then Tools::Bash::SudoMode::Always
+                 else                Tools::Bash::SudoMode::Request
+                 end
+          Tools::Bash.sudo_mode = mode
+          @messages << Message.new("system", "Sudo mode: #{mode_str}")
+        when .escape?
+          @sudo_list.hide
+          @dirty = true
+        end
+      end
+
+      private def handle_sudo_approval_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @sudo_approval_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          idx = @sudo_approval_list.selected
+          choice = case idx
+                   when 0 then Tools::Bash::SudoApprovalChoice::AllowOnce
+                   when 1 then Tools::Bash::SudoApprovalChoice::AlwaysAllow
+                   else        Tools::Bash::SudoApprovalChoice::Deny
+                   end
+          @sudo_approval_channel.send(choice)
+        when .escape?
+          @sudo_approval_channel.send(Tools::Bash::SudoApprovalChoice::Deny)
+        end
+      end
+
+      private def render_sudo_approval_panel(cols : Int32) : Array(String)
+        lines = [] of String
+        accent = @theme.colors.primary
+        dim = @theme.colors.dim
+
+        render_width = {cols - 4, 20}.max
+        border_top = "#{ANSI.color(accent, nil)}  ┌#{ANSI.bold} Sudo command requires approval #{ANSI.reset}#{ANSI.color(accent, nil)}#{"─" * {render_width - 31, 1}.max}┐#{ANSI.reset}"
+        border_bot = "#{ANSI.color(accent, nil)}  └#{"─" * {render_width - 1, 1}.max}┘#{ANSI.reset}"
+
+        lines << ""
+        lines << border_top
+
+        if cmd = @sudo_approval_pending
+          cmd_display = cmd.size > render_width - 6 ? cmd[0, render_width - 9] + "..." : cmd
+          lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset} #{ANSI.color(dim, nil)}$ #{cmd_display}#{ANSI.reset}"
+        end
+
+        lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset}"
+
+        start, count = @sudo_approval_list.visible_window
+        count.times do |rel|
+          i = start + rel
+          item = @sudo_approval_list.item_at(i).to_s
+          is_sel = i == @sudo_approval_list.selected
+          if is_sel
+            lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset} #{ANSI.color(accent, nil)}#{ANSI.bold}→ #{item}#{ANSI.reset}"
+          else
+            lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset} #{ANSI.color(dim, nil)}  #{item}#{ANSI.reset}"
+          end
+        end
+
+        lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset}"
+        lines << "#{ANSI.color(accent, nil)}  │#{ANSI.reset} #{ANSI.color(dim, nil)}↑↓ select · ↵ confirm · esc deny#{ANSI.reset}"
+        lines << border_bot
+        lines
       end
 
       private def open_session_selector(mode : Symbol) : Nil
@@ -2569,6 +2710,14 @@ module Hcode
 
         if @theme_list.visible?
           active_lines.concat(render_select_panel(@theme_list, cols))
+        end
+
+        if @sudo_list.visible?
+          active_lines.concat(render_select_panel(@sudo_list, cols))
+        end
+
+        if @sudo_approval_list.visible?
+          active_lines.concat(render_sudo_approval_panel(cols))
         end
 
         if todos = current_todos
@@ -3947,6 +4096,7 @@ module Hcode
                  when @permission_list then @permission_mode
                  when @effort_list     then @on_get_effort.try(&.call) || "off"
                  when @theme_list      then @theme.name
+                 when @sudo_list       then Tools::Bash.sudo_mode.to_s.downcase
                  else                       ""
                  end
 
@@ -4116,6 +4266,8 @@ module Hcode
         r = ANSI.reset
 
         if name == "Bash"
+          label_color = sudo_command?(msg.tool_args) ? @theme.colors.warning : @theme.colors.primary
+          pc = ANSI.color(label_color, nil)
           lines << "#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
         else
           verb = Hcode.t("tools.using")
@@ -4148,7 +4300,7 @@ module Hcode
 
         if name == "Bash"
           label = has_result ? Hcode.t("tools.ran_command") : Hcode.t("tools.running_command")
-          tone = is_error ? @theme.colors.error : @theme.colors.primary
+          tone = is_error ? @theme.colors.error : (sudo_command?(args) ? @theme.colors.warning : @theme.colors.primary)
           return "#{bullet}#{ANSI.color(tone, nil)}#{ANSI.bold}#{label}#{ANSI.reset}"
         end
 
@@ -4284,6 +4436,15 @@ module Hcode
         nil
       rescue
         nil
+      end
+
+      private def sudo_command?(args : String?) : Bool
+        return false unless args
+        parsed = JSON.parse(args)
+        command = parsed["command"]?.try(&.to_s) || ""
+        Permission::Danger.detect_command(command) == "elevated privileges"
+      rescue
+        false
       end
 
       private def wrap_text(text : String, max_width : Int32) : Array(String)

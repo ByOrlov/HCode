@@ -134,6 +134,25 @@ module Hcode
         ),
       ] of MockStep
 
+      # Sudo terminal-exec demo: a Bash call with `sudo` that triggers the
+      # alt-screen terminal path (real /dev/tty for password entry), then a
+      # final text answer. Requires `bin/mocksudo` on PATH or a real sudo.
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=sudo
+      SUDO_DEMO_SCRIPT = [
+        MockStep.new(
+          parts: [
+            TextPart.new("I'll run a sudo command to demonstrate terminal exec."),
+            ToolCallPart.new("m_sudo_1", "Bash", %({"command":"sudo echo \\"Hello from sudo\\""})),
+          ] of MessagePart,
+          stop_reason: "tool_use",
+        ),
+        MockStep.new(
+          parts: [TextPart.new("Sudo command completed successfully.")] of MessagePart,
+          stop_reason: "end_turn",
+          text: "Sudo command completed successfully.",
+        ),
+      ] of MockStep
+
       property model : String
       property script : Array(MockStep)
       @step : Int32 = 0
@@ -148,6 +167,7 @@ module Hcode
         when "thinking"       then THINKING_DEMO_SCRIPT.dup
         when "thinking-tools" then THINKING_TOOLS_DEMO_SCRIPT.dup
         when "markdown"       then MARKDOWN_DEMO_SCRIPT.dup
+        when "sudo"           then SUDO_DEMO_SCRIPT.dup
         else                       nil
         end
       end

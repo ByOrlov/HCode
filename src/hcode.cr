@@ -715,6 +715,17 @@ module Hcode
       # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
       Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
 
+      # Wire the Bash tool's terminal-exec bridge so sudo commands run in a
+      # real terminal (alt screen + cooked termios) where /dev/tty is available.
+      Hcode::Tools::Bash.terminal_exec = AppTerminalExecService.new(app)
+
+      # Wire the sudo approval callback: when SudoMode is Request, the Bash
+      # tool calls this to ask the user before running a sudo command. Reuses
+      # the existing approval panel (y/n/s prompt).
+      Hcode::Tools::Bash.sudo_approval = ->(command : String) do
+        app.request_sudo_approval(command)
+      end
+
       # Plan-mode wiring: instantiate the per-session plan service, expose its
       # permission mode, and bridge ExitPlanMode's interactive review to the
       # TUI's PlanReviewDialog. `/plan` toggles the mode through on_plan_mode.
@@ -1601,6 +1612,181 @@ module Hcode
     def request(plan : String, path : String?,
                options : Array(Tools::PlanOption)?) : Tools::PlanReviewResult?
       @app.request_plan_review(plan, path, options)
+    end
+  end
+
+  # Bridge Bash tool → real terminal for sudo commands. Switches to alt
+  # screen + cooked termios so the child process (and sudo's /dev/tty
+  # password read) works naturally, while relaying piped output to the
+  # terminal in real time AND capturing it for the ToolResult.
+  class AppTerminalExecService < Tools::TerminalExecService
+    def initialize(@app : TUI::App)
+    end
+
+    def run(command : String, cwd : String?,
+            env : Hash(String, String?), timeout_s : Int32?,
+            aborted? : -> Bool) : Tools::TerminalExecResult
+      terminal = @app.terminal
+
+      # Headless fallback: no alt screen / termios dance. Just pipe + capture
+      # (same as the normal Bash path — sudo will fail without /dev/tty).
+      unless terminal.tty?
+        return run_headless(command, cwd, env, timeout_s, aborted?)
+      end
+
+      # Terminal path: alt screen + cooked termios + pipe + relay + capture.
+      @app.terminal_exec_active = true
+      print TUI::ANSI.alt_screen_on
+      print "\e[H"    # cursor to row 1, col 1
+      print "\e[2J"   # clear the alt screen
+      terminal.restore!
+
+      # Print a header so the user sees what's running before output starts.
+      warning = @app.theme.colors.warning
+      dim = @app.theme.colors.dim
+      STDOUT.puts "#{TUI::ANSI.color(warning, nil)}#{TUI::ANSI.bold}● Running command#{TUI::ANSI.reset}"
+      STDOUT.puts "#{TUI::ANSI.color(dim, nil)}  $ #{command}#{TUI::ANSI.reset}"
+      STDOUT.puts
+      STDOUT.flush
+
+      output = ""
+      begin
+        process = Process.new(
+          command,
+          shell: true,
+          env: env,
+          input: Process::Redirect::Pipe,
+          output: Process::Redirect::Pipe,
+          error: Process::Redirect::Pipe,
+          chdir: cwd,
+        )
+        process.input.close
+
+        # Tee fibers: relay pipe → real terminal (STDOUT/STDERR) AND capture
+        # into IO::Memory for the ToolResult.
+        stdout_mem = IO::Memory.new
+        stderr_mem = IO::Memory.new
+        done_out = Channel(Nil).new
+        done_err = Channel(Nil).new
+
+        spawn do
+          tee_capture(process.output, STDOUT, stdout_mem)
+          done_out.send(nil)
+        end
+
+        spawn do
+          tee_capture(process.error, STDERR, stderr_mem)
+          done_err.send(nil)
+        end
+
+        status, timed_out, was_aborted = Tools::Tool.wait_for_exit(process, timeout_s, aborted?)
+
+        # Wait for tee fibers to finish draining the pipes.
+        done_out.receive
+        done_err.receive
+
+        output = combine_output(stdout_mem.to_s, stderr_mem.to_s)
+
+        Tools::TerminalExecResult.new(output, status.exit_code, timed_out, was_aborted)
+      rescue ex : File::NotFoundError
+        Tools::TerminalExecResult.new("Failed to execute command: shell not found", 127)
+      rescue ex : IO::Error
+        Tools::TerminalExecResult.new("Failed to execute command: #{ex.message}", 1)
+      rescue ex
+        Tools::TerminalExecResult.new("Unexpected error: #{ex.message}", 1)
+      ensure
+        terminal.raw!
+        print TUI::ANSI.alt_screen_off
+        @app.terminal_exec_active = false
+        @app.force_redraw!
+      end
+    end
+
+    private def run_headless(command : String, cwd : String?,
+                             env : Hash(String, String?), timeout_s : Int32?,
+                             aborted? : -> Bool) : Tools::TerminalExecResult
+      process = Process.new(
+        command,
+        shell: true,
+        env: env,
+        input: Process::Redirect::Pipe,
+        output: Process::Redirect::Pipe,
+        error: Process::Redirect::Pipe,
+        chdir: cwd,
+      )
+      process.input.close
+
+      stdout_ch = Channel(String).new
+      stderr_ch = Channel(String).new
+
+      spawn { stdout_ch.send(capture_only(process.output)) }
+      spawn { stderr_ch.send(capture_only(process.error)) }
+
+      status, timed_out, was_aborted = Tools::Tool.wait_for_exit(process, timeout_s, aborted?)
+
+      out_str = stdout_ch.receive
+      err_str = stderr_ch.receive
+      output = combine_output(out_str, err_str)
+
+      Tools::TerminalExecResult.new(output, status.exit_code, timed_out, was_aborted)
+    end
+
+    # Read from src, write to both dest (real terminal) and mem (capture).
+    # Caps at MAX_OUTPUT_BYTES in the capture; excess is relayed but discarded.
+    private def tee_capture(src : IO, dest : IO, mem : IO::Memory) : Nil
+      buf = Bytes.new(8192)
+      total = 0
+      begin
+        loop do
+          read = src.read(buf)
+          break if read == 0
+          dest.write(buf[0, read])
+          dest.flush
+          remaining = Tools::Bash::MAX_OUTPUT_BYTES - total
+          if read > remaining
+            mem.write(buf[0, remaining]) if remaining > 0
+            # Drain the rest so the child does not block on a full pipe.
+            loop { break if src.read(buf) == 0 }
+            break
+          end
+          mem.write(buf[0, read])
+          total += read
+        end
+      rescue IO::Error
+        # Process killed or stream closed — return what we have.
+      end
+    end
+
+    private def capture_only(io : IO) : String
+      mem = IO::Memory.new
+      buf = Bytes.new(8192)
+      total = 0
+      begin
+        loop do
+          read = io.read(buf)
+          break if read == 0
+          remaining = Tools::Bash::MAX_OUTPUT_BYTES - total
+          if read > remaining
+            mem.write(buf[0, remaining]) if remaining > 0
+            loop { break if io.read(buf) == 0 }
+            break
+          end
+          mem.write(buf[0, read])
+          total += read
+        end
+      rescue IO::Error
+      end
+      mem.to_s
+    end
+
+    private def combine_output(out_str : String, err_str : String) : String
+      String.build do |s|
+        s << out_str unless out_str.empty?
+        unless err_str.empty?
+          s << "\n" unless out_str.empty?
+          s << err_str
+        end
+      end
     end
   end
 end
