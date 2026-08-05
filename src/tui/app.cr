@@ -3171,7 +3171,7 @@ module Hcode
         if !expanded && content_lines.size > THINKING_PREVIEW_LINES
           shown = lines[0..THINKING_PREVIEW_LINES]
           remaining = content_lines.size - THINKING_PREVIEW_LINES
-          hint = "... (#{remaining} more lines, ctrl+o to expand)"
+          hint = "... (#{remaining} more lines, load session in /debug mode to expand)"
           shown << "#{indent}#{dc}#{hint}#{r}"
           lines = shown
         end
