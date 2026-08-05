@@ -272,23 +272,23 @@ describe "Zone behaviour tests (via App#render_zones)" do
       screen = mock.screen
       # No stale active-zone lines from the taller frame
       (1..8).each { |n| screen.should_not contain("A#{n}") unless n <= 5 }
-      # Log and active content correct
+      # All visible lines rewritten correctly — no blank rows.
       screen[0, 7].should eq((1..7).map { |n| l(n) })
       screen[7, 5].should eq((1..5).map { |n| a(n) })
     end
 
-    it "clears stale content above the active zone on viewport shrink" do
+    it "rewrites all visible lines on viewport shrink (partial)" do
       app = Hcode::TUI::App.new
       mock = Hcode::TUI::TerminalMock.new(rows: 12, cols: 80)
 
       # Frame 1: log=[L1..L9], active=[A1..A5] → total=14, VT=2
-      app.render_zones(mock, (1..9).map { |n| l(n) }, (1..5).map { |n| a(n) })
+      drain(app, mock, (1..9).map { |n| l(n) }, (1..5).map { |n| a(n) })
 
       # Frame 2: active shrinks to 3 → total=12, VT=0, scroll_delta=-2
       app.render_zones(mock, (1..9).map { |n| l(n) }, (1..3).map { |n| a(n) })
 
       screen = mock.screen
-      # Screen should show L1..L9, A1..A3 starting from row 0
+      # All visible lines rewritten — no blank rows.
       screen[0, 9].should eq((1..9).map { |n| l(n) })
       screen[9, 3].should eq((1..3).map { |n| a(n) })
     end

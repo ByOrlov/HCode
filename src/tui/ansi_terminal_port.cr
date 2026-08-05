@@ -22,6 +22,10 @@ module Hcode
         @io << "\e[H"
       end
 
+      def cursor_to_row(row : Int32) : Nil
+        @io << "\e[#{row};1H"
+      end
+
       def cursor_to_column(col : Int32) : Nil
         @io << "\e[#{col}G"
       end

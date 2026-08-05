@@ -217,7 +217,6 @@ module Hcode
       @previous_viewport_top : Int32 = 0
       @prev_log_count : Int32 = 0
       @prev_active_visible : Int32 = 0
-      @hardware_cursor_row : Int32 = 0
       # The two render zones (see `docs/TUI_ZONES.md`). LogZone tracks which
       # finalized log lines have already been emitted; ActiveZone is a stateless
       # renderer that paints the transient region at the bottom of the screen.
@@ -626,9 +625,10 @@ module Hcode
         @streaming_thinking = ""
         @streaming_tool = nil
         @current_step = 0
-        # History was rebuilt from scratch — reset the log emission cursor and
-        # force a full repaint on the next frame.
+        # History was rebuilt from scratch — reset the log emission cursor
+        # and force a full repaint.
         @log_zone.reset
+        @previous_viewport_top = 0
         @first_render = true
         invalidate_log_cache!
 
@@ -2704,56 +2704,53 @@ module Hcode
       # Incremental repaint driven by the two zones. The active zone is painted
       # at the bottom of the visible area every frame; freed rows are cleared
       # with \e[J. There is no manual blank/scroll simulation.
+      #
+      # Cursor positioning uses absolute CUP (`cursor_to_row`) everywhere — no
+      # shadow `@hardware_cursor_row` to desynchronize at the screen edge or
+      # after a clamp.
       private def incremental_render(port : TerminalPort, log_lines : Array(String), active_lines : Array(String), rows : Int32) : Nil
         total = log_lines.size + active_lines.size
         viewport_top = {0, total - rows}.max
-        prev_vt = @previous_viewport_top
-        scroll_delta = viewport_top - prev_vt
+        scroll_delta = viewport_top - @previous_viewport_top
 
-        # First frame: start from the home position so the initial paint lands
-        # at the top-left of the terminal instead of wherever the shell left the
-        # cursor. After this frame the cursor is tracked incrementally.
         first_frame = @first_render
         port.cursor_home if first_frame
 
         # ── 1. Scroll the terminal up if the viewport moved down ──
         if scroll_delta > 0
-          hw_screen_row = @hardware_cursor_row - prev_vt
-          hw_screen_row = {0, {hw_screen_row, rows - 1}.min}.max
-          move_to_bottom = rows - 1 - hw_screen_row
-          port.cursor_down(move_to_bottom) if move_to_bottom > 0
+          port.cursor_to_row(rows)
           scroll_delta.times { port.newline }
-          @hardware_cursor_row = viewport_top + {rows, total - viewport_top}.min - 1
         end
 
-        # ── Full repaint when the viewport moved UP (content shrank) ──
+        # ── Full repaint when the viewport moved UP or the log shrank ──
         # The terminal cannot scroll down on its own. When viewport_top
-        # decreases, every visible row now maps to different content, but the
-        # old pixels stay on screen. The only safe recovery is to rewrite every
-        # visible line from the top.
-        if scroll_delta < 0 && !first_frame
+        # decreases (or compaction cleared lines beyond the flush cursor), every
+        # visible row now maps to different content, but the old pixels stay on
+        # screen. Every visible line is rewritten from the top.
+        #
+        # Known limitation: a log line that scrolled into scrollback, was
+        # rewritten here, and later scrolls off again will appear twice in
+        # scrollback. This is an inherent limitation of the terminal's immutable
+        # scrollback — the alternative (leaving such rows blank) is worse
+        # because it creates visible gaps in the output.
+        if (scroll_delta < 0 || @log_zone.shrank?(log_lines.size)) && !first_frame
           all_lines = log_lines + active_lines
           visible_count = {total - viewport_top, rows}.min
 
-          port.cursor_home
           visible_count.times do |i|
-            port.cursor_down(1) if i > 0
-            port.carriage_return
+            port.cursor_to_row(i + 1)
             port.clear_line
             port.write(all_lines[viewport_top + i])
           end
           if visible_count < rows
-            port.cursor_down(1) if visible_count > 0
-            port.carriage_return
+            port.cursor_to_row(visible_count + 1) if visible_count > 0
             port.clear_below
           end
 
           @log_zone.mark_flushed(log_lines.size)
-          active_visible = Math.min(active_lines.size, rows)
-          @hardware_cursor_row = visible_count < rows ? total : {0, total - 1}.max
+          @prev_active_visible = Math.min(active_lines.size, rows)
           @previous_viewport_top = viewport_top
           @prev_log_count = log_lines.size
-          @prev_active_visible = active_visible
           @first_render = false
           return
         end
@@ -2762,9 +2759,8 @@ module Hcode
         new_log_count = log_lines.size - @log_zone.flushed
         if new_log_count > 0
           write_from = {@log_zone.flushed, viewport_top}.max
-          move_cursor_to(port, write_from, viewport_top, rows)
-          emitted = @log_zone.flush(port, log_lines)
-          @hardware_cursor_row = write_from + emitted
+          port.cursor_to_row(write_from - viewport_top + 1)
+          @log_zone.flush(port, log_lines)
         else
           @log_zone.mark_flushed(log_lines.size)
         end
@@ -2773,47 +2769,24 @@ module Hcode
         active_visible = Math.min(active_lines.size, rows)
         active_start = total - active_visible
 
-        move_cursor_to(port, active_start, viewport_top, rows)
-        prev_active_visible = @prev_active_visible
+        port.cursor_to_row(active_start - viewport_top + 1)
         @prev_active_visible = @active_zone.render(
-          port, active_lines, rows, prev_active_visible
+          port, active_lines, rows, @prev_active_visible
         )
-        # ActiveZone.render left the cursor on the last drawn active row
-        # (or at active_start if nothing was drawn). Sync the tracker so the
-        # clear-below move below computes the correct cursor delta.
-        @hardware_cursor_row = active_visible > 0 ? active_start + active_visible - 1 : active_start
 
         # Clear stale rows below the active zone when it shrank or on first
         # frame. Only do this when content doesn't fill the screen — when the
-        # active zone reaches the bottom row, cursor_down is clamped and
-        # clear_below would wipe the last active line instead of clearing below.
+        # active zone reaches the bottom row, cursor_to_row clamps to the last
+        # row and clear_below would wipe the last active line instead of
+        # clearing below.
         screen_end = total - viewport_top
         if screen_end < rows
-          move_cursor_to(port, total, viewport_top, rows)
-          port.carriage_return
+          port.cursor_to_row(total - viewport_top + 1)
           port.clear_below
-          @hardware_cursor_row = total
-        else
-          @hardware_cursor_row = {0, total - 1}.max
         end
 
         @previous_viewport_top = viewport_top
         @prev_log_count = log_lines.size
-      end
-
-      # Move the hardware cursor to an absolute content row (screen-relative),
-      # using cursor-up/down which never scroll the terminal. Updates
-      # `@hardware_cursor_row` to the resulting content row.
-      private def move_cursor_to(port : TerminalPort, content_row : Int32, viewport_top : Int32, rows : Int32) : Nil
-        target_screen = content_row - viewport_top
-        target_screen = {0, {target_screen, rows - 1}.min}.max
-        hw_screen = @hardware_cursor_row - viewport_top
-        hw_screen = {0, {hw_screen, rows - 1}.min}.max
-        diff = target_screen - hw_screen
-        port.cursor_down(diff) if diff > 0
-        port.cursor_up(-diff) if diff < 0
-        port.carriage_return
-        @hardware_cursor_row = viewport_top + target_screen
       end
 
       private def position_cursor(
@@ -2838,11 +2811,7 @@ module Hcode
           port.hide_cursor
           target_row = {total - 1, 0}.max
           target_screen = {0, {target_row - viewport_top, rows - 1}.min}.max
-          row_delta = target_screen - (@hardware_cursor_row - viewport_top)
-          port.cursor_down(row_delta) if row_delta > 0
-          port.cursor_up(-row_delta) if row_delta < 0
-          port.carriage_return
-          @hardware_cursor_row = viewport_top + target_screen
+          port.cursor_to_row(target_screen + 1)
           return
         end
 
@@ -2873,16 +2842,10 @@ module Hcode
         }.max
 
         target_screen = {0, {editor_row - viewport_top, rows - 1}.min}.max
-        hw_screen = {0, {@hardware_cursor_row - viewport_top, rows - 1}.min}.max
-
-        row_delta = target_screen - hw_screen
-        port.cursor_down(row_delta) if row_delta > 0
-        port.cursor_up(-row_delta) if row_delta < 0
+        port.cursor_to_row(target_screen + 1)
 
         editor_text_col = 5 + @editor.cursor_visual_col
-        port.carriage_return
         port.cursor_to_column(editor_text_col)
-        @hardware_cursor_row = viewport_top + target_screen
       end
 
       def render_message(msg : Message, cols : Int32) : Array(String)

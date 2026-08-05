@@ -46,6 +46,12 @@ module Hcode
         @cursor_col = 0
       end
 
+      def cursor_to_row(row : Int32) : Nil
+        r = row - 1
+        @cursor_row = {@rows - 1, {0, r}.max}.min
+        @cursor_col = 0
+      end
+
       def cursor_to_column(col : Int32) : Nil
         @cursor_col = {col, 0}.max
       end
