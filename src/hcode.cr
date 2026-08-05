@@ -26,6 +26,13 @@ require "./auth/oauth"
 require "./llm/zai_provider"
 require "./llm/ollama_provider"
 require "./llm/lmstudio_provider"
+require "./llm/deepseek_provider"
+require "./llm/groq_provider"
+require "./llm/openrouter_provider"
+require "./llm/xai_provider"
+require "./llm/cerebras_provider"
+require "./llm/fireworks_provider"
+require "./llm/together_provider"
 require "./llm/mock_provider"
 require "./tools/tool"
 require "./tools/registry"
@@ -266,7 +273,9 @@ module Hcode
       # interactive setup wizard (TTY) or fail with a clear message (non-TTY).
       unless config.provider_name && config.provider_configured?
         if STDIN.tty? && !hi_mode && prompt.nil?
-          run_setup_wizard(config)
+          # User aborted setup (Esc/Ctrl+D at the wizard) — exit cleanly
+          # instead of falling through to build_provider, which would raise.
+          exit(0) unless run_setup_wizard(config)
         else
           STDERR.puts Hcode.t("errors.no_provider")
           STDERR.puts ""
@@ -641,8 +650,13 @@ module Hcode
     # Run the interactive setup wizard inside a minimal TUI. The wizard collects
     # the provider choice and credentials, writes them to config.json, then
     # returns so the caller can build the real provider and proceed.
-    private def self.run_setup_wizard(config) : Nil
+    # Returns true if the wizard completed and wrote a provider to `config`,
+    # false if the user aborted (Esc/Ctrl+D). On abort the caller should exit
+    # cleanly rather than fall through to `build_provider`, which would raise
+    # "No provider configured".
+    private def self.run_setup_wizard(config) : Bool
       app = TUI::App.new
+      app.work_dir = Dir.current
       app.start_setup
       app.on_setup_complete = ->(wizard : Setup::Wizard) do
         wizard.apply_to(config)
@@ -664,6 +678,9 @@ module Hcode
       end
 
       app.run { |_text, _persisted| }
+
+      # If setup_mode is still true, the user aborted before completing.
+      !app.setup_mode?
     end
 
     private def self.run_interactive(agent, system_prompt, store, config, permission, oauth, home, work_dir, initial_prompt = nil,
@@ -1305,7 +1322,7 @@ module Hcode
           begin
             record = plugin_manager.install(rest.strip)
             "Installed plugin \"#{record.display_name}\" (#{record.id}) v#{record.version || "?"}.\n" \
-              "Run /reload or /new to activate."
+            "Run /reload or /new to activate."
           rescue ex
             "Install failed: #{ex.message}"
           end
@@ -1352,7 +1369,7 @@ module Hcode
           render_plugin_info(plugin_manager, sub)
         else
           "Unknown subcommand: #{sub}\n" \
-            "Usage: /plugins [list|install|info|enable|disable|remove|reload|mcp]"
+          "Usage: /plugins [list|install|info|enable|disable|remove|reload|mcp]"
         end
       end
     end
@@ -1610,7 +1627,7 @@ module Hcode
     end
 
     def request(plan : String, path : String?,
-               options : Array(Tools::PlanOption)?) : Tools::PlanReviewResult?
+                options : Array(Tools::PlanOption)?) : Tools::PlanReviewResult?
       @app.request_plan_review(plan, path, options)
     end
   end
@@ -1637,8 +1654,8 @@ module Hcode
       # Terminal path: alt screen + cooked termios + pipe + relay + capture.
       @app.terminal_exec_active = true
       print TUI::ANSI.alt_screen_on
-      print "\e[H"    # cursor to row 1, col 1
-      print "\e[2J"   # clear the alt screen
+      print "\e[H"  # cursor to row 1, col 1
+      print "\e[2J" # clear the alt screen
       terminal.restore!
 
       # Print a header so the user sees what's running before output starts.

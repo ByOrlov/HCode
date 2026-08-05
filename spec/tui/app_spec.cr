@@ -84,6 +84,49 @@ describe Hcode::TUI::App do
     active_stripped2.join('\n').should_not contain("Using Read")
   end
 
+  # A fully-completed TodoList must migrate from the active zone into the log:
+  # the live panel is frozen as a `todo_snapshot` message (rendered identically
+  # to the panel) and the tool's state is cleared so a fresh list can start.
+  # Partially-done lists stay in the active zone. See `snapshot_todo_if_complete!`.
+  it "snapshots a fully-done TodoList into the log and clears it" do
+    app = Hcode::TUI::App.new
+    todos = [] of {String, String}
+
+    app.on_fetch_todos = -> : Array({String, String})? do
+      todos.empty? ? nil : todos
+    end
+    app.on_clear_todos = -> : Nil do
+      todos.clear
+      nil
+    end
+
+    # Partially done → stays in the active zone, no snapshot.
+    todos.replace([{"Task A", "done"}, {"Task B", "in_progress"}])
+    app.on_event(Hcode::Loop::Event.tool_call_start("t1", "TodoList", %({"todos":[]})))
+    app.on_event(Hcode::Loop::Event.tool_result("t1", "ok", false))
+    app.@messages.any? { |m| m.role == "todo_snapshot" }.should be_false
+    todos.should_not be_empty
+
+    # All done → snapshot appended, tool cleared.
+    todos.replace([{"Task A", "done"}, {"Task B", "done"}])
+    app.on_event(Hcode::Loop::Event.tool_call_start("t2", "TodoList", %({"todos":[]})))
+    app.on_event(Hcode::Loop::Event.tool_result("t2", "ok", false))
+
+    snapshot = app.@messages.find { |m| m.role == "todo_snapshot" }
+    snapshot.should_not be_nil
+    snapshot.not_nil!.todo_items.should eq([{"Task A", "done"}, {"Task B", "done"}])
+    todos.should be_empty
+
+    # The snapshot renders in the LOG zone (with the Todos header), and the
+    # active zone no longer holds the live panel.
+    lines, _editor_line, log_size = app.build_rendered_lines(80)
+    log_stripped = lines[0...log_size].map { |l| app_strip_ansi(l) }
+    active_stripped = lines[log_size..].map { |l| app_strip_ansi(l) }
+    log_stripped.join('\n').should contain("Todos (2/2)")
+    log_stripped.join('\n').should contain("✓ Task A")
+    active_stripped.join('\n').should_not contain("Todos (2/2)")
+  end
+
   it "on_event sets dirty after processing" do
     app = Hcode::TUI::App.new
     app.on_event(Hcode::Loop::Event.step_begin(0))

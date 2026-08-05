@@ -72,9 +72,17 @@ to the log:
 | `tool_result` arrives | Tool result appended | Spinner/status updated |
 | `tool_call_start` | (nothing) | Spinner/status updated |
 | `turn_end` | (nothing) | Spinner stopped, status cleared |
+| TodoList reaches all-`done` | `todo_snapshot` (frozen panel) appended | Live panel cleared |
 
 After each transition, the active zone is rewritten from scratch. No
 already-written log line is ever modified.
+
+The TodoList migration is special: the live todo panel is active-zone chrome
+polled every frame, not a transcript entry, so it has no natural migration
+path. When every item becomes `done`, the TUI freezes the rendered panel into a
+`todo_snapshot` message (drawn identically to the live panel) and clears the
+tool's state — the completed plan scrolls into history and a fresh list can be
+started. See `App#snapshot_todo_if_complete!`.
 
 ## Rendering algorithm
 

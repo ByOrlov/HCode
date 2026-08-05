@@ -25,7 +25,10 @@ module Hcode
       end
     end
 
-    Provider.register("lmstudio", "LM Studio — local models, no API key") do |config, _|
+    Provider.register("lmstudio", "LM Studio — local models, no API key",
+      label: "Local — LM Studio", needs_key: false,
+      default_endpoint: "http://localhost:1234/v1",
+      default_model: "local-model") do |config, _|
       endpoint = config.lmstudio_endpoint || LmStudioProvider::DEFAULT_ENDPOINT
       LmStudioProvider.new(
         model: config.lmstudio_model || LmStudioProvider::DEFAULT_MODEL,

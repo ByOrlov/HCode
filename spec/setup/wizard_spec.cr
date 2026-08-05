@@ -23,6 +23,18 @@ describe Hcode::Setup::Wizard do
       moonshot = Hcode::Setup::Wizard.choices.find { |c| c.name == "moonshot" }.not_nil!
       moonshot.needs_key?.should be_true
     end
+
+    it "excludes hidden providers (mock) from the wizard" do
+      names = Hcode::Setup::Wizard.choices.map(&.name)
+      names.should_not contain("mock")
+    end
+
+    it "includes all seven new OpenAI-compatible cloud providers" do
+      names = Hcode::Setup::Wizard.choices.map(&.name)
+      %w[deepseek groq openrouter xai cerebras fireworks together].each do |name|
+        names.should contain(name)
+      end
+    end
   end
 
   describe "state machine — keyless provider (ollama)" do

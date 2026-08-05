@@ -10,7 +10,9 @@ module Hcode
       def start_setup : Nil
         @setup_mode = true
         @wizard = Setup::Wizard.new
-        @show_welcome = false
+        # Keep the welcome banner visible so the first-run flow opens with the
+        # same branded box as a normal launch, instead of a bare transcript.
+        @show_welcome = true
         @messages << Message.new("system",
           Hcode.t("ui.setup_welcome"))
         @status = Hcode.t("ui.setup_status")

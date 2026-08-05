@@ -6,32 +6,9 @@ module Hcode
       end
     end
 
-    struct ProviderChoice
-      property name : String
-      property label : String
-      property? needs_key : Bool
-      property default_endpoint : String
-      property default_model : String
-      property key_hint : String
-
-      def initialize(@name : String, @label : String, @needs_key : Bool,
-                     @default_endpoint : String, @default_model : String,
-                     @key_hint : String = "")
-      end
-    end
-
-    PROVIDER_CHOICES = [
-      ProviderChoice.new("lmstudio", "Local — LM Studio", false,
-        "http://localhost:1234/v1", "local-model"),
-      ProviderChoice.new("moonshot", "Moonshot (Kimi)", true,
-        "https://api.kimi.com/coding/v1", "kimi-for-coding",
-        "Get a key at https://www.kimi.com/code/console"),
-      ProviderChoice.new("ollama", "Local — Ollama", false,
-        "http://localhost:11434/v1", "llama3.2"),
-      ProviderChoice.new("zai", "Z.AI / Zhipu (GLM)", true,
-        "https://api.z.ai/api/paas/v4", "glm-4.6",
-        "Get a key at https://z.ai"),
-    ] of ProviderChoice
+    # Alias so call sites (`Setup::Wizard.choices`, `current_choice`) read
+    # naturally while staying backed by `LLM::ProviderInfo` from the registry.
+    alias ProviderChoice = Hcode::LLM::Provider::ProviderInfo
 
     # Stateful first-run wizard. Driven by the TUI input box: each step
     # produces a placeholder string; the user types a value and submits.
@@ -52,12 +29,15 @@ module Hcode
       property endpoint : String? = nil
       property model : String? = nil
 
+      # The provider list shown in the first-run selector. Sourced directly
+      # from the LLM provider registry (the single source of truth) so every
+      # registered backend appears automatically — no second list to maintain.
       def self.choices : Array(ProviderChoice)
-        PROVIDER_CHOICES
+        Hcode::LLM::Provider.wizard_choices
       end
 
       def current_choice : ProviderChoice?
-        PROVIDER_CHOICES.find { |c| c.name == provider_name }
+        self.class.choices.find { |choice| choice.name == provider_name }
       end
 
       def done? : Bool
@@ -140,6 +120,36 @@ module Hcode
         end
       end
 
+      # Cloud providers that share the same config shape (api_key + endpoint +
+      # model), mapped to their config setters. Keeps `apply_to` flat instead of
+      # one `when` branch per provider.
+      CLOUD_APPLIERS = {
+        "zai" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.zai_api_key = k; c.zai_endpoint = ep || ""; c.zai_model = m || ""
+        },
+        "deepseek" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.deepseek_api_key = k; c.deepseek_endpoint = ep || ""; c.deepseek_model = m || ""
+        },
+        "openrouter" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.openrouter_api_key = k; c.openrouter_endpoint = ep || ""; c.openrouter_model = m || ""
+        },
+        "xai" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.xai_api_key = k; c.xai_endpoint = ep || ""; c.xai_model = m || ""
+        },
+        "groq" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.groq_api_key = k; c.groq_endpoint = ep || ""; c.groq_model = m || ""
+        },
+        "cerebras" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.cerebras_api_key = k; c.cerebras_endpoint = ep || ""; c.cerebras_model = m || ""
+        },
+        "fireworks" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.fireworks_api_key = k; c.fireworks_endpoint = ep || ""; c.fireworks_model = m || ""
+        },
+        "together" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.together_api_key = k; c.together_endpoint = ep || ""; c.together_model = m || ""
+        },
+      }
+
       # Write the collected values into a Config and persist it.
       def apply_to(config : Config::Config) : Nil
         config.provider_name = provider_name
@@ -154,10 +164,10 @@ module Hcode
         when "lmstudio"
           config.lmstudio_endpoint = endpoint
           config.lmstudio_model = model
-        when "zai"
-          config.zai_api_key = api_key
-          config.zai_endpoint = endpoint || ""
-          config.zai_model = model || ""
+        else
+          if applier = CLOUD_APPLIERS[provider_name || ""]?
+            applier.call(config, api_key, endpoint, model)
+          end
         end
       end
     end

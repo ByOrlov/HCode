@@ -19,6 +19,27 @@ module Hcode
       property ollama_model : String? = nil
       property lmstudio_endpoint : String? = nil
       property lmstudio_model : String? = nil
+      property deepseek_api_key : String = ""
+      property deepseek_endpoint : String = "https://api.deepseek.com/v1"
+      property deepseek_model : String = "deepseek-chat"
+      property groq_api_key : String = ""
+      property groq_endpoint : String = "https://api.groq.com/openai/v1"
+      property groq_model : String = "llama-3.3-70b-versatile"
+      property openrouter_api_key : String = ""
+      property openrouter_endpoint : String = "https://openrouter.ai/api/v1"
+      property openrouter_model : String = "anthropic/claude-3.5-sonnet"
+      property xai_api_key : String = ""
+      property xai_endpoint : String = "https://api.x.ai/v1"
+      property xai_model : String = "grok-4"
+      property cerebras_api_key : String = ""
+      property cerebras_endpoint : String = "https://api.cerebras.ai/v1"
+      property cerebras_model : String = "llama-3.3-70b"
+      property fireworks_api_key : String = ""
+      property fireworks_endpoint : String = "https://api.fireworks.ai/inference/v1"
+      property fireworks_model : String = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+      property together_api_key : String = ""
+      property together_endpoint : String = "https://api.together.xyz/v1"
+      property together_model : String = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
       property max_steps : Int32 = 100
       property max_context_tokens : Int32 = 262144
       property temperature : Float64? = nil
@@ -71,6 +92,69 @@ module Hcode
         end
         if model = ENV["LMSTUDIO_MODEL"]?
           config.lmstudio_model = model
+        end
+        if key = ENV["DEEPSEEK_API_KEY"]?
+          config.deepseek_api_key = key
+        end
+        if ep = ENV["DEEPSEEK_ENDPOINT"]?
+          config.deepseek_endpoint = ep
+        end
+        if model = ENV["DEEPSEEK_MODEL"]?
+          config.deepseek_model = model
+        end
+        if key = ENV["GROQ_API_KEY"]?
+          config.groq_api_key = key
+        end
+        if ep = ENV["GROQ_ENDPOINT"]?
+          config.groq_endpoint = ep
+        end
+        if model = ENV["GROQ_MODEL"]?
+          config.groq_model = model
+        end
+        if key = ENV["OPENROUTER_API_KEY"]?
+          config.openrouter_api_key = key
+        end
+        if ep = ENV["OPENROUTER_ENDPOINT"]?
+          config.openrouter_endpoint = ep
+        end
+        if model = ENV["OPENROUTER_MODEL"]?
+          config.openrouter_model = model
+        end
+        if key = ENV["XAI_API_KEY"]?
+          config.xai_api_key = key
+        end
+        if ep = ENV["XAI_ENDPOINT"]?
+          config.xai_endpoint = ep
+        end
+        if model = ENV["XAI_MODEL"]?
+          config.xai_model = model
+        end
+        if key = ENV["CEREBRAS_API_KEY"]?
+          config.cerebras_api_key = key
+        end
+        if ep = ENV["CEREBRAS_ENDPOINT"]?
+          config.cerebras_endpoint = ep
+        end
+        if model = ENV["CEREBRAS_MODEL"]?
+          config.cerebras_model = model
+        end
+        if key = ENV["FIREWORKS_API_KEY"]?
+          config.fireworks_api_key = key
+        end
+        if ep = ENV["FIREWORKS_ENDPOINT"]?
+          config.fireworks_endpoint = ep
+        end
+        if model = ENV["FIREWORKS_MODEL"]?
+          config.fireworks_model = model
+        end
+        if key = ENV["TOGETHER_API_KEY"]?
+          config.together_api_key = key
+        end
+        if ep = ENV["TOGETHER_ENDPOINT"]?
+          config.together_endpoint = ep
+        end
+        if model = ENV["TOGETHER_MODEL"]?
+          config.together_model = model
         end
         if model = ENV["MOONSHOT_MODEL"]?
           config.model = model
@@ -135,6 +219,41 @@ module Hcode
           if lmstudio = provider["lmstudio"]?.try(&.as_h?)
             config.lmstudio_endpoint = lmstudio["endpoint"]?.try(&.as_s?)
             config.lmstudio_model = lmstudio["model"]?.try(&.as_s?)
+          end
+          if deepseek = provider["deepseek"]?.try(&.as_h?)
+            config.deepseek_api_key = deepseek["api_key"]?.try(&.as_s?) || ""
+            config.deepseek_endpoint = deepseek["endpoint"]?.try(&.as_s?) || config.deepseek_endpoint
+            config.deepseek_model = deepseek["model"]?.try(&.as_s?) || config.deepseek_model
+          end
+          if groq = provider["groq"]?.try(&.as_h?)
+            config.groq_api_key = groq["api_key"]?.try(&.as_s?) || ""
+            config.groq_endpoint = groq["endpoint"]?.try(&.as_s?) || config.groq_endpoint
+            config.groq_model = groq["model"]?.try(&.as_s?) || config.groq_model
+          end
+          if openrouter = provider["openrouter"]?.try(&.as_h?)
+            config.openrouter_api_key = openrouter["api_key"]?.try(&.as_s?) || ""
+            config.openrouter_endpoint = openrouter["endpoint"]?.try(&.as_s?) || config.openrouter_endpoint
+            config.openrouter_model = openrouter["model"]?.try(&.as_s?) || config.openrouter_model
+          end
+          if xai = provider["xai"]?.try(&.as_h?)
+            config.xai_api_key = xai["api_key"]?.try(&.as_s?) || ""
+            config.xai_endpoint = xai["endpoint"]?.try(&.as_s?) || config.xai_endpoint
+            config.xai_model = xai["model"]?.try(&.as_s?) || config.xai_model
+          end
+          if cerebras = provider["cerebras"]?.try(&.as_h?)
+            config.cerebras_api_key = cerebras["api_key"]?.try(&.as_s?) || ""
+            config.cerebras_endpoint = cerebras["endpoint"]?.try(&.as_s?) || config.cerebras_endpoint
+            config.cerebras_model = cerebras["model"]?.try(&.as_s?) || config.cerebras_model
+          end
+          if fireworks = provider["fireworks"]?.try(&.as_h?)
+            config.fireworks_api_key = fireworks["api_key"]?.try(&.as_s?) || ""
+            config.fireworks_endpoint = fireworks["endpoint"]?.try(&.as_s?) || config.fireworks_endpoint
+            config.fireworks_model = fireworks["model"]?.try(&.as_s?) || config.fireworks_model
+          end
+          if together = provider["together"]?.try(&.as_h?)
+            config.together_api_key = together["api_key"]?.try(&.as_s?) || ""
+            config.together_endpoint = together["endpoint"]?.try(&.as_s?) || config.together_endpoint
+            config.together_model = together["model"]?.try(&.as_s?) || config.together_model
           end
         end
 
@@ -256,6 +375,55 @@ module Hcode
                     end
                   end
                 end
+                json.field("deepseek") do
+                  json.object do
+                    json.field("api_key", @deepseek_api_key)
+                    json.field("endpoint", @deepseek_endpoint)
+                    json.field("model", @deepseek_model)
+                  end
+                end
+                json.field("groq") do
+                  json.object do
+                    json.field("api_key", @groq_api_key)
+                    json.field("endpoint", @groq_endpoint)
+                    json.field("model", @groq_model)
+                  end
+                end
+                json.field("openrouter") do
+                  json.object do
+                    json.field("api_key", @openrouter_api_key)
+                    json.field("endpoint", @openrouter_endpoint)
+                    json.field("model", @openrouter_model)
+                  end
+                end
+                json.field("xai") do
+                  json.object do
+                    json.field("api_key", @xai_api_key)
+                    json.field("endpoint", @xai_endpoint)
+                    json.field("model", @xai_model)
+                  end
+                end
+                json.field("cerebras") do
+                  json.object do
+                    json.field("api_key", @cerebras_api_key)
+                    json.field("endpoint", @cerebras_endpoint)
+                    json.field("model", @cerebras_model)
+                  end
+                end
+                json.field("fireworks") do
+                  json.object do
+                    json.field("api_key", @fireworks_api_key)
+                    json.field("endpoint", @fireworks_endpoint)
+                    json.field("model", @fireworks_model)
+                  end
+                end
+                json.field("together") do
+                  json.object do
+                    json.field("api_key", @together_api_key)
+                    json.field("endpoint", @together_endpoint)
+                    json.field("model", @together_model)
+                  end
+                end
               end
             end
 
@@ -338,9 +506,16 @@ module Hcode
         when "zai-coding-plan" then !zai_api_key.empty?
         when "ollama"          then true
         when "lmstudio"        then true
+        when "deepseek"        then !deepseek_api_key.empty?
+        when "groq"            then !groq_api_key.empty?
+        when "openrouter"      then !openrouter_api_key.empty?
+        when "xai"             then !xai_api_key.empty?
+        when "cerebras"        then !cerebras_api_key.empty?
+        when "fireworks"       then !fireworks_api_key.empty?
+        when "together"        then !together_api_key.empty?
         when "mock"            then true
         when nil               then false
-        else                   !api_key.to_s.empty?
+        else                        !api_key.to_s.empty?
         end
       end
 

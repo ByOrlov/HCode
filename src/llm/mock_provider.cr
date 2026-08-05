@@ -153,6 +153,40 @@ module Hcode
         ),
       ] of MockStep
 
+      # TodoList migration demo: progressively completes a 3-item plan. The
+      # panel lives in the active zone while work is underway; the moment every
+      # item is `done`, the TUI freezes it as a `todo_snapshot` message (migrates
+      # into the append-only log) and clears the tool so a fresh list can start.
+      # The 1 s delays make the active-zone → log-zone transition visible.
+      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos
+      TODOS_DEMO_SCRIPT = [
+        MockStep.new(
+          parts: [ToolCallPart.new("m_todo_1", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"in_progress"},{"title":"Write the fix","status":"pending"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 400,
+        ),
+        MockStep.new(
+          parts: [ToolCallPart.new("m_todo_2", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"in_progress"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 1000,
+        ),
+        MockStep.new(
+          parts: [ToolCallPart.new("m_todo_3", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"in_progress"}]}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 1000,
+        ),
+        MockStep.new(
+          parts: [ToolCallPart.new("m_todo_4", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"done"}]}))] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 1000,
+        ),
+        MockStep.new(
+          parts: [TextPart.new("All tasks complete — the finished plan snapshot migrated into the log.")] of MessagePart,
+          stop_reason: "end_turn",
+          text: "All tasks complete — the finished plan snapshot migrated into the log.",
+        ),
+      ] of MockStep
+
       property model : String
       property script : Array(MockStep)
       @step : Int32 = 0
@@ -168,6 +202,7 @@ module Hcode
         when "thinking-tools" then THINKING_TOOLS_DEMO_SCRIPT.dup
         when "markdown"       then MARKDOWN_DEMO_SCRIPT.dup
         when "sudo"           then SUDO_DEMO_SCRIPT.dup
+        when "todos"          then TODOS_DEMO_SCRIPT.dup
         else                       nil
         end
       end
@@ -222,7 +257,8 @@ module Hcode
       end
     end
 
-    Provider.register("mock", "Mock — scripted self-test provider (testing)") do |_, _|
+    Provider.register("mock", "Mock — scripted self-test provider (testing)",
+      label: "Mock (testing)", hidden: true) do |_, _|
       MockProvider.new(MockProvider.script_from_env || MockProvider::DEFAULT_SCRIPT.dup)
     end
   end

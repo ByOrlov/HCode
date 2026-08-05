@@ -147,6 +147,11 @@ module Hcode
       # Swarm/Agent live progress: when non-empty, the tool block renders an
       # animated grid of per-subagent cells instead of the static header.
       property swarm_members : Array(SwarmMember) = [] of SwarmMember
+      # Todo snapshot: when a TodoList reaches all-done, the live panel is
+      # frozen into the transcript (role "todo_snapshot") so it migrates from
+      # the active zone into the append-only log. Carries `{title, status}`
+      # pairs rendered identically to the active-zone panel. See TUI_ZONES.md.
+      property todo_items : Array({String, String})? = nil
 
       def initialize(@role : String, @content : String = "")
       end
@@ -824,6 +829,11 @@ module Hcode
           @streaming_tool = nil
           @status = thinking_status
           inject_plan_if_any(event.text)
+          # A completed TodoList (all items done) is snapshotted into the log
+          # and cleared, so the finished plan migrates out of the active zone
+          # and a fresh list can be started. Idempotent: clearing happens right
+          # after the snapshot, so subsequent tool results see an empty list.
+          snapshot_todo_if_complete!
         when .info?
           @status = event.text
           # Compaction start message ("Context near limit, triggering compaction...")
@@ -3121,6 +3131,15 @@ module Hcode
           lines.concat(render_plan_box(msg, cols))
         when "compaction"
           lines.concat(render_compaction_block(msg, cols))
+        when "todo_snapshot"
+          # Frozen copy of the live todo panel — rendered identically to the
+          # active-zone panel, then appended to the log so completed plans
+          # scroll into history instead of pinning the active zone. See
+          # TUI_ZONES.md.
+          if items = msg.todo_items
+            lines.concat(render_todo_panel(items, cols))
+            lines << ""
+          end
         end
 
         lines
@@ -3373,20 +3392,25 @@ module Hcode
 
         content_lines = wrap_thinking(content, cols - indent.size)
 
-        lines << ""
         content_lines.each_with_index do |cl, i|
           prefix = i == 0 ? "#{dc}#{STATUS_BULLET}" : indent
           lines << "#{prefix}#{dc}#{ANSI.italic}#{cl}#{r}"
         end
 
         if !expanded && content_lines.size > THINKING_PREVIEW_LINES
-          shown = lines[0..THINKING_PREVIEW_LINES]
+          shown = lines[0...THINKING_PREVIEW_LINES]
           remaining = content_lines.size - THINKING_PREVIEW_LINES
           hint = "... (#{remaining} more lines, load session in /debug mode to expand)"
           shown << "#{indent}#{dc}#{hint}#{r}"
           lines = shown
         end
 
+        # Follow the same convention as every other message type: one trailing
+        # blank line acts as the separator between messages. The previous code
+        # emitted a LEADING blank (and no trailing one), which produced two
+        # blanks before the block and none after it when sandwiched between
+        # tool results.
+        lines << ""
         lines
       end
 
@@ -3908,6 +3932,25 @@ module Hcode
       private def current_todos : Array({String, String})?
         return nil unless cb = @on_fetch_todos
         cb.call
+      end
+
+      # When the live todo list is fully done, freeze it into the transcript as
+      # a `todo_snapshot` message (rendered identically to the active-zone panel
+      # — see `render_message`) and clear the tool's state, so the completed
+      # plan migrates into the append-only log and a fresh list can be started.
+      # Called after every `tool_result`; a no-op unless all items are done.
+      private def snapshot_todo_if_complete! : Nil
+        todos = current_todos
+        return unless todos && !todos.empty?
+        return unless todos.all? { |(_, status)| status == "done" }
+
+        msg = Message.new("todo_snapshot", "")
+        # Dup: `on_clear_todos` below mutates the tool's array in place, and the
+        # snapshot must be an immutable frozen copy.
+        msg.todo_items = todos.dup
+        @messages << msg
+        invalidate_log_cache!
+        @on_clear_todos.try(&.call)
       end
 
       # Todo panel: mirrors TS `components/chrome/todo-panel.ts`. Shows the

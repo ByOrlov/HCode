@@ -109,7 +109,11 @@ module Hcode
       end
     end
 
-    Provider.register("moonshot", "Moonshot — Chat Completions (default)") do |config, oauth|
+    Provider.register("moonshot", "Moonshot — Chat Completions (default)",
+      label: "Moonshot (Kimi)", needs_key: true,
+      default_endpoint: "https://api.kimi.com/coding/v1",
+      default_model: "kimi-for-coding",
+      key_hint: "Get a key at https://www.kimi.com/code/console") do |config, oauth|
       if oauth.nil? && config.api_key.to_s.empty?
         raise ProviderConfigError.new(
           "No Moonshot credentials found. Either:\n" \

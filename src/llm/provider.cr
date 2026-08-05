@@ -63,20 +63,40 @@ module Hcode
       def used_context_tokens=(tokens : Int32) : Nil
       end
 
-      # Metadata for a selectable backend, listed by the /provider command.
+      # Metadata for a selectable backend, listed by the /provider command and
+      # the first-run setup wizard. Carries both the selector description and
+      # the wizard-facing fields (label, key requirement, defaults). The
+      # registry is the single source of truth — every place that lists
+      # backends enumerates this, so a new provider appears everywhere by
+      # adding one `Provider.register` call.
       struct ProviderInfo
         property name : String
         property description : String
+        # Human-facing label shown in the first-run wizard selector.
+        property label : String
+        # Whether this backend requires an API key (true) or runs keyless
+        # (local servers like ollama / lmstudio).
+        property? needs_key : Bool
+        property default_endpoint : String
+        property default_model : String
+        property key_hint : String
+        # Hidden backends are excluded from the first-run wizard but still
+        # reachable via `/provider` and config (used by `mock`).
+        property? hidden : Bool
 
-        def initialize(@name : String, @description : String)
+        def initialize(@name : String, @description : String,
+                       @label : String = @name, @needs_key : Bool = true,
+                       @default_endpoint : String = "", @default_model : String = "",
+                       @key_hint : String = "", @hidden : Bool = false)
         end
       end
 
       # One registered backend: the metadata shown in selectors plus the
       # factory that builds a live `Provider` from a `Config` (and optional
       # OAuth creds). The registry is the single source of truth — both the
-      # `/provider` selector and `build_named_provider` enumerate it, so adding
-      # a backend is just one `Provider.register` call in its file.
+      # `/provider` selector, the setup wizard, and `build_named_provider`
+      # enumerate it, so adding a backend is just one `Provider.register`
+      # call in its file.
       struct Registration
         getter info : ProviderInfo
         getter builder : Proc(Config::Config, OAuthCredentials?, Provider)
@@ -90,17 +110,31 @@ module Hcode
 
       # Register a backend under a stable name. Each provider file calls this
       # at top level so `require`-ing the file is enough to make the backend
-      # appear in selectors and `build_named_provider` — no second list to keep
-      # in sync.
-      def self.register(name : String, description : String,
+      # appear in selectors, the setup wizard, and `build_named_provider` — no
+      # second list to keep in sync.
+      #
+      # Wizard metadata (`label`, `needs_key`, `default_endpoint`,
+      # `default_model`, `key_hint`) is supplied as named args so the registry
+      # stays the single source of truth. `hidden` excludes a backend from the
+      # first-run wizard (e.g. `mock`) while keeping it usable elsewhere.
+      def self.register(name : String, description : String, *,
+                        label : String = name, needs_key : Bool = true,
+                        default_endpoint : String = "", default_model : String = "",
+                        key_hint : String = "", hidden : Bool = false,
                         &builder : Config::Config, OAuthCredentials? -> Provider) : Nil
-        info = ProviderInfo.new(name, description)
+        info = ProviderInfo.new(name, description, label, needs_key,
+          default_endpoint, default_model, key_hint, hidden)
         @@registry << Registration.new(info, builder)
       end
 
       # All registered backends, sorted A→Z by name.
       def self.providers : Array(ProviderInfo)
         @@registry.map(&.info).sort_by(&.name)
+      end
+
+      # Backends visible in the first-run wizard (hidden ones excluded).
+      def self.wizard_choices : Array(ProviderInfo)
+        providers.reject(&.hidden?)
       end
 
       def self.known_provider?(name : String) : Bool

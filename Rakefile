@@ -68,6 +68,25 @@ namespace :mock do
   task :mocksudo => :build do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=sudo PATH=#{File.dirname(__FILE__)}/bin:$PATH ./hcode --tui-prompt 'mock' --yolo"
   end
+
+  desc "Run TUI with mock provider — TodoList completion → log migration demo"
+  task :todos => :build do
+    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos ./hcode --tui-prompt 'mock' --yolo"
+  end
+
+  # Simulate a first run with no config so the setup wizard launches. HCODE_HOME
+  # is pointed at a throwaway dir inside the project and config.json is wiped
+  # first, so the wizard sees an unconfigured state. Writes go to that throwaway
+  # dir only — the real ~/.hcode is never touched. HCODE_PROVIDER is NOT set:
+  # setting it to "mock" would mark the provider as configured and skip the
+  # wizard entirely.
+  desc "Simulate a first run (no config) to exercise the setup wizard"
+  task :welcome => :build do
+    welcome_home = File.expand_path("tmp/hcode_welcome_home", __dir__)
+    rm_rf welcome_home
+    mkdir_p welcome_home
+    sh "HCODE_HOME=#{welcome_home} ./hcode"
+  end
 end
 
 namespace :mock do
