@@ -150,8 +150,7 @@ module Hcode
   # credentials, unknown name, ...). At startup it is rescued and turned into
   # an exit; at runtime the /provider selector catches it to show an inline
   # error without leaving the TUI.
-  class ProviderConfigError < Exception
-  end
+  ProviderConfigError = LLM::ProviderConfigError
 
   class CLI
     # Set by `--ram`. When true, every tool_result event prints RSS + tool
@@ -434,67 +433,15 @@ module Hcode
     # and surface the message instead.
     def self.build_named_provider(name : String?, config, oauth) : LLM::Provider
       if name.nil? || name.empty?
-        available = LLM::KNOWN_PROVIDERS.map(&.name).join(", ")
+        available = LLM::Provider.providers.map(&.name).join(", ")
         raise ProviderConfigError.new("No provider configured. Available: #{available}")
       end
-      case name
-      when "moonshot"
-        if oauth.nil? && config.api_key.to_s.empty?
-          raise ProviderConfigError.new(
-            "No Moonshot credentials found. Either:\n" \
-            "  1. Login with Moonshot's kimi-code CLI (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
-            "  2. Set MOONSHOT_API_KEY environment variable")
-        end
-        LLM::MoonshotProvider.new(
-          model: config.model || "kimi-for-coding",
-          endpoint: config.endpoint || LLM::MoonshotProvider::DEFAULT_ENDPOINT,
-          oauth: oauth,
-          api_key: config.api_key.to_s,
-          temperature: config.temperature,
-        )
-      when "zai"
-        if config.zai_api_key.empty?
-          raise ProviderConfigError.new(
-            "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable " \
-            "(or [provider.zai] api_key in config).")
-        end
-        LLM::ZaiProvider.new(
-          model: config.zai_model,
-          endpoint: config.zai_endpoint,
-          api_key: config.zai_api_key,
-          provider_label: "zai",
-          builtin_web_search: true,
-        )
-      when "zai-coding-plan"
-        if config.zai_api_key.empty?
-          raise ProviderConfigError.new(
-            "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
-        end
-        LLM::ZaiProvider.new(
-          model: config.zai_coding_plan_model,
-          endpoint: config.zai_coding_plan_endpoint,
-          api_key: config.zai_api_key,
-          provider_label: "zai-coding-plan",
-          builtin_web_search: true,
-        )
-      when "ollama"
-        endpoint = config.ollama_endpoint || LLM::OllamaProvider::DEFAULT_ENDPOINT
-        LLM::OllamaProvider.new(
-          model: config.ollama_model || LLM::OllamaProvider::DEFAULT_MODEL,
-          endpoint: endpoint,
-        )
-      when "lmstudio"
-        endpoint = config.lmstudio_endpoint || LLM::LmStudioProvider::DEFAULT_ENDPOINT
-        LLM::LmStudioProvider.new(
-          model: config.lmstudio_model || LLM::LmStudioProvider::DEFAULT_MODEL,
-          endpoint: endpoint,
-        )
-      when "mock"
-        LLM::MockProvider.new(LLM::MockProvider.script_from_env || LLM::MockProvider::DEFAULT_SCRIPT.dup)
-      else
-        available = LLM::KNOWN_PROVIDERS.map(&.name).join(", ")
+      registration = LLM::Provider.find(name)
+      unless registration
+        available = LLM::Provider.providers.map(&.name).join(", ")
         raise ProviderConfigError.new("Unknown provider '#{name}'. Available: #{available}")
       end
+      registration.builder.call(config, oauth)
     end
 
     # Fold the runtime request-config into a freshly built provider: the
@@ -1609,7 +1556,7 @@ module Hcode
           MOONSHOT_API_KEY        API key for Moonshot
           MOONSHOT_ENDPOINT       API endpoint (default: https://api.kimi.com/coding/v1)
           MOONSHOT_MODEL          Default model name
-          HCODE_PROVIDER          Provider: moonshot | zai | zai-coding-plan | mock
+          HCODE_PROVIDER          Provider: #{LLM::Provider.providers.map(&.name).join(" | ")}
           HCODE_HOME              Config directory (default: ~/.hcode)
           HTTP_PROXY              HTTP/HTTPS proxy URL
           ALL_PROXY               SOCKS proxy URL

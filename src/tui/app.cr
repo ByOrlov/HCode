@@ -2013,7 +2013,7 @@ module Hcode
       end
 
       private def open_provider_selector : Nil
-        items = LLM::KNOWN_PROVIDERS.map(&.name)
+        items = LLM::Provider.providers.map(&.name)
         @provider_list.show(Hcode.t("ui.select_provider"), items)
         @provider_list.selected = items.index(@provider_name) || 0
         # Discard a queued Enter that was batched with the /provider submit,
@@ -3824,7 +3824,7 @@ module Hcode
         count.times do |rel|
           i = start + rel
           item = @provider_list.items[i]
-          info = LLM::KNOWN_PROVIDERS.find { |p| p.name == item }
+          info = LLM::Provider.providers.find { |p| p.name == item }
           desc = info.try(&.description) || ""
           marker = item == @provider_name ? " (active)" : ""
           line_text = "#{item.ljust(8)} #{desc}#{marker}"

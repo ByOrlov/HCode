@@ -1,12 +1,19 @@
 module Hcode
   module LLM
+    # Raised when a provider cannot be built from the current config (missing
+    # credentials, unknown name, ...). At startup it is rescued and turned into
+    # an exit; at runtime the /provider selector catches it to show an inline
+    # error without leaving the TUI.
+    class ProviderConfigError < Exception
+    end
+
     # Abstract base for all chat-completion backends.
     #
     # A Provider converts the shared Message / ToolDefinition types into a
     # provider-specific request, streams the response back as MessagePart
     # deltas, and returns the aggregated StepResult. The agent loop depends
     # only on this abstraction, so a new backend can be added by subclassing
-    # Provider and appending an entry to KNOWN_PROVIDERS.
+    # Provider and appending a `Provider.register` call to it.
     abstract class Provider
       # Short stable identifier for the backend ("moonshot", "openai", ...).
       # Surfaced by the /provider selector and the status footer.
@@ -55,32 +62,56 @@ module Hcode
       # completion budget against the remaining context window.
       def used_context_tokens=(tokens : Int32) : Nil
       end
-    end
 
-    # Metadata for a selectable backend, listed by the /provider command.
-    struct ProviderInfo
-      property name : String
-      property description : String
+      # Metadata for a selectable backend, listed by the /provider command.
+      struct ProviderInfo
+        property name : String
+        property description : String
 
-      def initialize(@name : String, @description : String)
+        def initialize(@name : String, @description : String)
+        end
+      end
+
+      # One registered backend: the metadata shown in selectors plus the
+      # factory that builds a live `Provider` from a `Config` (and optional
+      # OAuth creds). The registry is the single source of truth — both the
+      # `/provider` selector and `build_named_provider` enumerate it, so adding
+      # a backend is just one `Provider.register` call in its file.
+      struct Registration
+        getter info : ProviderInfo
+        getter builder : Proc(Config::Config, OAuthCredentials?, Provider)
+
+        def initialize(@info : ProviderInfo,
+                       @builder : Proc(Config::Config, OAuthCredentials?, Provider))
+        end
+      end
+
+      @@registry = [] of Registration
+
+      # Register a backend under a stable name. Each provider file calls this
+      # at top level so `require`-ing the file is enough to make the backend
+      # appear in selectors and `build_named_provider` — no second list to keep
+      # in sync.
+      def self.register(name : String, description : String,
+                        &builder : Config::Config, OAuthCredentials? -> Provider) : Nil
+        info = ProviderInfo.new(name, description)
+        @@registry << Registration.new(info, builder)
+      end
+
+      # All registered backends, sorted A→Z by name.
+      def self.providers : Array(ProviderInfo)
+        @@registry.map(&.info).sort_by(&.name)
+      end
+
+      def self.known_provider?(name : String) : Bool
+        @@registry.any? { |r| r.info.name == name }
+      end
+
+      def self.find(name : String) : Registration?
+        @@registry.find { |r| r.info.name == name }
       end
     end
 
     DEFAULT_PROVIDER_NAME = nil
-
-    # Known backends. Moonshot is the default; append entries here as new
-    # Provider subclasses are implemented so the /provider selector can
-    # enumerate them.
-    KNOWN_PROVIDERS = [
-      ProviderInfo.new("moonshot", "Moonshot — Chat Completions (default)"),
-      ProviderInfo.new("zai", "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)"),
-      ProviderInfo.new("ollama", "Ollama — local models, no API key"),
-      ProviderInfo.new("lmstudio", "LM Studio — local models, no API key"),
-      ProviderInfo.new("mock", "Mock — scripted self-test provider (testing)"),
-    ] of ProviderInfo
-
-    def self.known_provider?(name : String) : Bool
-      KNOWN_PROVIDERS.any? { |p| p.name == name }
-    end
   end
 end

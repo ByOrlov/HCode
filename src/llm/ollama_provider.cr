@@ -24,5 +24,13 @@ module Hcode
         ""
       end
     end
+
+    Provider.register("ollama", "Ollama — local models, no API key") do |config, _|
+      endpoint = config.ollama_endpoint || OllamaProvider::DEFAULT_ENDPOINT
+      OllamaProvider.new(
+        model: config.ollama_model || OllamaProvider::DEFAULT_MODEL,
+        endpoint: endpoint,
+      )
+    end
   end
 end

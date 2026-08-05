@@ -48,5 +48,34 @@ module Hcode
         request
       end
     end
+
+    Provider.register("zai", "Z.AI / Zhipu — pay-as-you-go (OpenAI-compatible)") do |config, _|
+      if config.zai_api_key.empty?
+        raise ProviderConfigError.new(
+          "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable " \
+          "(or [provider.zai] api_key in config).")
+      end
+      ZaiProvider.new(
+        model: config.zai_model,
+        endpoint: config.zai_endpoint,
+        api_key: config.zai_api_key,
+        provider_label: "zai",
+        builtin_web_search: true,
+      )
+    end
+
+    Provider.register("zai-coding-plan", "Z.AI / Zhipu — Coding Plan subscription") do |config, _|
+      if config.zai_api_key.empty?
+        raise ProviderConfigError.new(
+          "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
+      end
+      ZaiProvider.new(
+        model: config.zai_coding_plan_model,
+        endpoint: config.zai_coding_plan_endpoint,
+        api_key: config.zai_api_key,
+        provider_label: "zai-coding-plan",
+        builtin_web_search: true,
+      )
+    end
   end
 end

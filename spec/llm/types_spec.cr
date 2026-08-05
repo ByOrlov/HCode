@@ -479,22 +479,24 @@ describe "LLM provider registry" do
     Hcode::LLM::DEFAULT_PROVIDER_NAME.should be_nil
   end
 
-  it "lists moonshot, zai, ollama, lmstudio and mock among the known providers" do
-    names = Hcode::LLM::KNOWN_PROVIDERS.map(&.name)
+  it "lists all providers sorted A→Z by name" do
+    names = Hcode::LLM::Provider.providers.map(&.name)
     names.should contain("moonshot")
     names.should contain("zai")
+    names.should contain("zai-coding-plan")
     names.should contain("ollama")
     names.should contain("lmstudio")
     names.should contain("mock")
+    names.should eq(names.sort)
   end
 
   it "recognises known providers and rejects unknown ones" do
-    Hcode::LLM.known_provider?("moonshot").should be_true
-    Hcode::LLM.known_provider?("zai").should be_true
-    Hcode::LLM.known_provider?("ollama").should be_true
-    Hcode::LLM.known_provider?("lmstudio").should be_true
-    Hcode::LLM.known_provider?("mock").should be_true
-    Hcode::LLM.known_provider?("nope").should be_false
+    Hcode::LLM::Provider.known_provider?("moonshot").should be_true
+    Hcode::LLM::Provider.known_provider?("zai").should be_true
+    Hcode::LLM::Provider.known_provider?("ollama").should be_true
+    Hcode::LLM::Provider.known_provider?("lmstudio").should be_true
+    Hcode::LLM::Provider.known_provider?("mock").should be_true
+    Hcode::LLM::Provider.known_provider?("nope").should be_false
   end
 end
 

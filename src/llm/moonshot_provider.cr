@@ -108,5 +108,21 @@ module Hcode
         File.join(home, ".kimi-code", "credentials", "kimi-code.json")
       end
     end
+
+    Provider.register("moonshot", "Moonshot — Chat Completions (default)") do |config, oauth|
+      if oauth.nil? && config.api_key.to_s.empty?
+        raise ProviderConfigError.new(
+          "No Moonshot credentials found. Either:\n" \
+          "  1. Login with Moonshot's kimi-code CLI (creates ~/.kimi-code/credentials/kimi-code.json)\n" \
+          "  2. Set MOONSHOT_API_KEY environment variable")
+      end
+      MoonshotProvider.new(
+        model: config.model || "kimi-for-coding",
+        endpoint: config.endpoint || MoonshotProvider::DEFAULT_ENDPOINT,
+        oauth: oauth,
+        api_key: config.api_key.to_s,
+        temperature: config.temperature,
+      )
+    end
   end
 end

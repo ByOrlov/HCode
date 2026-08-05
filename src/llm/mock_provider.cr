@@ -201,5 +201,9 @@ module Hcode
         )
       end
     end
+
+    Provider.register("mock", "Mock — scripted self-test provider (testing)") do |_, _|
+      MockProvider.new(MockProvider.script_from_env || MockProvider::DEFAULT_SCRIPT.dup)
+    end
   end
 end

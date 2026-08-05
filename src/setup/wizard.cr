@@ -21,13 +21,13 @@ module Hcode
     end
 
     PROVIDER_CHOICES = [
+      ProviderChoice.new("lmstudio", "Local — LM Studio", false,
+        "http://localhost:1234/v1", "local-model"),
       ProviderChoice.new("moonshot", "Moonshot (Kimi)", true,
         "https://api.kimi.com/coding/v1", "kimi-for-coding",
         "Get a key at https://www.kimi.com/code/console"),
       ProviderChoice.new("ollama", "Local — Ollama", false,
         "http://localhost:11434/v1", "llama3.2"),
-      ProviderChoice.new("lmstudio", "Local — LM Studio", false,
-        "http://localhost:1234/v1", "local-model"),
       ProviderChoice.new("zai", "Z.AI / Zhipu (GLM)", true,
         "https://api.z.ai/api/paas/v4", "glm-4.6",
         "Get a key at https://z.ai"),
