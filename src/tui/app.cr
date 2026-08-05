@@ -3002,6 +3002,20 @@ module Hcode
         total = log_lines.size + active_lines.size
         viewport_top = @previous_viewport_top
 
+        # No editor is rendered while a full-screen takeover owns the screen
+        # (tasks browser, plan-review full-plan viewer) — park the hardware
+        # cursor on the last line and hide it. The next normal render restores
+        # positioning. Without this the editor-positioning math below leaves the
+        # cursor floating mid-row at the editor's text column.
+        if (@tasks_browser.visible?) ||
+           (@plan_review_dialog.visible? && @plan_review_dialog.viewing_full?)
+          port.hide_cursor
+          target_row = {total - 1, 0}.max
+          target_screen = {0, {target_row - viewport_top, rows - 1}.min}.max
+          port.cursor_to_row(target_screen + 1)
+          return
+        end
+
         # No editor is rendered while the help overlay is open — park the
         # hardware cursor on the panel's last line and leave it hidden. The
         # next non-help render restores normal positioning.
