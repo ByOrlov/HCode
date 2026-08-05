@@ -172,6 +172,7 @@ fa:
     plan_mode_on: "روشن"
     plan_mode_off: "خاموش"
     plan_not_wired: "حالت برنامه‌ریزی متصل نشده است."
+    plan_toggle_failed: "امکان تغییر حالت برنامه‌ریزی وجود ندارد."
     debugzones_on: "روشن"
     debugzones_off: "خاموش"
     swarm_mode_state: "حالت swarm: %{state}"

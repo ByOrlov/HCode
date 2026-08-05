@@ -172,6 +172,7 @@ es:
     plan_mode_on: "activado"
     plan_mode_off: "desactivado"
     plan_not_wired: "El modo plan no está conectado."
+    plan_toggle_failed: "No se pudo alternar el modo plan."
     debugzones_on: "activado"
     debugzones_off: "desactivado"
     swarm_mode_state: "Modo enjambre: %{state}"

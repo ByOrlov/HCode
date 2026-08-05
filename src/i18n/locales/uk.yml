@@ -172,6 +172,7 @@ uk:
     plan_mode_on: "увімк"
     plan_mode_off: "вимк"
     plan_not_wired: "Режим планування не підключено."
+    plan_toggle_failed: "Не вдалося перемкнути режим планування."
     debugzones_on: "увімк"
     debugzones_off: "вимк"
     swarm_mode_state: "Режим рою: %{state}"

@@ -172,6 +172,7 @@ zh:
     plan_mode_on: "开"
     plan_mode_off: "关"
     plan_not_wired: "计划模式未接入。"
+    plan_toggle_failed: "无法切换计划模式。"
     debugzones_on: "开"
     debugzones_off: "关"
     swarm_mode_state: "Swarm 模式：%{state}"

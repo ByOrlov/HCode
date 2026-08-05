@@ -755,12 +755,16 @@ module Hcode
       Hcode::Tools::PlanMode.plan_review_service = AppPlanReviewService.new(app)
       app.on_plan_mode = ->(next_on : Bool) do
         svc = Hcode::Tools::PlanMode.plan_service
-        false if svc.nil?
+        return false if svc.nil?
         begin
-          if next_on
-            svc.try(&.enter)
-          else
-            svc.try(&.cancel)
+          # Idempotent: only transition when the desired state differs from
+          # the current one, so a stray double-toggle (or a TUI flag that is
+          # out of sync with the service) does not raise "Already in plan mode".
+          current = !svc.status.nil?
+          if next_on && !current
+            svc.enter
+          elsif !next_on && current
+            svc.cancel
           end
           true
         rescue
@@ -1204,6 +1208,13 @@ module Hcode
               # block rather than as a separate info message.
               event.ram_line = CLI.ram_line(tname, event.text.bytesize, event.is_error)
               app.on_event(event)
+              # Keep the TUI's plan-mode flag in sync with the service: the
+              # model can toggle it directly via EnterPlanMode/ExitPlanMode,
+              # bypassing toggle_plan_mode, which would otherwise leave the
+              # input-frame tint and placeholder stale.
+              if svc = Hcode::Tools::PlanMode.plan_service
+                app.plan_mode = !svc.status.nil?
+              end
             when .step_begin?, .step_end?, .info?, .error?, .turn_end?,
                  .compaction_started?, .compaction_completed?, .compaction_cancelled?
               app.on_event(event)

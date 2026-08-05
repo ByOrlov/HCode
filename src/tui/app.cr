@@ -1712,10 +1712,19 @@ module Hcode
       # The active state is signalled visually by the input frame colour and
       # the placeholder text, not by a transcript system message.
       private def toggle_plan_mode : Nil
-        if @on_plan_mode.try(&.call(!@plan_mode))
-          @plan_mode = !@plan_mode
-        else
+        cb = @on_plan_mode
+        if cb.nil?
           @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
+          return
+        end
+        desired = !@plan_mode
+        if cb.call(desired)
+          @plan_mode = desired
+        else
+          # Callback exists but failed (e.g. service raised). Sync from the
+          # service when possible so the flag tracks reality instead of
+          # flipping blindly, and surface a distinct error.
+          @messages << Message.new("error", Hcode.t("ui.plan_toggle_failed"))
         end
       end
 

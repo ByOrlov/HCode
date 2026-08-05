@@ -174,6 +174,7 @@ ru:
     plan_mode_off: "выкл"
     plan_mode_placeholder: "Режим планирования"
     plan_not_wired: "Режим планирования не подключён."
+    plan_toggle_failed: "Не удалось переключить режим планирования."
     debugzones_on: "вкл"
     debugzones_off: "выкл"
     swarm_mode_state: "Режим роя: %{state}"

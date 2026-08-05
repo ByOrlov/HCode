@@ -172,6 +172,7 @@ hi:
     plan_mode_on: "चालू"
     plan_mode_off: "बंद"
     plan_not_wired: "प्लान मोड वायर्ड नहीं है।"
+    plan_toggle_failed: "प्लान मोड टॉगल नहीं हो सका।"
     debugzones_on: "चालू"
     debugzones_off: "बंद"
     swarm_mode_state: "Swarm मोड: %{state}"

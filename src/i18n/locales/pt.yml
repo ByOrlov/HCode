@@ -172,6 +172,7 @@ pt:
     plan_mode_on: "ligado"
     plan_mode_off: "desligado"
     plan_not_wired: "O modo de planejamento não está conectado."
+    plan_toggle_failed: "Não foi possível alternar o modo de planejamento."
     debugzones_on: "ligado"
     debugzones_off: "desligado"
     swarm_mode_state: "Modo enxame: %{state}"
