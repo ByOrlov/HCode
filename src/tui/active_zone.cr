@@ -2,17 +2,18 @@ module Hcode
   module TUI
     # Stateless renderer for the repainted region at the bottom of the screen.
     #
-    # Unlike the previous implementation, this zone does NOT track blank rows,
-    # height history, or shift state. It simply paints the active content at the
-    # current cursor position and clears any rows that are no longer used.
+    # Paints the active content at the current cursor position. Does NOT clear
+    # rows below the zone — that is the caller's responsibility because only the
+    # caller knows the absolute screen geometry (needed to avoid wiping the last
+    # active row when the zone reaches the bottom of the screen).
     class ActiveZone
       # Render `active_lines` starting at the current cursor row.
       #
       # If the zone is taller than `available_rows`, only the bottom portion is
       # drawn (tail-clipping) so the editor/footer stay visible.
       #
-      # `prev_visible` is how many rows the zone occupied on the previous frame.
-      # If it was larger, the leftover rows are cleared with `\e[J`.
+      # `prev_visible` is accepted for API compatibility but no longer used —
+      # clearing stale rows below the zone is handled by `incremental_render`.
       #
       # Returns the number of visible rows actually drawn.
       def render(port : TerminalPort, active_lines : Array(String), available_rows : Int32, prev_visible : Int32) : Int32
@@ -24,12 +25,6 @@ module Hcode
           port.carriage_return
           port.clear_line
           port.write(active_lines.unsafe_fetch(skip + vi))
-        end
-
-        if prev_visible > visible
-          port.cursor_down(1) if visible > 0
-          port.carriage_return
-          port.clear_below
         end
 
         visible

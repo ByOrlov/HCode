@@ -565,7 +565,7 @@ module Hcode
           streaming = !@streaming_thinking.empty? || !@streaming_text.empty?
           if @dirty && (!@agent_busy || streaming || elapsed >= 80)
             render
-            @dirty = false
+            @dirty = @log_zone.pending?
             @last_render = now
           end
 
@@ -718,10 +718,12 @@ module Hcode
             # assistant message so it never inflates the Active zone.
             unless event.text.empty?
               @messages << Message.new("assistant", event.text)
+              invalidate_log_cache!
             end
           else
             @messages << Message.new("assistant", @streaming_text)
             @streaming_text = ""
+            invalidate_log_cache!
           end
           @spinner.stop
           @status = ""
@@ -730,6 +732,7 @@ module Hcode
           unless @streaming_text.empty?
             @messages << Message.new("assistant", @streaming_text)
             @streaming_text = ""
+            invalidate_log_cache!
           end
           @step_tool_count += 1
 
@@ -2357,7 +2360,7 @@ module Hcode
         return unless @running
         return if @first_render
         render
-        @dirty = false
+        @dirty = @log_zone.pending?
       end
 
       # Build the full ANSI frame string that render() writes to the terminal.
@@ -2710,16 +2713,8 @@ module Hcode
         # First frame: start from the home position so the initial paint lands
         # at the top-left of the terminal instead of wherever the shell left the
         # cursor. After this frame the cursor is tracked incrementally.
-        port.cursor_home if @first_render
-
-        # The terminal cannot scroll back up on its own. If the viewport shrank
-        # (e.g. a tall modal was dismissed), the only safe option would be a full
-        # repaint, but full render is currently disabled to avoid redrawing the
-        # whole screen (and the logo) unexpectedly. Incremental path continues.
-        # if scroll_delta < 0 || log_lines.size < @prev_log_count
-        #   full_render(port, log_lines, active_lines, rows)
-        #   return
-        # end
+        first_frame = @first_render
+        port.cursor_home if first_frame
 
         # ── 1. Scroll the terminal up if the viewport moved down ──
         if scroll_delta > 0
@@ -2729,6 +2724,38 @@ module Hcode
           port.cursor_down(move_to_bottom) if move_to_bottom > 0
           scroll_delta.times { port.newline }
           @hardware_cursor_row = viewport_top + {rows, total - viewport_top}.min - 1
+        end
+
+        # ── Full repaint when the viewport moved UP (content shrank) ──
+        # The terminal cannot scroll down on its own. When viewport_top
+        # decreases, every visible row now maps to different content, but the
+        # old pixels stay on screen. The only safe recovery is to rewrite every
+        # visible line from the top.
+        if scroll_delta < 0 && !first_frame
+          all_lines = log_lines + active_lines
+          visible_count = {total - viewport_top, rows}.min
+
+          port.cursor_home
+          visible_count.times do |i|
+            port.cursor_down(1) if i > 0
+            port.carriage_return
+            port.clear_line
+            port.write(all_lines[viewport_top + i])
+          end
+          if visible_count < rows
+            port.cursor_down(1) if visible_count > 0
+            port.carriage_return
+            port.clear_below
+          end
+
+          @log_zone.mark_flushed(log_lines.size)
+          active_visible = Math.min(active_lines.size, rows)
+          @hardware_cursor_row = visible_count < rows ? total : {0, total - 1}.max
+          @previous_viewport_top = viewport_top
+          @prev_log_count = log_lines.size
+          @prev_active_visible = active_visible
+          @first_render = false
+          return
         end
 
         # ── 2. Write any new log lines ──
@@ -2745,20 +2772,30 @@ module Hcode
         # ── 3. Render the active zone anchored at the bottom of the viewport ──
         active_visible = Math.min(active_lines.size, rows)
         active_start = total - active_visible
+
         move_cursor_to(port, active_start, viewport_top, rows)
         prev_active_visible = @prev_active_visible
         @prev_active_visible = @active_zone.render(
           port, active_lines, rows, prev_active_visible
         )
-        # After render the real cursor is either on the last content row, or,
-        # if the zone shrank and clear_below was issued, one row below it.
-        @hardware_cursor_row = if active_visible == 0
-                                 active_start
-                               elsif prev_active_visible > active_visible
-                                 active_start + active_visible
-                               else
-                                 active_start + active_visible - 1
-                               end
+        # ActiveZone.render left the cursor on the last drawn active row
+        # (or at active_start if nothing was drawn). Sync the tracker so the
+        # clear-below move below computes the correct cursor delta.
+        @hardware_cursor_row = active_visible > 0 ? active_start + active_visible - 1 : active_start
+
+        # Clear stale rows below the active zone when it shrank or on first
+        # frame. Only do this when content doesn't fill the screen — when the
+        # active zone reaches the bottom row, cursor_down is clamped and
+        # clear_below would wipe the last active line instead of clearing below.
+        screen_end = total - viewport_top
+        if screen_end < rows
+          move_cursor_to(port, total, viewport_top, rows)
+          port.carriage_return
+          port.clear_below
+          @hardware_cursor_row = total
+        else
+          @hardware_cursor_row = {0, total - 1}.max
+        end
 
         @previous_viewport_top = viewport_top
         @prev_log_count = log_lines.size
@@ -3390,7 +3427,10 @@ module Hcode
       end
 
       private def render_editor_box(cols : Int32) : Array(String)
-        box_w = cols
+        # Use cols-1 so border lines are never exactly cols wide — a full-width
+        # line triggers a terminal pending-wrap state that corrupts incremental
+        # rendering (cursor_down double-wraps, leaving stale rows).
+        box_w = {cols - 1, 10}.max
         # Input frame tint: white in normal mode, yellow (opencode darkYellow
         # #e5c07b) when Plan mode is active.
         border_color = @plan_mode ? 180 : 255

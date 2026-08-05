@@ -80,6 +80,12 @@ task :mockrun do
   sh "./bin/mock-hcode"
 end
 
+desc "Build and run mockfast-hcode (big plan + couple of tools for quick render check)"
+task :mockfast do
+  sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
+  sh "./bin/mockfast_hcode"
+end
+
 desc "Remove build artifacts"
 task :clean do
   rm_f "hcode"

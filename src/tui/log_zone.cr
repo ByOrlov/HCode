@@ -76,6 +76,9 @@ module Hcode
           port.carriage_return
           port.clear_line
           port.write(log_lines[@flushed])
+          # Cancel pending-wrap before cursor_down — a full-width line leaves
+          # the terminal in a state where cursor_down can double-wrap.
+          port.carriage_return
           port.cursor_down(1)
           @flushed &+= 1
           emitted &+= 1

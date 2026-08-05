@@ -175,28 +175,122 @@ describe "Zone behaviour tests (via App#render_zones)" do
     end
   end
 
-  # Test 8 relied on the full_render fallback when the viewport shrinks.
-  # Full render is currently disabled, so this case is skipped.
-  # describe "Test 8: tall modal dismiss (viewport_top shrink → full repaint)" do
-  #   it "clears stale lines when active zone shrinks after viewport scroll" do
-  #     app = Hcode::TUI::App.new
-  #     mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
-  #
-  #     # Frame 1: log=[L1..L3], active=[D1..D20] (tall dialog).
-  #     # total=23 > rows=10, so the screen shows the bottom of the dialog.
-  #     dialog = (1..20).map { |n| "D#{n}" }
-  #     app.render_zones(mock, [l(1), l(2), l(3)] of String, dialog)
-  #
-  #     # Frame 2: dialog dismissed — active shrinks to [A1..A3]. total=6,
-  #     # viewport_top=0 < prev_vt=13 → forces full_render. No stale D-lines.
-  #     app.render_zones(mock, [l(1), l(2), l(3)] of String, [a(1), a(2), a(3)] of String)
-  #
-  #     screen = mock.screen
-  #     screen[0, 6].should eq(["L1", "L2", "L3", "A1", "A2", "A3"])
-  #     screen[6..].each { |row| row.should eq("") }
-  #     # The new content is on screen; the scrollback still holds the old
-  #     # dialog lines, which is expected terminal behaviour.
-  #     mock.visible_rows[-6..-1].should eq(["L1", "L2", "L3", "A1", "A2", "A3"])
-  #   end
-  # end
+  # Viewport shrink (scroll_delta < 0): the active zone is anchored at the
+  # bottom of the content, so when content shrank (modal dismissed, spinner
+  # gone at turn end, log compacted) the zone moves DOWN on screen and the rows
+  # it vacated at the top go stale — the terminal cannot scroll back up on its
+  # own. incremental_render must clear those freed rows.
+  describe "Test 8: content shrink (viewport_top shrink → stale rows cleared)" do
+    it "clears stale lines when the active zone shrinks after viewport scroll" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+
+      # Frame 1: log=[L1..L3], active=[D1..D20] (tall dialog). total=23 > rows,
+      # so the screen shows the bottom of the dialog.
+      dialog = (1..20).map { |n| "D#{n}" }
+      drain(app, mock, [l(1), l(2), l(3)] of String, dialog)
+
+      # Frame 2: dialog dismissed — active shrinks to [A1..A3]. total=6,
+      # viewport_top=0 < prev_vt → stale rows above the active zone must be
+      # cleared, no D-lines survive on screen. (L1..L3 scrolled into scrollback
+      # while the tall dialog was shown and are not re-emitted; restoring them
+      # would need a full repaint, which is out of scope for the incremental
+      # path.)
+      app.render_zones(mock, [l(1), l(2), l(3)] of String, [a(1), a(2), a(3)] of String)
+
+      screen = mock.screen
+      screen.should_not contain("D1")
+      (1..20).each { |n| screen.should_not contain("D#{n}") }
+      screen[3, 3].should eq(["A1", "A2", "A3"])
+      screen[6..].each { |row| row.should eq("") }
+    end
+
+    it "clears the stale row when the spinner line disappears at turn end" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+
+      # log=[L1..L9], active=[S (spinner), A1] — total=11, viewport_top=1.
+      app.render_zones(mock, (1..9).map { |n| l(n) }, ["S", a(1)] of String)
+
+      # Spinner dismissed: active shrinks to [A1]. total=10, viewport_top=0,
+      # scroll_delta=-1 → the row the spinner vacated must be cleared, leaving
+      # no stale "S" on screen.
+      app.render_zones(mock, (1..9).map { |n| l(n) }, [a(1)] of String)
+
+      screen = mock.screen
+      screen.should_not contain("S")
+    end
+  end
+
+  # When the active zone fills the screen to the bottom row and then shrinks,
+  # cursor_down(1) from the last row is clamped. Previously clear_below would
+  # then wipe the last active line instead of clearing rows below the zone.
+  # The fix: only clear_below when content doesn't fill the screen.
+  describe "Test 9: shrink at screen bottom — last active line preserved" do
+    it "does not wipe the last active line when zone shrinks at bottom" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: 13, cols: 80)
+
+      # total=13 == rows, active fills to bottom
+      app.render_zones(mock, (1..5).map { |n| l(n) }, (1..8).map { |n| a(n) })
+      mock.screen[12].should eq("A8")
+
+      # active shrinks 8→5, log grows +3, total stays 13
+      app.render_zones(mock, (1..8).map { |n| l(n) }, (1..5).map { |n| a(n) })
+
+      mock.screen.should eq(
+        (1..8).map { |n| l(n) } + (1..5).map { |n| a(n) }
+      )
+    end
+
+    it "does not wipe the last active line on the first frame at bottom" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: 5, cols: 80)
+
+      app.render_zones(mock, [] of String, (1..5).map { |n| a(n) })
+      mock.screen.should eq((1..5).map { |n| a(n) })
+    end
+  end
+
+  # When scroll_delta < 0 (viewport moved up because content shrank), every
+  # visible row now maps to different content. The terminal cannot scroll down
+  # on its own, so incremental_render must do a full repaint of the visible area.
+  describe "Test 10: viewport shrink → full repaint" do
+    it "rewrites all visible lines when viewport_top decreases" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: 12, cols: 80)
+
+      # Frame 1: log=[L1..L7], active=[A1..A5] → total=12, VT=0
+      app.render_zones(mock, (1..7).map { |n| l(n) }, (1..5).map { |n| a(n) })
+
+      # Frame 2: active grows to 8 → total=15, VT=3
+      app.render_zones(mock, (1..7).map { |n| l(n) }, (1..8).map { |n| a(n) })
+
+      # Frame 3: active shrinks to 5 → total=12, VT=0, scroll_delta=-3
+      app.render_zones(mock, (1..7).map { |n| l(n) }, (1..5).map { |n| a(n) })
+
+      screen = mock.screen
+      # No stale active-zone lines from the taller frame
+      (1..8).each { |n| screen.should_not contain("A#{n}") unless n <= 5 }
+      # Log and active content correct
+      screen[0, 7].should eq((1..7).map { |n| l(n) })
+      screen[7, 5].should eq((1..5).map { |n| a(n) })
+    end
+
+    it "clears stale content above the active zone on viewport shrink" do
+      app = Hcode::TUI::App.new
+      mock = Hcode::TUI::TerminalMock.new(rows: 12, cols: 80)
+
+      # Frame 1: log=[L1..L9], active=[A1..A5] → total=14, VT=2
+      app.render_zones(mock, (1..9).map { |n| l(n) }, (1..5).map { |n| a(n) })
+
+      # Frame 2: active shrinks to 3 → total=12, VT=0, scroll_delta=-2
+      app.render_zones(mock, (1..9).map { |n| l(n) }, (1..3).map { |n| a(n) })
+
+      screen = mock.screen
+      # Screen should show L1..L9, A1..A3 starting from row 0
+      screen[0, 9].should eq((1..9).map { |n| l(n) })
+      screen[9, 3].should eq((1..3).map { |n| a(n) })
+    end
+  end
 end
