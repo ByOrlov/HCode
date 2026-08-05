@@ -13,19 +13,27 @@ module Hcode
         user_agents2 = File.join(home, ".agents", "AGENTS.md")
         paths << user_agents2 if File.exists?(user_agents2)
 
-        git_root = find_git_root(cwd)
-        if git_root
-          Dir.glob(File.join(git_root, "**", "AGENTS.md")).each do |p|
-            next if p.includes?("/node_modules/") || p.includes?("/.git/")
-            next if paths.includes?(p)
-            paths << p
-          end
+        # Cascade: collect AGENTS.md from the chain of directories between the
+        # project root and cwd (inclusive at both ends), mirroring kimi-code's
+        # `dirsRootToLeaf`. Point checks only — no recursive glob, which would
+        # stat every file under the repo (including `.git/objects`).
+        project_root = find_git_root(cwd) || cwd
+        dirs = [] of String
+        cur = File.expand_path(cwd)
+        loop do
+          dirs << cur
+          break if cur == project_root
+          parent = File.dirname(cur)
+          break if parent == cur
+          cur = parent
+        end
+        dirs.reverse! # root → leaf
 
-          Dir.glob(File.join(git_root, "**", ".hcode", "AGENTS.md")).each do |p|
-            next if p.includes?("/node_modules/") || p.includes?("/.git/")
-            next if paths.includes?(p)
-            paths << p
-          end
+        dirs.each do |dir|
+          brand = File.join(dir, ".hcode", "AGENTS.md")
+          paths << brand if File.exists?(brand) && !paths.includes?(brand)
+          generic = File.join(dir, "AGENTS.md")
+          paths << generic if File.exists?(generic) && !paths.includes?(generic)
         end
 
         paths.sort_by! { |p| p.size }
