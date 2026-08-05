@@ -52,7 +52,7 @@ module Hcode
 
     # Outcome of running one hook command.
     struct HookResult
-      getter action : String    # "allow" | "block"
+      getter action : String # "allow" | "block"
       getter message : String?
       getter reason : String?
       getter stdout : String
@@ -83,8 +83,8 @@ module Hcode
       end
     end
 
-    DEFAULT_TIMEOUT_SECONDS = 30
-    KILL_GRACE_MS = 100
+    DEFAULT_TIMEOUT_SECONDS =  30
+    KILL_GRACE_MS           = 100
 
     # Runs hook commands on demand, grouped by event. Hook commands are shell
     # strings that receive a JSON payload on stdin and signal their decision

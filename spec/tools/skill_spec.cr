@@ -50,7 +50,7 @@ describe Hcode::Tools::Skill do
 
   it "fails when model invocation is disabled" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("commit", "content", disable_model_invocation: true)
+      make_skill("commit", "content", disable_model_invocation: true),
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "commit" })))
@@ -60,7 +60,7 @@ describe Hcode::Tools::Skill do
 
   it "fails when type is not inline (e.g. flow)" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("flow", "content", type: "flow")
+      make_skill("flow", "content", type: "flow"),
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "flow" })))
@@ -70,7 +70,7 @@ describe Hcode::Tools::Skill do
 
   it "succeeds for default (prompt) skill type" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("commit", "Commit the changes.")
+      make_skill("commit", "Commit the changes."),
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "commit" })))
@@ -80,7 +80,7 @@ describe Hcode::Tools::Skill do
 
   it "injects rendered block into memory" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("commit", "Commit it now.", path: "/tmp/skills/commit.md")
+      make_skill("commit", "Commit it now.", path: "/tmp/skills/commit.md"),
     ])
     memory = Hcode::Context::Memory.new
     Hcode::Tools::Skill.memory = memory
@@ -150,7 +150,7 @@ describe Hcode::Tools::Skill do
 
   it "rejects nested skill invocation past MAX_SKILL_QUERY_DEPTH" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("x", "content")
+      make_skill("x", "content"),
     ])
     Hcode::Tools::Skill.current_depth = Hcode::Tools::Skill::MAX_SKILL_QUERY_DEPTH
     tool = Hcode::Tools::Skill.new
@@ -161,7 +161,7 @@ describe Hcode::Tools::Skill do
 
   it "uses nested-skill trigger when depth > 0" do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new([
-      make_skill("x", "content", path: "/tmp/x.md")
+      make_skill("x", "content", path: "/tmp/x.md"),
     ])
     memory = Hcode::Context::Memory.new
     Hcode::Tools::Skill.memory = memory

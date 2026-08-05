@@ -541,7 +541,6 @@ module Hcode
         editor_text_col = 5 + @editor.cursor_visual_col
         port.cursor_to_column(editor_text_col)
       end
-
     end
   end
 end

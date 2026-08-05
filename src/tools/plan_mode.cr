@@ -224,8 +224,7 @@ module Hcode
           ToolResult.success(prefix + format_user_approved(plan, path))
         in .revise?
           fb = result.not_nil!.feedback
-          msg = fb.empty? ? "User requested revisions. Plan mode remains active." :
-            "User rejected the plan. Feedback:\n\n#{fb}"
+          msg = fb.empty? ? "User requested revisions. Plan mode remains active." : "User rejected the plan. Feedback:\n\n#{fb}"
           ToolResult.success(msg)
         in .reject_and_exit?
           service.exit

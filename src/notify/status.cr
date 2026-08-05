@@ -11,7 +11,7 @@ module Hcode
     # decide whether and what to deliver. `body` is optional context (e.g. the
     # tool that needs approval); channels may ignore it.
     record Transition,
-      event : String,        # "turn_started", "turn_done", "input_required", "idle"
+      event : String, # "turn_started", "turn_done", "input_required", "idle"
       prev_status : AgentStatus,
       next_status : AgentStatus,
       title : String = "",
@@ -44,12 +44,12 @@ module Hcode
       # the next status name so they still reach the dispatcher.
       private def event_for(prev : AgentStatus, next_status : AgentStatus) : String
         case {prev, next_status}
-        when {AgentStatus::Idle, AgentStatus::Working}    then "turn_started"
-        when {AgentStatus::Working, AgentStatus::Done}    then "turn_done"
-        when {AgentStatus::Done, AgentStatus::Idle}       then "settled"
-        when {_, AgentStatus::InputRequired}              then "input_required"
+        when {AgentStatus::Idle, AgentStatus::Working}          then "turn_started"
+        when {AgentStatus::Working, AgentStatus::Done}          then "turn_done"
+        when {AgentStatus::Done, AgentStatus::Idle}             then "settled"
+        when {_, AgentStatus::InputRequired}                    then "input_required"
         when {AgentStatus::InputRequired, AgentStatus::Working} then "resumed"
-        else                                                   next_status.to_s.downcase
+        else                                                         next_status.to_s.downcase
         end
       end
     end

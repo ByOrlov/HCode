@@ -284,8 +284,7 @@ module Hcode
         end
 
         lines << ""
-        hint = @editing_feedback ? "type feedback · Enter submit · Esc cancel" :
-          "↑↓ action · ←/→ option · 1-5 / Enter confirm · Esc cancel"
+        hint = @editing_feedback ? "type feedback · Enter submit · Esc cancel" : "↑↓ action · ←/→ option · 1-5 / Enter confirm · Esc cancel"
         lines << "#{ANSI.color(dim, nil)}  #{hint}#{ANSI.reset}"
         lines << "#{ANSI.color(accent, nil)}#{"─" * render_width}#{ANSI.reset}"
         lines
@@ -341,6 +340,7 @@ module Hcode
 
       # Terminal width for plan body wrapping. Set by the App alongside `rows`.
       @terminal_width : Int32 = 80
+
       def terminal_width=(v : Int32) : Nil
         @terminal_width = v
       end

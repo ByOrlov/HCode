@@ -446,6 +446,7 @@ module Hcode
         @dirty = true
         received.receive
       end
+
       private def inject_plan_if_any(tool_output : String) : Nil
         return unless tool_output.includes?("Plan")
         plan_body, kind = extract_plan_body(tool_output)

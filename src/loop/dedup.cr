@@ -24,7 +24,7 @@ module Hcode
       end
 
       def check_and_track(tool_name : String, canonical_args : String) : DedupAction
-        key    = tool_name
+        key = tool_name
         digest = Digest::SHA256.hexdigest(canonical_args)
 
         history = @call_history[key]? || [] of String

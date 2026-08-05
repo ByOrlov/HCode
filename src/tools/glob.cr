@@ -295,9 +295,7 @@ module Hcode
 
       private def format_glob_warning(stderr : String) : String
         trimmed = stderr.strip
-        trimmed.empty? \
-          ? "Glob completed with warnings; some directories could not be read."
-          : "Glob completed with warnings; some directories could not be read: #{trimmed}"
+        trimmed.empty? ? "Glob completed with warnings; some directories could not be read." : "Glob completed with warnings; some directories could not be read: #{trimmed}"
       end
 
       private def relativize_if_under(candidate : String, base : String) : String

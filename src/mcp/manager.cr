@@ -372,7 +372,7 @@ module Hcode
         defs.select { |d| allowed.includes?(d.name) }.each do |d|
           proxy = ToolNaming.proxy_name(config.name, d.name)
           tools << McpProxyTool.new(proxy, config.name, d.name, d.description, d.input_schema, client,
-                                    tool_timeout: config.effective_tool_timeout)
+            tool_timeout: config.effective_tool_timeout)
         end
         entry.tools = tools
         entry.status = ServerStatus::Connected
@@ -459,8 +459,8 @@ module Hcode
         @mutex.synchronize do
           @reports = @entries.values.map do |e|
             ServerReport.new(e.name, e.status, e.error || "",
-                             tool_count: e.tools.size,
-                             tool_names: e.tools.map(&.name))
+              tool_count: e.tools.size,
+              tool_names: e.tools.map(&.name))
           end
         end
       end

@@ -14,10 +14,10 @@ module Hcode
     #    pipeline `ReadMediaFile` uses, so a screenshot is downsampled and
     #    kept rather than dropped to a text notice.
     module Output
-      MAX_OUTPUT_CHARS       = 100_000
-      MAX_BINARY_PART_BYTES  = 10 * 1024 * 1024
+      MAX_OUTPUT_CHARS      = 100_000
+      MAX_BINARY_PART_BYTES = 10 * 1024 * 1024
       # base64 length = ceil(bytes * 4 / 3)
-      MAX_BINARY_PART_CHARS  = (MAX_BINARY_PART_BYTES * 4 / 3).to_i
+      MAX_BINARY_PART_CHARS = (MAX_BINARY_PART_BYTES * 4 / 3).to_i
 
       TRUNCATED_TEXT = "\n\n[Output truncated: exceeded #{MAX_OUTPUT_CHARS} character limit. " \
                        "Use pagination or more specific queries to get remaining content.]"

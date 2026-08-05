@@ -10,8 +10,8 @@ module Hcode
     class PollInputWait < InputWait
       private lib LibCPoll
         struct PollFd
-          fd      : Int32
-          events  : Int16
+          fd : Int32
+          events : Int16
           revents : Int16
         end
 

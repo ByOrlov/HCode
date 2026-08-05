@@ -467,9 +467,8 @@ module Hcode
         {0x1E5EE_u32, 0x1E5EF_u32},
         {0x1E8D0_u32, 0x1E8D6_u32},
         {0x1E944_u32, 0x1E94A_u32},
-      
-      ] of {UInt32, UInt32}
 
+      ] of {UInt32, UInt32}
 
       # Non-Mark codepoints that contribute no advance width: the
       # `\p{Default_Ignorable_Code_Point}` / `\p{Control}` / `\p{Format}`
@@ -477,21 +476,21 @@ module Hcode
       # `\p{Mark}` above. ZWJ (U+200D) is handled by the grapheme walker and
       # intentionally excluded here.
       NON_MARK_ZERO_WIDTH_RANGES = {
-        {0x0000_u32, 0x001F_u32}, # C0 controls
-        {0x007F_u32, 0x009F_u32}, # DEL + C1 controls
-        {0x0600_u32, 0x0605_u32}, # Arabic number marks
-        {0x061C_u32, 0x061C_u32}, # Arabic letter mark
-        {0x06DD_u32, 0x06DD_u32}, # Arabic end of ayah
-        {0x070F_u32, 0x070F_u32}, # Syriac abbreviation mark
-        {0x0890_u32, 0x0891_u32}, # Arabic signs
-        {0x08E2_u32, 0x08E2_u32}, # Arabic disputed end of ayah
-        {0x180E_u32, 0x180E_u32}, # Mongolian vowel separator
-        {0x200B_u32, 0x200F_u32}, # ZWSP, ZWNJ, ZWJ, LRM, RLM (ZWJ re-checked in walker)
-        {0x202A_u32, 0x202E_u32}, # Bidi controls
-        {0x2060_u32, 0x2064_u32}, # Word joiner etc.
-        {0x2066_u32, 0x206F_u32}, # Bidi isolate controls
-        {0xFEFF_u32, 0xFEFF_u32}, # BOM
-        {0xFFF9_u32, 0xFFFB_u32}, # Interlinear annotation
+        {0x0000_u32, 0x001F_u32},   # C0 controls
+        {0x007F_u32, 0x009F_u32},   # DEL + C1 controls
+        {0x0600_u32, 0x0605_u32},   # Arabic number marks
+        {0x061C_u32, 0x061C_u32},   # Arabic letter mark
+        {0x06DD_u32, 0x06DD_u32},   # Arabic end of ayah
+        {0x070F_u32, 0x070F_u32},   # Syriac abbreviation mark
+        {0x0890_u32, 0x0891_u32},   # Arabic signs
+        {0x08E2_u32, 0x08E2_u32},   # Arabic disputed end of ayah
+        {0x180E_u32, 0x180E_u32},   # Mongolian vowel separator
+        {0x200B_u32, 0x200F_u32},   # ZWSP, ZWNJ, ZWJ, LRM, RLM (ZWJ re-checked in walker)
+        {0x202A_u32, 0x202E_u32},   # Bidi controls
+        {0x2060_u32, 0x2064_u32},   # Word joiner etc.
+        {0x2066_u32, 0x206F_u32},   # Bidi isolate controls
+        {0xFEFF_u32, 0xFEFF_u32},   # BOM
+        {0xFFF9_u32, 0xFFFB_u32},   # Interlinear annotation
         {0x110BD_u32, 0x110BD_u32}, # Kaithi number sign
         {0x110CD_u32, 0x110CD_u32},
         {0x13430_u32, 0x13438_u32}, # Egyptian hieroglyph format controls

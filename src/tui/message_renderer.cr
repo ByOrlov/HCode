@@ -1,22 +1,22 @@
 module Hcode
   module TUI
     module MessageRenderer
-      THINKING_PREVIEW_LINES    = 2
-      THINKING_INDENT           = "  "
-      STATUS_BULLET             = "● "
-      ASSISTANT_BULLET          = "💬 "
-      USER_BULLET               = "👤 "
+      THINKING_PREVIEW_LINES = 2
+      THINKING_INDENT        = "  "
+      STATUS_BULLET          = "● "
+      ASSISTANT_BULLET       = "💬 "
+      USER_BULLET            = "👤 "
       # Vertical bar drawn on the left of the streaming assistant block in the
       # Active zone. Colored khaki (logo color from the theme), it visually
       # marks the mutable region that is repainted every frame. Finalized text
       # in the Log zone is clean — no bar.
-      STREAMING_BAR             = "▌"
+      STREAMING_BAR = "▌"
       # Lines reserved for the rest of the active zone (spinner, editor box,
       # footer, etc.) when capping the streaming text window. The streaming
       # block is mutable and must never scroll into immutable scrollback, so
       # only the tail within this budget is kept.
-      STREAMING_RESERVE         = 10
-      TOOL_PREVIEW_LINES        = 10
+      STREAMING_RESERVE  = 10
+      TOOL_PREVIEW_LINES = 10
 
       def render_message(msg : Message, cols : Int32) : Array(String)
         lines = [] of String

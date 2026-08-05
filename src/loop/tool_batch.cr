@@ -143,8 +143,8 @@ module Hcode
           # itself block) so the hook sees only user-approved calls.
           if engine = @hooks
             if block = engine.trigger_block("PreToolUse", tc.name,
-                {"tool_name" => JSON::Any.new(tc.name),
-                 "tool_input" => JSON.parse(tc.arguments)})
+                 {"tool_name"  => JSON::Any.new(tc.name),
+                  "tool_input" => JSON.parse(tc.arguments)})
               msg = "Blocked by PreToolUse hook: #{block.reason}"
               on_event.call(Event.tool_result(tc.id, msg, true))
               planned << PlannedCall.new(idx, tc, PlannedCallStatus::Skipped, msg, true)
@@ -188,8 +188,8 @@ module Hcode
             event_type = result.is_error ? "PostToolUseFailure" : "PostToolUse"
             spawn(same_thread: true) do
               engine.trigger(event_type, tc.name,
-                {"tool_name" => JSON::Any.new(tc.name),
-                 "tool_input" => JSON.parse(tc.arguments),
+                {"tool_name"   => JSON::Any.new(tc.name),
+                 "tool_input"  => JSON.parse(tc.arguments),
                  "tool_result" => JSON::Any.new(budgeted_content)})
             end
           end

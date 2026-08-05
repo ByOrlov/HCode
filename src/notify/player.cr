@@ -17,10 +17,10 @@ module Hcode
 
       def play_for(event : String) : Nil
         path = case event
-               when "turn_done"        then @done_path
-               when "input_required"   then @alert_path
-               when "turn_started"     then @working_path
-               else                         ""
+               when "turn_done"      then @done_path
+               when "input_required" then @alert_path
+               when "turn_started"   then @working_path
+               else                       ""
                end
         play(path) unless path.empty?
       end
@@ -30,7 +30,7 @@ module Hcode
         return unless File.exists?(path)
         spawn do
           Process.run(cmd[0], args: cmd[1] + [path],
-                       output: Process::Redirect::Close, error: Process::Redirect::Close)
+            output: Process::Redirect::Close, error: Process::Redirect::Close)
         end
       end
 

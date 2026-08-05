@@ -184,8 +184,8 @@ module Hcode
       end
 
       def self.compaction_completed(tokens_before : Int32? = nil,
-                                     tokens_after : Int32? = nil,
-                                     summary : String? = nil) : Event
+                                    tokens_after : Int32? = nil,
+                                    summary : String? = nil) : Event
         e = new(EventType::CompactionCompleted)
         e.tokens_before = tokens_before
         e.tokens_after = tokens_after

@@ -171,7 +171,7 @@ describe Hcode::Loop::Agent do
 
     turn_ends = events.select(&.type.turn_end?)
     turn_ends.size.should eq(1)
-    turn_ends.first.is_error.should be_false  # not cancelled
+    turn_ends.first.is_error.should be_false # not cancelled
     # TurnEnd must be the last event so the TUI can safely drain the queue.
     events.last.type.turn_end?.should be_true
   end
@@ -207,7 +207,7 @@ describe Hcode::Loop::Agent do
 
       turn_ends = events.select(&.type.turn_end?)
       turn_ends.size.should eq(1)
-      turn_ends.first.is_error.should be_true  # cancelled flag
+      turn_ends.first.is_error.should be_true # cancelled flag
     ensure
       Dir.delete(work_dir) rescue nil
     end

@@ -11,17 +11,17 @@ module Hcode
     #
     # См. детальный план портирования в `md-tools/ask-user-question.md`.
     class AskUserQuestion < Tool
-      MIN_QUESTIONS                        = 1
-      MAX_QUESTIONS                        = 4
-      MIN_OPTIONS                          = 2
-      MAX_OPTIONS                          = 4
-      QUESTION_UNIQUENESS_MESSAGE          =
+      MIN_QUESTIONS               = 1
+      MAX_QUESTIONS               = 4
+      MIN_OPTIONS                 = 2
+      MAX_OPTIONS                 = 4
+      QUESTION_UNIQUENESS_MESSAGE =
         "Question texts must be unique across questions, and option labels must be unique within each question."
-      QUESTION_DISMISSED_MESSAGE           =
+      QUESTION_DISMISSED_MESSAGE =
         "User dismissed the question without answering."
       QUESTION_UNSUPPORTED_FAILURE_MESSAGE =
         "The connected client does not support interactive questions. Do NOT call this tool again. Ask the user directly in your text response instead."
-      AUTO_MODE_DENY_MESSAGE               =
+      AUTO_MODE_DENY_MESSAGE =
         "AskUserQuestion is disabled while auto permission mode is active. Make a reasonable decision and continue without asking the user."
 
       DESCRIPTION = <<-TEXT

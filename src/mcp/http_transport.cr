@@ -96,7 +96,7 @@ module Hcode
       end
 
       # Build an `HTTP::Client`, honouring HTTPS_PROXY / HTTP_PROXY / ALL_PROXY
-        # from the environment — mirrors `OpenAiChatProvider#make_client`.
+      # from the environment — mirrors `OpenAiChatProvider#make_client`.
       private def make_client(uri : URI) : HTTP::Client
         proxy = ENV["HTTPS_PROXY"]? || ENV["HTTP_PROXY"]? || ENV["ALL_PROXY"]?
         if (p = proxy) && !p.empty? && !bypass_proxy?(uri)

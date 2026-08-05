@@ -124,7 +124,7 @@ describe Hcode::Plugin::Manager do
     with_tmpdir do |home|
       with_tmpdir do |source|
         manifest = {
-          "name" => "session-start-plugin",
+          "name"         => "session-start-plugin",
           "sessionStart" => {"skill" => "init-skill"},
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
@@ -145,7 +145,7 @@ describe Hcode::Plugin::Manager do
     with_tmpdir do |home|
       with_tmpdir do |source|
         manifest = {
-          "name" => "mcp-plugin",
+          "name"       => "mcp-plugin",
           "mcpServers" => {
             "api" => {"command" => "node", "args" => ["server.js"]},
           },
@@ -168,7 +168,7 @@ describe Hcode::Plugin::Manager do
     with_tmpdir do |home|
       with_tmpdir do |source|
         manifest = {
-          "name" => "hooks-plugin",
+          "name"  => "hooks-plugin",
           "hooks" => [{"event" => "PreToolUse", "command" => "echo check"}],
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
@@ -210,7 +210,7 @@ describe Hcode::Plugin::Manager do
     with_tmpdir do |home|
       with_tmpdir do |source|
         manifest = {
-          "name" => "mcp-toggle",
+          "name"       => "mcp-toggle",
           "mcpServers" => {
             "srv1" => {"command" => "node"},
           },

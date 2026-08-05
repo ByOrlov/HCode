@@ -105,10 +105,10 @@ module Hcode
 
       private def status_marker(status : TodoStatus) : String
         case status
-        when .pending?    then "[pending]"
+        when .pending?     then "[pending]"
         when .in_progress? then "[in_progress]"
-        when .done?       then "[done]"
-        else                   "[pending]"
+        when .done?        then "[done]"
+        else                    "[pending]"
         end
       end
 
@@ -116,9 +116,9 @@ module Hcode
         case s.downcase
         when "in_progress" then TodoStatus::InProgress
         when "done"        then TodoStatus::Done
-        # Backwards compat: accept the old Crystal "completed" value.
-        when "completed"   then TodoStatus::Done
-        else                    TodoStatus::Pending
+          # Backwards compat: accept the old Crystal "completed" value.
+        when "completed" then TodoStatus::Done
+        else                  TodoStatus::Pending
         end
       end
     end

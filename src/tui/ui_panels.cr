@@ -634,7 +634,6 @@ module Hcode
         lines << "#{ANSI.color(@theme.colors.muted, nil)}  [y] once  [s] session  [n] reject  [Esc] reject#{ANSI.reset}"
         lines
       end
-
     end
   end
 end

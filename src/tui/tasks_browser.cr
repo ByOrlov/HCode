@@ -13,11 +13,11 @@ module Hcode
     # routing switches over while visible. Mirrors the TS layout primitives
     # (renderFrame, fitExactly, padToWidth) so the visual output matches.
     class TasksBrowser
-      MIN_WIDTH          = 48
-      MIN_HEIGHT         = 10
-      LIST_COL_MIN       = 28
-      LIST_COL_MAX       = 44
-      LIST_COL_RATIO     = 0.32
+      MIN_WIDTH               =    48
+      MIN_HEIGHT              =    10
+      LIST_COL_MIN            =    28
+      LIST_COL_MAX            =    44
+      LIST_COL_RATIO          =  0.32
       STOP_CONFIRM_TIMEOUT_MS = 5_000
 
       # Filter for the task list. :active = only running tasks, :all = everything.
@@ -27,8 +27,8 @@ module Hcode
 
         def to_s : String
           case self
-          in All     then "all"
-          in Active  then "active"
+          in All    then "all"
+          in Active then "active"
           end
         end
       end

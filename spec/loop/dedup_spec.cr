@@ -65,7 +65,7 @@ describe Hcode::Loop::DedupTracker do
     it "treats the same canonical args as the same call regardless of size" do
       tracker = Hcode::Loop::DedupTracker.new
       small = %({"path":"a.txt","old_string":"x","new_string":"y"})
-      large = small + ("q" * 200_000)  # very different bytes, but same JSON prefix
+      large = small + ("q" * 200_000) # very different bytes, but same JSON prefix
 
       2.times { tracker.check_and_track("Edit", small) }
       # Different args → streak resets
@@ -86,7 +86,7 @@ describe Hcode::Loop::DedupTracker do
 
     it "does not retain the full args payload (hash-only storage)" do
       tracker = Hcode::Loop::DedupTracker.new
-      payload = "x" * 500_000  # 500 KB body
+      payload = "x" * 500_000 # 500 KB body
       args = %({"path":"a.txt","old_string":"#{payload}","new_string":"y"})
 
       tracker.check_and_track("Edit", args)
@@ -96,8 +96,8 @@ describe Hcode::Loop::DedupTracker do
       # only 64-char SHA256 hex digests.
       history = tracker.@call_history["Edit"]
       history.each do |entry|
-        entry.size.should eq(64)             # SHA256 hex digest length
-        entry.should_not contain("x" * 100)  # no payload leak
+        entry.size.should eq(64)            # SHA256 hex digest length
+        entry.should_not contain("x" * 100) # no payload leak
       end
     end
   end

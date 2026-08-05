@@ -11,8 +11,8 @@ module Hcode
       property command : String     # stdio: executable
       property args : Array(String) # stdio: argv
       property env : Hash(String, String)
-      property cwd : String?        # stdio: working directory
-      property url : String?        # http/sse: endpoint
+      property cwd : String?                  # stdio: working directory
+      property url : String?                  # http/sse: endpoint
       property headers : Hash(String, String) # http/sse: extra HTTP headers
       # Indirect secret: bearer token looked up from `ENV[token_env]` at
       # connection time, never committed to config. Mirrors JS
@@ -192,8 +192,6 @@ module Hcode
         cfg.providers = parse_providers_json(h)
         cfg
       end
-
-
 
       private def self.parse_providers_json(h : Hash(String, JSON::Any)) : Array(String)
         if arr = h["providers"]?.try(&.as_a?)

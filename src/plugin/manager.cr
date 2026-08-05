@@ -385,7 +385,7 @@ module Hcode
       end
 
       private def mcp_server_enabled?(record : PluginRecord, name : String,
-                                       config : Mcp::McpServerConfig) : Bool
+                                      config : Mcp::McpServerConfig) : Bool
         caps = record.capabilities
         state = caps.try(&.mcp_servers[name]?)
         return config.enabled? if state.nil?

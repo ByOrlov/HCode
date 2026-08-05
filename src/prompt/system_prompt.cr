@@ -244,7 +244,7 @@ module Hcode
       end
 
       IGNORE_DIRS = {"node_modules", ".git", "dist", "build", "__pycache__",
-                      ".next", "target", "vendor", ".venv", "venv"}
+                     ".next", "target", "vendor", ".venv", "venv"}
     end
   end
 end

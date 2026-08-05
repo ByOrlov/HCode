@@ -867,14 +867,14 @@ module Hcode
       String.build do |io|
         value.each_char do |c|
           case c
-          when '"' then io << "&quot;"
-          when '&' then io << "&amp;"
-          when '<' then io << "&lt;"
-          when '>' then io << "&gt;"
+          when '"'  then io << "&quot;"
+          when '&'  then io << "&amp;"
+          when '<'  then io << "&lt;"
+          when '>'  then io << "&gt;"
           when '\n' then io << "&#10;"
           when '\r' then io << "&#13;"
           when '\t' then io << "&#9;"
-          else io << c
+          else           io << c
           end
         end
       end

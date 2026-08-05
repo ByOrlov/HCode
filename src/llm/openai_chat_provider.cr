@@ -316,8 +316,8 @@ module Hcode
 
       # Assemble the wire request, folding in the per-session / per-step runtime
       # config: prompt-cache key (session affinity), the completion budget clamp
-        # (as `max_completion_tokens` for the Moonshot transport, the legacy
-        # `max_tokens` alias for plain OpenAI-compatible backends), and the
+      # (as `max_completion_tokens` for the Moonshot transport, the legacy
+      # `max_tokens` alias for plain OpenAI-compatible backends), and the
       # reasoning-effort object for backends that speak it. Extracted from
       # `chat` so the request shape is unit-testable without a network call.
       def build_request(messages : Array(Message), tools : Array(ToolDefinition)?) : ChatRequest
@@ -409,7 +409,7 @@ module Hcode
       # cache the supported effort levels. Only meaningful for the Moonshot wire
       # (OpenAI-style `reasoning_effort` needs no model lookup). Failures are
       # swallowed: a missing or unparseable response leaves `valid_efforts`
-        # nil, which makes `build_moonshot_thinking` omit the `effort` subfield —
+      # nil, which makes `build_moonshot_thinking` omit the `effort` subfield —
       # always a valid request.
       private def refresh_model_metadata : Nil
         return if @meta_fetched

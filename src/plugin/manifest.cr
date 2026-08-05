@@ -49,13 +49,13 @@ module Hcode
         if name.empty?
           diagnostics << PluginDiagnostic.new(DiagnosticSeverity::Error, "\"name\" is required")
           return ParsedManifestResult.new(manifest_kind: manifest_kind, manifest_path: manifest_path,
-                                          shadowed_manifest_path: shadowed, diagnostics: diagnostics)
+            shadowed_manifest_path: shadowed, diagnostics: diagnostics)
         end
         unless name.matches?(PLUGIN_NAME_REGEX)
           diagnostics << PluginDiagnostic.new(DiagnosticSeverity::Error,
             "\"name\" must match #{PLUGIN_NAME_REGEX} (got \"#{name}\")")
           return ParsedManifestResult.new(manifest_kind: manifest_kind, manifest_path: manifest_path,
-                                          shadowed_manifest_path: shadowed, diagnostics: diagnostics)
+            shadowed_manifest_path: shadowed, diagnostics: diagnostics)
         end
 
         skills = resolve_skills_field(plugin_root, h["skills"]?, diagnostics)
@@ -181,7 +181,7 @@ module Hcode
       end
 
       private def self.read_mcp_servers(plugin_root : String, raw : JSON::Any?,
-                                       diagnostics : Array(PluginDiagnostic)) : Hash(String, Mcp::McpServerConfig)
+                                        diagnostics : Array(PluginDiagnostic)) : Hash(String, Mcp::McpServerConfig)
         result = {} of String => Mcp::McpServerConfig
         return result if raw.nil?
 
@@ -213,14 +213,14 @@ module Hcode
       end
 
       private def self.normalize_plugin_mcp_server(plugin_root : String, root_real : String,
-                                                    name : String, cfg : Mcp::McpServerConfig,
-                                                    diagnostics : Array(PluginDiagnostic)) : Mcp::McpServerConfig?
+                                                   name : String, cfg : Mcp::McpServerConfig,
+                                                   diagnostics : Array(PluginDiagnostic)) : Mcp::McpServerConfig?
         return cfg if cfg.remote?
 
         command = cfg.command
         if command.starts_with?("./")
           resolved = resolve_plugin_path(plugin_root, root_real, "mcpServers.#{name}.command",
-                                         command, diagnostics)
+            command, diagnostics)
           return nil unless resolved
           cfg.command = resolved
         elsif command.includes?('/') || Path.new(command).absolute?
@@ -232,7 +232,7 @@ module Hcode
         if cwd = cfg.cwd
           if cwd.starts_with?("./")
             resolved = resolve_plugin_path(plugin_root, root_real, "mcpServers.#{name}.cwd",
-                                           cwd, diagnostics)
+              cwd, diagnostics)
             return nil unless resolved
             cfg.cwd = resolved
           end
@@ -353,7 +353,7 @@ module Hcode
       end
 
       private def self.record_unsupported_fields(h : Hash(String, JSON::Any),
-                                                  diagnostics : Array(PluginDiagnostic)) : Nil
+                                                 diagnostics : Array(PluginDiagnostic)) : Nil
         UNSUPPORTED_RUNTIME_FIELDS.each do |field|
           next unless h.has_key?(field)
           diagnostics << PluginDiagnostic.new(DiagnosticSeverity::Info,

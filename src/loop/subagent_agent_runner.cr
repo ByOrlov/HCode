@@ -252,12 +252,12 @@ module Hcode
       # the model sees the background result as a synthetic user-role message
       # on its next turn — mirrors the JS task-completion delivery path.
       private def inject_completion_notification(entry : SubagentEntry, task_id : String,
-                                                  summary : String?, type : String?) : Nil
+                                                 summary : String?, type : String?) : Nil
         status_str = case type
-                     when nil then "completed"
+                     when nil      then "completed"
                      when "killed" then "killed"
                      when "failed" then "failed"
-                     else type.to_s
+                     else               type.to_s
                      end
         body = summary || ""
 

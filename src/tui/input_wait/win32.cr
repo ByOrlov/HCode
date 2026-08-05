@@ -12,11 +12,11 @@ module Hcode
     class Win32InputWait < InputWait
       private lib LibKernel32
         STD_INPUT_HANDLE = 0xFFFFFFF6_u32 # (DWORD)-10
-        WAIT_FAILED       = 0xFFFFFFFF_u32
-        WAIT_TIMEOUT      = 0x00000102_u32
+        WAIT_FAILED      = 0xFFFFFFFF_u32
+        WAIT_TIMEOUT     = 0x00000102_u32
 
         alias HANDLE = Void*
-        alias DWORD  = UInt32
+        alias DWORD = UInt32
 
         fun GetStdHandle(n_std_handle : DWORD) : HANDLE
         fun WaitForSingleObject(handle : HANDLE, milliseconds : DWORD) : DWORD

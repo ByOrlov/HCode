@@ -4,7 +4,7 @@ module Hcode
   module Tools
     class Grep < Tool
       DEFAULT_TIMEOUT_S  = 20
-      SIGTERM_GRACE_S    = 5
+      SIGTERM_GRACE_S    =  5
       MAX_OUTPUT_BYTES   = 10 * 1024 * 1024
       DEFAULT_HEAD_LIMIT = 250
       RG_MAX_COLUMNS     = 500
@@ -123,11 +123,10 @@ module Hcode
         filtered_sensitive = [] of String
         kept = filter_sensitive(raw_lines, mode, filtered_sensitive)
 
-        ordered = (mode == "files_with_matches" && !run_result.timed_out) \
-          ? sort_by_mtime(kept) : kept
+        ordered = (mode == "files_with_matches" && !run_result.timed_out) ? sort_by_mtime(kept) : kept
 
         offset_val = (input["offset"]?.try(&.as_i?) || 0).to_i32
-        head_limit  = (input["head_limit"]?.try(&.as_i?) || DEFAULT_HEAD_LIMIT).to_i32
+        head_limit = (input["head_limit"]?.try(&.as_i?) || DEFAULT_HEAD_LIMIT).to_i32
         after_offset = offset_val > 0 ? ordered[offset_val..] || [] of ParsedLine : ordered
         limit_active = head_limit > 0
         limited = limit_active ? slice_at(after_offset, head_limit) : after_offset

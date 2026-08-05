@@ -23,7 +23,7 @@ module Hcode
       property refresh_token : String?
       @[JSON::Field(emit_null: false)]
       property token_type : String?
-      property expires_at : Int64?    # unix seconds
+      property expires_at : Int64? # unix seconds
       @[JSON::Field(emit_null: false)]
       property scope : String?
 
@@ -215,7 +215,7 @@ module Hcode
           raise OAuthError.new("No client_id available (DCR failed or not supported)")
         end
 
-        verifier  = generate_code_verifier
+        verifier = generate_code_verifier
         challenge = pkce_challenge(verifier)
 
         auth_params = URI::Params.new
@@ -312,12 +312,12 @@ module Hcode
       # ------------------------------------------------------------------
 
       private def self.register_client(registration_endpoint : String,
-                                      redirect_uri : String) : {String, String?}
+                                       redirect_uri : String) : {String, String?}
         body = {
-          "redirect_uris" => [redirect_uri] of String,
+          "redirect_uris"              => [redirect_uri] of String,
           "token_endpoint_auth_method" => "none",
-          "grant_types" => ["authorization_code"] of String,
-          "response_types" => ["code"] of String,
+          "grant_types"                => ["authorization_code"] of String,
+          "response_types"             => ["code"] of String,
         }.to_json
 
         uri = URI.parse(registration_endpoint)

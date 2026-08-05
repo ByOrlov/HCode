@@ -1,6 +1,5 @@
 module Hcode
   module TUI
-
     class App
       include SetupController
       include CommandController

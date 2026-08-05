@@ -355,7 +355,7 @@ module Hcode::Tools::PlanServiceSpecHelper
     end
 
     def request(plan : String, path : String?,
-               options : Array(Hcode::Tools::PlanOption)?) : Hcode::Tools::PlanReviewResult?
+                options : Array(Hcode::Tools::PlanOption)?) : Hcode::Tools::PlanReviewResult?
       @result
     end
   end

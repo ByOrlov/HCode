@@ -27,7 +27,7 @@ end
 
 # rows=10, active=1 → chunk = rows - active = 9 new log lines per frame.
 LR_ROWS = 10
-CHUNK = 9
+CHUNK   =  9
 
 describe "Chunked log rendering (overflow)" do
   it "splits a large log block across frames of ≤ chunk" do

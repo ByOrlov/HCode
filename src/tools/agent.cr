@@ -10,20 +10,20 @@ module Hcode
     #
     # См. детальный план портирования в `md-tools/agent.md`.
     class Agent < Tool
-      DEFAULT_PROFILE_NAME           = "coder"
-      RESUMED_LABEL                  = "subagent"
-      BACKGROUND_AGENT_UNAVAILABLE   =
+      DEFAULT_PROFILE_NAME         = "coder"
+      RESUMED_LABEL                = "subagent"
+      BACKGROUND_AGENT_UNAVAILABLE =
         "Background agent execution is not available for this agent because TaskList, TaskOutput, and TaskStop are not enabled."
-      RESUME_WITH_TYPE_UNAVAILABLE   =
+      RESUME_WITH_TYPE_UNAVAILABLE =
         "Cannot set subagent_type when resuming an existing agent. Resume by agent id only."
       USER_INTERRUPTED_SUBAGENT_MESSAGE =
         "The subagent was stopped before it finished by user."
-      SUBAGENT_STOPPED_MESSAGE       =
+      SUBAGENT_STOPPED_MESSAGE =
         "The subagent was stopped before it finished."
-      USER_CANCELLATION_MESSAGE      = "Aborted by the user"
-      DEFAULT_SUBAGENT_TIMEOUT_MS    = 7_200_000
-      TASK_ID_PREFIX                 = "agent"
-      NO_RUNNER_ERROR                =
+      USER_CANCELLATION_MESSAGE   = "Aborted by the user"
+      DEFAULT_SUBAGENT_TIMEOUT_MS = 7_200_000
+      TASK_ID_PREFIX              = "agent"
+      NO_RUNNER_ERROR             =
         "Agent is not available: no subagent runtime is registered in this build."
 
       DESCRIPTION_BASE = <<-TEXT
@@ -323,24 +323,24 @@ module Hcode
 
       def format_background_agent_result(outcome : AgentRunOutcome) : String
         %(task_id: #{outcome.task_id}\n) \
-          %(status: running\n) \
-          %(agent_id: #{outcome.agent_id}\n) \
-          %(actual_subagent_type: #{outcome.profile_name}\n) \
-          %(automatic_notification: true\n) \
-          %(\n) \
-          %(description: #{outcome.description}\n) \
-          %(\n) \
-          %(next_step: The completion arrives automatically in a later turn — do NOT wait, poll, or call TaskOutput on it; continue with other work or hand back to the user. (If you have nothing to do until it finishes, run such tasks in the foreground next time.)\n) \
-          %(resume_hint: To continue or recover this same subagent later, call Agent(resume="#{outcome.agent_id}", prompt="..."). The parameter is agent_id ("#{outcome.agent_id}"), NOT task_id ("#{outcome.task_id}") or source_id from a later <notification>. Recovery cases: a later <notification type="task.lost" | "task.failed" | "task.killed"> for this subagent — its conversation history is preserved across session restarts and resume will pick it up.)
+        %(status: running\n) \
+        %(agent_id: #{outcome.agent_id}\n) \
+        %(actual_subagent_type: #{outcome.profile_name}\n) \
+        %(automatic_notification: true\n) \
+        %(\n) \
+        %(description: #{outcome.description}\n) \
+        %(\n) \
+        %(next_step: The completion arrives automatically in a later turn — do NOT wait, poll, or call TaskOutput on it; continue with other work or hand back to the user. (If you have nothing to do until it finishes, run such tasks in the foreground next time.)\n) \
+        %(resume_hint: To continue or recover this same subagent later, call Agent(resume="#{outcome.agent_id}", prompt="..."). The parameter is agent_id ("#{outcome.agent_id}"), NOT task_id ("#{outcome.task_id}") or source_id from a later <notification>. Recovery cases: a later <notification type="task.lost" | "task.failed" | "task.killed"> for this subagent — its conversation history is preserved across session restarts and resume will pick it up.)
       end
 
       def format_foreground_agent_success(outcome : AgentRunOutcome) : String
         summary = outcome.summary || ""
         %(agent_id: #{outcome.agent_id}\n) \
-          %(actual_subagent_type: #{outcome.profile_name}\n) \
-          %(status: completed\n) \
-          %(\n) \
-          %(#{summary})
+        %(actual_subagent_type: #{outcome.profile_name}\n) \
+        %(status: completed\n) \
+        %(\n) \
+        %(#{summary})
       end
 
       def format_foreground_agent_failure(outcome : AgentRunOutcome) : String

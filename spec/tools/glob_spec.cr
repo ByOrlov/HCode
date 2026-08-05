@@ -253,4 +253,3 @@ describe Hcode::Tools::Glob do
     end
   end
 end
-

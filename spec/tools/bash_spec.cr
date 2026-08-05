@@ -59,9 +59,9 @@ describe Hcode::Tools::Bash do
       bash = Hcode::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv NO_COLOR; printenv TERM; printenv GIT_TERMINAL_PROMPT"})))
       lines = result.content.strip.split('\n')
-      lines.should contain("1")        # NO_COLOR=1
-      lines.should contain("dumb")     # TERM=dumb
-      lines.should contain("0")        # GIT_TERMINAL_PROMPT=0 (hardened default)
+      lines.should contain("1")    # NO_COLOR=1
+      lines.should contain("dumb") # TERM=dumb
+      lines.should contain("0")    # GIT_TERMINAL_PROMPT=0 (hardened default)
     ensure
       ENV["GIT_TERMINAL_PROMPT"] = prev if prev
     end

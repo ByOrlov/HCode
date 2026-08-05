@@ -69,7 +69,7 @@ describe Hcode::Plugin::ManifestParser do
   it "parses mcpServers with stdio transport" do
     with_tmpdir do |dir|
       manifest = {
-        "name" => "mcp-plugin",
+        "name"       => "mcp-plugin",
         "mcpServers" => {
           "server1" => {
             "command" => "node",
@@ -91,7 +91,7 @@ describe Hcode::Plugin::ManifestParser do
   it "parses hooks" do
     with_tmpdir do |dir|
       manifest = {
-        "name" => "hooks-plugin",
+        "name"  => "hooks-plugin",
         "hooks" => [
           {"event" => "PreToolUse", "matcher" => "Bash", "command" => "echo check"},
         ],

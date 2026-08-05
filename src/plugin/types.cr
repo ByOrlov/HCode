@@ -182,7 +182,7 @@ module Hcode
     end
 
     struct PluginGithubRef
-      property kind : String  # "branch" | "tag" | "sha"
+      property kind : String # "branch" | "tag" | "sha"
       property value : String
 
       def initialize(@kind : String, @value : String)

@@ -154,13 +154,13 @@ module Hcode
     # результат менее чистый, но сохраняет основной контракт.
     class LocalFetcher < UrlFetcher
       private IPV4_PRIVATE_RANGES = [
-        {127, 0, 0, 0, 8},   # 127.0.0.0/8 loopback
-        {10, 0, 0, 0, 8},    # 10.0.0.0/8
-        {192, 168, 0, 0, 16},# 192.168.0.0/16
-        {172, 16, 0, 0, 12}, # 172.16.0.0/12
-        {169, 254, 0, 0, 16},# 169.254.0.0/16 link-local
-        {0, 0, 0, 0, 8},     # 0.0.0.0/8
-        {100, 64, 0, 0, 10}, # 100.64.0.0/10 CGNAT
+        {127, 0, 0, 0, 8},    # 127.0.0.0/8 loopback
+        {10, 0, 0, 0, 8},     # 10.0.0.0/8
+        {192, 168, 0, 0, 16}, # 192.168.0.0/16
+        {172, 16, 0, 0, 12},  # 172.16.0.0/12
+        {169, 254, 0, 0, 16}, # 169.254.0.0/16 link-local
+        {0, 0, 0, 0, 8},      # 0.0.0.0/8
+        {100, 64, 0, 0, 10},  # 100.64.0.0/10 CGNAT
       ]
 
       @transport : HttpTransport
@@ -262,11 +262,11 @@ module Hcode
       private def ipv4_private?(o0 : Int32, o1 : Int32, o2 : Int32, o3 : Int32) : Bool
         IPV4_PRIVATE_RANGES.each do |base0, base1, base2, base3, prefix|
           in_range = case prefix
-                     when 8  then o0 == base0
+                     when  8 then o0 == base0
                      when 10 then o0 == base0 && (o1 & 0xC0) == (base1 & 0xC0)
                      when 12 then o0 == base0 && o1 >= base1 && o1 < base1 + 16
                      when 16 then o0 == base0 && o1 == base1
-                     else          false
+                     else         false
                      end
           return true if in_range
         end

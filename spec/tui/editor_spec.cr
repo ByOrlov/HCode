@@ -108,7 +108,7 @@ describe Hcode::TUI::Editor do
     editor.insert_paste_marker("multi\nline\nblock", 3)
     editor.handle_input(Hcode::TUI::KeyEvent.char('B'))
     # Move cursor to the start of the marker (after "A").
-    editor.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Home)) # col 0
+    editor.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Home))  # col 0
     editor.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Right)) # past "A"
 
     # Forward delete removes the entire marker.

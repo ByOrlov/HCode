@@ -9,7 +9,7 @@ module Hcode
     # ↑↓ navigate, Enter select, Esc cancel. Selecting below the cursor marks
     # the "in undo range" — those turns are the ones that will be dropped.
     class UndoDialog
-      MAX_VISIBLE          = 5
+      MAX_VISIBLE               = 5
       PREFERRED_SELECTED_OFFSET = 2
 
       struct Choice

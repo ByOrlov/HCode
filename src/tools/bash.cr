@@ -1,19 +1,19 @@
 module Hcode
   module Tools
     class Bash < Tool
-      DEFAULT_TIMEOUT_S = 60
+      DEFAULT_TIMEOUT_S =  60
       MAX_TIMEOUT_S     = 300
 
       # Background-specific timeouts.
-      DEFAULT_BG_TIMEOUT_S = 600
+      DEFAULT_BG_TIMEOUT_S =    600
       MAX_BG_TIMEOUT_S     = 86_400
 
       # In-tool output cap. The context budget (Context::Budget) separately
       # truncates at 50k chars for the model context; this cap mirrors the JS
       # BashTool's 10 MB foreground buffer so a runaway command (e.g. `yes`,
       # `cat /dev/urandom`) cannot exhaust memory before the budget runs.
-      MAX_OUTPUT_BYTES            = 10 * 1024 * 1024
-      OUTPUT_TRUNCATION_SENTINEL  = "\n[...truncated]\nOutput is truncated to fit in the message."
+      MAX_OUTPUT_BYTES           = 10 * 1024 * 1024
+      OUTPUT_TRUNCATION_SENTINEL = "\n[...truncated]\nOutput is truncated to fit in the message."
 
       @work_dir : String
       @task_service : TaskService?
@@ -508,7 +508,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
       # ------------------------------------------------------------------
 
       private def background_started_result(task_id : String, output_path : String,
-                                           command : String) : String
+                                            command : String) : String
         lines = [] of String
         lines << "Background task started."
         lines << "task_id: #{task_id}"

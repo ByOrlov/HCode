@@ -24,6 +24,7 @@ module Hcode
       def busy? : Bool
         @busy
       end
+
       @max_goal_turns : Int32 = 100
 
       # The autonomous stand-in for the user typing "continue" — drives each
@@ -217,7 +218,7 @@ module Hcode
 
       # The continuation loop: runs while the goal is still `active`.
       private def drive_goal_loop(system_prompt : String?, service : Tools::GoalService,
-                                 on_event : Event ->) : TurnResult
+                                  on_event : Event ->) : TurnResult
         result = uninitialized TurnResult
         continuation_count = 0
 

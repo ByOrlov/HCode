@@ -9,9 +9,9 @@ module Hcode
     #
     # См. детальный план портирования в `md-tools/goal.md`.
     module Goal
-      MAX_OBJECTIVE_LENGTH            = 4000
-      MAX_COMPLETION_CRITERION_LENGTH = 4000
-      MIN_REASONABLE_TIME_BUDGET_MS   = 1_000
+      MAX_OBJECTIVE_LENGTH            =       4000
+      MAX_COMPLETION_CRITERION_LENGTH =       4000
+      MIN_REASONABLE_TIME_BUDGET_MS   =      1_000
       MAX_REASONABLE_TIME_BUDGET_MS   = 86_400_000
 
       BUDGET_UNITS = ["turns", "tokens", "milliseconds", "seconds", "minutes", "hours"]
@@ -42,9 +42,9 @@ module Hcode
 
       def to_wire : String
         case self
-        in Active  then "active"
-        in Paused  then "paused"
-        in Blocked then "blocked"
+        in Active   then "active"
+        in Paused   then "paused"
+        in Blocked  then "blocked"
         in Complete then "complete"
         end
       end

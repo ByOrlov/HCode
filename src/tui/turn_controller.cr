@@ -251,7 +251,6 @@ module Hcode
       rescue
         ""
       end
-
     end
   end
 end

@@ -9,10 +9,10 @@ module Hcode
     # + sensitive files). Ported (in spirit) from
     # `packages/agent-core/src/tools/support/run-rg.ts`.
     module RunRg
-      DEFAULT_TIMEOUT_S    =   20
-      SIGTERM_GRACE_S      =    5
-      MAX_OUTPUT_BYTES     =   10 * 1024 * 1024 # 10 MiB
-      MAX_STDERR_BYTES     =    1 * 1024 * 1024 # 1 MiB
+      DEFAULT_TIMEOUT_S = 20
+      SIGTERM_GRACE_S   =  5
+      MAX_OUTPUT_BYTES  = 10 * 1024 * 1024 # 10 MiB
+      MAX_STDERR_BYTES  = 1 * 1024 * 1024  # 1 MiB
 
       # VCS metadata directories excluded from search. Mirrors
       # `VCS_DIRECTORIES_TO_EXCLUDE` in `support/run-rg.ts`.

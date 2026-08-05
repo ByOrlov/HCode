@@ -524,9 +524,9 @@ module Hcode
         it "filters out servers whose provider does not match" do
           m = Manager.new
           zai = McpServerConfig.new("zai-search", command: "no-such-cmd",
-                                    providers: ["zai", "zai-coding-plan"])
+            providers: ["zai", "zai-coding-plan"])
           m.connect_all([zai], Tools::Registry.new,
-                        active_provider: "moonshot", blocking: true)
+            active_provider: "moonshot", blocking: true)
           m.any_connected?.should be_false
           m.status_text.should eq("No MCP servers configured.")
         end
@@ -535,7 +535,7 @@ module Hcode
           m = Manager.new
           global = McpServerConfig.new("global", command: "no-such-cmd")
           m.connect_all([global], Tools::Registry.new,
-                        active_provider: "moonshot", blocking: true)
+            active_provider: "moonshot", blocking: true)
           # It attempts connection (fails on missing binary) but is not filtered.
           m.status_text.should contain("global")
           m.status_text.should_not contain("No MCP servers configured.")
@@ -611,7 +611,7 @@ module Hcode
           Dir.mkdir_p(home)
           begin
             tokens = OAuthTokens.new("access-123", "refresh-456", "Bearer",
-                                     Time.utc.to_unix + 3600, "read")
+              Time.utc.to_unix + 3600, "read")
             OAuth.save_tokens("srv", "https://mcp.example.com", home, tokens)
             loaded = OAuth.load_tokens("srv", "https://mcp.example.com", home)
             loaded.should_not be_nil
@@ -802,9 +802,9 @@ module Hcode
         it "removes a tool by name via unregister" do
           reg = Tools::Registry.new
           tool = McpProxyTool.new("mcp__srv__echo", "srv", "echo", "d",
-                                  JSON.parse(%({"type":"object"})),
-                                  Client.new("srv", SmartLoopback.new,
-                                             JsonRpcClient.new(SmartLoopback.new)))
+            JSON.parse(%({"type":"object"})),
+            Client.new("srv", SmartLoopback.new,
+              JsonRpcClient.new(SmartLoopback.new)))
           reg.register(tool)
           reg.get("mcp__srv__echo").should_not be_nil
           reg.unregister("mcp__srv__echo")

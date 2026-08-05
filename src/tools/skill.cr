@@ -245,7 +245,7 @@ module Hcode
       def parse_argument_names(arguments : String? | Array(String)?) : Array(String)
         return [] of String if arguments.nil?
         raw = case arguments
-              when String       then arguments.split(/\s+/)
+              when String        then arguments.split(/\s+/)
               when Array(String) then arguments
               else
                 [] of String
@@ -498,8 +498,8 @@ module Hcode
     # (mirrors TS `skillRoots.ts` + `fileSkillDiscovery.ts`) and parses each
     # `SKILL.md` into a `SkillDefinition`.
     module SkillDiscovery
-      USER_BRAND_DIRS   = ["skills"]
-      USER_GENERIC_DIRS = [".agents/skills"]
+      USER_BRAND_DIRS      = ["skills"]
+      USER_GENERIC_DIRS    = [".agents/skills"]
       PROJECT_BRAND_DIRS   = [".hcode/skills"]
       PROJECT_GENERIC_DIRS = [".agents/skills"]
 
@@ -671,7 +671,7 @@ module Hcode
       end
 
       KEY_ALIASES = {
-        "when-to-use"            => "when_to_use",
+        "when-to-use"              => "when_to_use",
         "disable-model-invocation" => "disable_model_invocation",
       }
 

@@ -29,10 +29,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       outcome = runner.launch(
         {
           prompt:            "do the thing",
-          description:        "test task",
-          subagent_type:      "coder",
-          resume_agent_id:    nil,
-          run_in_background:  false,
+          description:       "test task",
+          subagent_type:     "coder",
+          resume_agent_id:   nil,
+          run_in_background: false,
         },
         nil,
       )
@@ -77,10 +77,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       outcome = runner.launch(
         {
           prompt:            "do the thing",
-          description:        "test task",
-          subagent_type:      "coder",
-          resume_agent_id:    nil,
-          run_in_background:  false,
+          description:       "test task",
+          subagent_type:     "coder",
+          resume_agent_id:   nil,
+          run_in_background: false,
         },
         nil,
       )
@@ -112,10 +112,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       outcome = runner.launch(
         {
           prompt:            "continue",
-          description:        "resume",
-          subagent_type:      nil,
-          resume_agent_id:    "agent-999",
-          run_in_background:  false,
+          description:       "resume",
+          subagent_type:     nil,
+          resume_agent_id:   "agent-999",
+          run_in_background: false,
         },
         nil,
       )
@@ -157,10 +157,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       first = runner.launch(
         {
           prompt:            "turn one",
-          description:        "spawn",
-          subagent_type:      "coder",
-          resume_agent_id:    nil,
-          run_in_background:  false,
+          description:       "spawn",
+          subagent_type:     "coder",
+          resume_agent_id:   nil,
+          run_in_background: false,
         },
         nil,
       )
@@ -171,10 +171,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       second = runner.launch(
         {
           prompt:            "turn two",
-          description:        "resume",
-          subagent_type:      nil,
-          resume_agent_id:    agent_id,
-          run_in_background:  false,
+          description:       "resume",
+          subagent_type:     nil,
+          resume_agent_id:   agent_id,
+          run_in_background: false,
         },
         nil,
       )
@@ -212,10 +212,10 @@ describe Hcode::Loop::SubagentAgentRunner do
       outcome = runner.launch(
         {
           prompt:            "bg task",
-          description:        "background",
-          subagent_type:      "coder",
-          resume_agent_id:    nil,
-          run_in_background:  true,
+          description:       "background",
+          subagent_type:     "coder",
+          resume_agent_id:   nil,
+          run_in_background: true,
         },
         nil,
       )

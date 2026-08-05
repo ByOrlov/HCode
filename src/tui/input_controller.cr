@@ -571,7 +571,7 @@ module Hcode
       end
 
       private def enable_swarm_mode(service : Hcode::Tools::SwarmModeService,
-                                   trigger : Hcode::Tools::SwarmTrigger) : Nil
+                                    trigger : Hcode::Tools::SwarmTrigger) : Nil
         if service.active?
           @messages << Message.new("system", Hcode.t("ui.swarm_already_on"))
           return
@@ -978,9 +978,9 @@ module Hcode
           @sudo_list.hide
           @dirty = true
           mode = case mode_str
-                 when "off"     then Tools::Bash::SudoMode::Off
-                 when "always"  then Tools::Bash::SudoMode::Always
-                 else                Tools::Bash::SudoMode::Request
+                 when "off"    then Tools::Bash::SudoMode::Off
+                 when "always" then Tools::Bash::SudoMode::Always
+                 else               Tools::Bash::SudoMode::Request
                  end
           Tools::Bash.sudo_mode = mode
           @messages << Message.new("system", "Sudo mode: #{mode_str}")
@@ -1140,7 +1140,6 @@ module Hcode
           @dirty = true
         end
       end
-
     end
   end
 end

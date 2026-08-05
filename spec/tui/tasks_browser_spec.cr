@@ -115,7 +115,7 @@ describe Hcode::TUI::TasksBrowser do
     on_fetch = Proc(Array(Hcode::Tools::AgentTaskInfo)).new { tasks }
     on_select = Proc(String, Nil).new { |_| }
     browser.show(on_fetch, on_select)
-    lines = browser.render(80)  # wide enough that width is OK; rows triggers fallback
+    lines = browser.render(80) # wide enough that width is OK; rows triggers fallback
     # Strip ANSI to test the visible message.
     plain = lines.join("\n").gsub(/\e\[[0-9;]*m/, "")
     plain.should contain("Terminal too small")

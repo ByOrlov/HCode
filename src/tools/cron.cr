@@ -15,7 +15,7 @@ module Hcode
       MAX_PROMPT_BYTES          = 8 * 1024
       ONE_SHOT_MAX_FUTURE_MS    = 350_i64 * 24 * 60 * 60 * 1000
       MS_PER_DAY                = 86_400_000_i64
-      PROMPT_PREVIEW_BYTES      = 200
+      PROMPT_PREVIEW_BYTES      =            200
       STALE_THRESHOLD_MS        = 7_i64 * MS_PER_DAY
 
       # Принимает 8-hex или 26-char Crockford Base32 ULID (case-insensitive).
@@ -263,10 +263,10 @@ module Hcode
       @seeded = Set(String).new
       @delivered = [] of String
 
-      DEFAULT_POLL_INTERVAL_MS = 1_000
-      MAX_COALESCE_ITERATIONS   = 10_000
-      JITTER_CAP_MS             = 15 * 60 * 1000
-      ONE_SHOT_BACKWARD_MS      = 90_000
+      DEFAULT_POLL_INTERVAL_MS =  1_000
+      MAX_COALESCE_ITERATIONS  = 10_000
+      JITTER_CAP_MS            = 15 * 60 * 1000
+      ONE_SHOT_BACKWARD_MS     = 90_000
 
       def initialize(@store : Session::Store? = nil,
                      @agent : Loop::Agent? = nil,

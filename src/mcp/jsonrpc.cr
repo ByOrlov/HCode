@@ -43,11 +43,11 @@ module Hcode
         write(build_request(id, method, params))
 
         result = select
-          when r = ch.receive
-            r
-          when timeout(timeout)
-            @mutex.synchronize { @pending.delete(id) }
-            raise RpcError.new(-1, method, "MCP request '#{method}' timed out after #{timeout.total_seconds}s")
+        when r = ch.receive
+          r
+        when timeout(timeout)
+          @mutex.synchronize { @pending.delete(id) }
+          raise RpcError.new(-1, method, "MCP request '#{method}' timed out after #{timeout.total_seconds}s")
         end
 
         if err = result["error"]?

@@ -11,8 +11,8 @@ module Hcode
     # Tokens are stored as `LLM::OAuthCredentials` (JSON) at the standard
     # kimi-code credentials path so they are interchangeable with the TS CLI.
     module OAuth
-      DEFAULT_OAUTH_HOST = "https://auth.kimi.com"
-      DEFAULT_CLIENT_ID  = "17e5f671-d194-4dfb-9706-5516cb48c098"
+      DEFAULT_OAUTH_HOST       = "https://auth.kimi.com"
+      DEFAULT_CLIENT_ID        = "17e5f671-d194-4dfb-9706-5516cb48c098"
       DEFAULT_CREDENTIALS_PATH = File.join(ENV["HOME"]? || "/tmp", ".kimi-code", "credentials", "kimi-code.json")
 
       # Result of the device-authorization request.

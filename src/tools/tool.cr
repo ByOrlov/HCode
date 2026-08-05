@@ -85,8 +85,8 @@ module Hcode
     # JSON, which is brittle when argument key names drift between the schema
     # and the renderer (see `App#render_edit_diff`).
     struct ToolDisplay
-      property kind : String        # "file_io" | "diff" | ...
-      property operation : String?  # "read" | "write" | "edit"
+      property kind : String       # "file_io" | "diff" | ...
+      property operation : String? # "read" | "write" | "edit"
       property path : String?
       property before : String?
       property after : String?

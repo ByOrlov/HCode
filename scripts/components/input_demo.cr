@@ -97,8 +97,13 @@ class Hcode::TUI::App
     @editor.set_cursor(row, col)
   end
 
-  def demo_cursor_visual_row; @editor_cursor_visual_row; end
-  def demo_cursor_visual_col; @editor_cursor_visual_col; end
+  def demo_cursor_visual_row
+    @editor_cursor_visual_row
+  end
+
+  def demo_cursor_visual_col
+    @editor_cursor_visual_col
+  end
 end
 
 # Direct cursor setter used by the demo (Editor keeps cursor private).

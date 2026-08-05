@@ -29,14 +29,14 @@ module Hcode
     # metadata to render a picker / filter without opening the wire log.
     struct SessionEntry
       property id : String
-      property path : String          # session directory absolute path
-      property wire_path : String     # <path>/wire.jsonl
+      property path : String      # session directory absolute path
+      property wire_path : String # <path>/wire.jsonl
       property title : String = ""
       property cwd : String = ""
       property? archived : Bool = false
       property created_at : Time = Time.utc
       property updated_at : Time = Time.utc
-      property preview : String = ""  # first user prompt (truncated)
+      property preview : String = "" # first user prompt (truncated)
       property workspace_id : String = ""
       property? legacy : Bool = false
       # True when the wire log has no real conversation events (no user
@@ -266,9 +266,9 @@ module Hcode
       # the session selector's line-oriented rendering.
       private def sanitize_preview(text : String) : String
         text.gsub(/\e\[[0-9;?]*[A-Za-z]/, "")
-            .gsub(/\e[\(\)][A-B0-9]/, "")
-            .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
-            .strip
+          .gsub(/\e[\(\)][A-B0-9]/, "")
+          .gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+          .strip
       end
     end
   end

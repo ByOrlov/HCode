@@ -9,7 +9,7 @@ module Hcode
     # Faithful port of apps/kimi-code/src/tui/utils/terminal-notification.ts.
     class TerminalChannel
       @written : Set(String) = Set(String).new
-      @condition : String    # "unfocused" | "always"
+      @condition : String # "unfocused" | "always"
       @output : IO
       @supports_osc9 : Bool
       @inside_tmux : Bool
