@@ -482,8 +482,8 @@ module Hcode
         caps = Media.capabilities
         return ToolResult.error("Model capabilities are not initialized.") if caps.nil?
 
-        svc = fs.not_nil!
-        capabilities = caps.not_nil!
+        svc = fs
+        capabilities = caps
 
         unless svc.exists?(path)
           return ToolResult.error(%("#{path}" does not exist.))
@@ -541,7 +541,7 @@ module Hcode
         if detected.kind.image?
           process = Media.image_processor || PassThroughImageProcessor.new
           if r = region
-            outcome = process.not_nil!.crop(data, mime, r, skip_resize: full_resolution)
+            outcome = process.crop(data, mime, r, skip_resize: full_resolution)
             delivery_kind = full_resolution ? "crop_full" : "crop"
             delivery = Delivery.new(
               kind: delivery_kind,
@@ -556,7 +556,7 @@ module Hcode
             body_bytes = outcome.data
             body_mime = outcome.mime_type
           elsif full_resolution
-            outcome = process.not_nil!.compress(data, mime, byte_budget: Media::IMAGE_BYTE_BUDGET, max_edge: Media::MAX_IMAGE_EDGE_PX)
+            outcome = process.compress(data, mime, byte_budget: Media::IMAGE_BYTE_BUDGET, max_edge: Media::MAX_IMAGE_EDGE_PX)
             delivery = Delivery.new(
               kind: "full",
               width: outcome.width,
@@ -568,7 +568,7 @@ module Hcode
             body_bytes = outcome.data
             body_mime = outcome.mime_type
           else
-            outcome = process.not_nil!.compress(data, mime, byte_budget: Media::IMAGE_BYTE_BUDGET, max_edge: Media::MAX_IMAGE_EDGE_PX)
+            outcome = process.compress(data, mime, byte_budget: Media::IMAGE_BYTE_BUDGET, max_edge: Media::MAX_IMAGE_EDGE_PX)
             delivery_kind = outcome.resized? ? "downsampled" : "untouched"
             delivery = Delivery.new(
               kind: delivery_kind,

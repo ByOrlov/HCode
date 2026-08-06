@@ -222,8 +222,8 @@ describe Hcode::TUI::Markdown do
     it "indents nested items deeper than parent" do
       text = md_render_text(md, "- top\n  - nested")
       lines = text.split('\n').reject(&.empty?)
-      top_line = lines.find { |l| l.includes?("top") }.not_nil!
-      nested_line = lines.find { |l| l.includes?("nested") }.not_nil!
+      top_line = lines.find! { |l| l.includes?("top") }
+      nested_line = lines.find! { |l| l.includes?("nested") }
       nested_indent = nested_line.size - nested_line.lstrip.size
       top_indent = top_line.size - top_line.lstrip.size
       nested_indent.should be > top_indent
@@ -232,8 +232,8 @@ describe Hcode::TUI::Markdown do
     it "handles 3 levels of nesting" do
       text = md_render_text(md, "- L1\n  - L2\n    - L3")
       lines = text.split('\n').reject(&.empty?)
-      l1 = lines.find { |l| l.includes?("L1") }.not_nil!
-      l3 = lines.find { |l| l.includes?("L3") }.not_nil!
+      l1 = lines.find! { |l| l.includes?("L1") }
+      l3 = lines.find! { |l| l.includes?("L3") }
       l3_indent = l3.size - l3.lstrip.size
       l1_indent = l1.size - l1.lstrip.size
       l3_indent.should be > l1_indent
@@ -317,12 +317,12 @@ describe Hcode::TUI::Markdown do
       # and would otherwise mask the bug.
       text = md_render_text(md, "| Status |\n|---|\n| \u26A0 |\n| \u274C |", 40)
       lines = text.split('\n').select(&.includes?('│'))
-      warn_line = lines.find(&.includes?("\u26A0")).not_nil!
-      cross_line = lines.find(&.includes?("\u274C")).not_nil!
+      warn_line = lines.find!(&.includes?("\u26A0"))
+      cross_line = lines.find!(&.includes?("\u274C"))
       # Column width = max("Status"=6, ⚠=1, ❌=2) = 6. Trailing spaces between
       # the glyph and the final │ = (6 - glyph width) + 1 (the " │" join gap).
-      warn_pad = warn_line.match(/⚠( *)│\z/).not_nil![1].size
-      cross_pad = cross_line.match(/❌( *)│\z/).not_nil![1].size
+      warn_pad = (warn_line.match(/⚠( *)│\z/) || raise "warn_pad match failed")[1].size
+      cross_pad = (cross_line.match(/❌( *)│\z/) || raise "cross_pad match failed")[1].size
       warn_pad.should eq(6)  # 6 - 1 (⚠ width) + 1
       cross_pad.should eq(5) # 6 - 2 (❌ width) + 1
     end

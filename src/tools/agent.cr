@@ -252,8 +252,8 @@ module Hcode
       end
 
       private def preprocess(args : AgentInput) : AgentInput
-        resume_present = !args.resume.nil? && !args.resume.not_nil!.empty?
-        type_present = !args.subagent_type.nil? && !args.subagent_type.not_nil!.empty?
+        resume_present = args.resume.try(&.empty?) == false
+        type_present = args.subagent_type.try(&.empty?) == false
 
         # 1. Ни resume, ни subagent_type → default coder.
         unless resume_present || type_present

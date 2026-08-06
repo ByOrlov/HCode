@@ -132,21 +132,27 @@ describe Hcode::TUI::CharWidth do
     it "extracts a CSI SGR sequence" do
       ansi = Hcode::TUI::CharWidth.extract_ansi_code("\e[1;31mtext", 0)
       ansi.should_not be_nil
-      ansi.not_nil!.code.should eq("\e[1;31m")
-      ansi.not_nil!.length.should eq(7)
+      if a = ansi
+        a.code.should eq("\e[1;31m")
+        a.length.should eq(7)
+      end
     end
 
     it "extracts an OSC sequence terminated by ST" do
       ansi = Hcode::TUI::CharWidth.extract_ansi_code("\e]8;;url\e\\x", 0)
       ansi.should_not be_nil
-      ansi.not_nil!.code.should eq("\e]8;;url\e\\")
-      ansi.not_nil!.length.should eq(10)
+      if a = ansi
+        a.code.should eq("\e]8;;url\e\\")
+        a.length.should eq(10)
+      end
     end
 
     it "extracts an OSC sequence terminated by BEL" do
       ansi = Hcode::TUI::CharWidth.extract_ansi_code("\e]0;title\u0007x", 0)
       ansi.should_not be_nil
-      ansi.not_nil!.code.should eq("\e]0;title\u0007")
+      if a = ansi
+        a.code.should eq("\e]0;title\u0007")
+      end
     end
 
     it "returns nil at a non-escape position" do

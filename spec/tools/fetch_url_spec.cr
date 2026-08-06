@@ -243,7 +243,7 @@ describe Hcode::Tools::FetchURL do
       fetcher = Hcode::Tools::LocalFetcher.new(transport)
       result = fetcher.fetch("https://example.com")
       result.content.should contain("hello world")
-      transport.last_uri.not_nil!.to_s.should contain("example.com")
+      (transport.last_uri || raise "last_uri should not be nil").to_s.should contain("example.com")
     end
 
     it "raises HttpFetchError on 404" do

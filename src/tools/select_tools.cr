@@ -121,7 +121,7 @@ module Hcode
         service = ToolSelect.service
         return ToolResult.error("Tool-select service is not initialized.") if service.nil?
 
-        svc = service.not_nil!
+        svc = service
         unless svc.enabled?
           return ToolResult.error("select_tools is not available for the current model.")
         end

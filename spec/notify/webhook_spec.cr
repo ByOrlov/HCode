@@ -77,7 +77,7 @@ describe Hcode::Notify::Webhook do
       ))
       10.times { Fiber.yield }
       # No exception propagated — the IO::Error was swallowed.
-      transport.last_uri.not_nil!.to_s.should contain("example.com")
+      (transport.last_uri || raise "last_uri should not be nil").to_s.should contain("example.com")
     end
 
     it "delivers payload through transport on success" do

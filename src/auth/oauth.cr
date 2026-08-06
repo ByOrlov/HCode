@@ -152,7 +152,7 @@ module Hcode
           result = poll_device_token(auth.device_code, oauth_host, client_id)
           case result.kind
           when PollResultKind::Success
-            creds = result.credentials.not_nil!
+            creds = result.credentials || raise "credentials required for Success"
             creds.save(credentials_path)
             return creds
           when PollResultKind::Pending

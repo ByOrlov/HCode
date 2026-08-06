@@ -222,7 +222,7 @@ module Hcode
             @context.add_tool_result(result.tool_call_id, result.content)
             messages << LLM::Message.tool(result.content, result.tool_call_id)
           when PlannedCallStatus::Skipped, PlannedCallStatus::Stopped
-            content = plan.content.not_nil!
+            content = plan.content || ""
             @context.add_tool_result(tc.id, content)
             messages << LLM::Message.tool(content, tc.id)
           end

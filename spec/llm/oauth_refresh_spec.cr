@@ -22,7 +22,7 @@ describe Hcode::LLM::OAuthCredentials do
       creds.refresh!("https://auth.example.com", "client-id", transport)
       creds.bearer_token.should eq("new-access")
       creds.expires_in.should eq(600)
-      transport.last_uri.not_nil!.to_s.should contain("/api/oauth/token")
+      (transport.last_uri || raise "last_uri should not be nil").to_s.should contain("/api/oauth/token")
       (transport.last_body || "").should contain("refresh_token=rt")
     end
 

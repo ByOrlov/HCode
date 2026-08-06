@@ -8,7 +8,7 @@ private class FakeService < Hcode::Tools::QuestionService
   end
 
   def request(req : Hcode::Tools::QuestionRequest, signal : Hcode::Loop::AbortController?) : Hcode::Tools::QuestionResult?
-    @block.not_nil!.call(req, signal)
+    @block.call(req, signal)
   end
 end
 

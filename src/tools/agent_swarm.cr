@@ -210,7 +210,7 @@ module Hcode
         end
 
         if item_count > 0
-          template = prompt_template.not_nil!
+          template = prompt_template || raise "prompt_template required"
           seen = {} of String => Int32
           items.each_with_index do |item, idx|
             prompt = template.split(PROMPT_TEMPLATE_PLACEHOLDER).join(item)

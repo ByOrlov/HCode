@@ -336,7 +336,7 @@ module Hcode
           end
         end
 
-        status = status.not_nil!
+        status = status || raise "process status should not be nil"
 
         out_pair = stdout_ch.receive
         err_pair = stderr_ch.receive

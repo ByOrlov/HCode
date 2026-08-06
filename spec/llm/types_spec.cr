@@ -31,8 +31,10 @@ describe Hcode::LLM::Message do
       msg = Hcode::LLM::Message.assistant("", [tc])
       msg.role.should eq("assistant")
       msg.tool_calls.should_not be_nil
-      msg.tool_calls.not_nil!.size.should eq(1)
-      msg.tool_calls.not_nil![0].name.should eq("Bash")
+      if tcs = msg.tool_calls
+        tcs.size.should eq(1)
+        tcs[0].name.should eq("Bash")
+      end
     end
 
     it "builds from content parts via assistant_parts" do
@@ -109,7 +111,7 @@ end
 describe Hcode::LLM::StreamChunk do
   it "parses usage from the top-level field" do
     chunk = Hcode::LLM::StreamChunk.from_json(%({"usage":{"prompt_tokens":42,"completion_tokens":7,"total_tokens":49}}))
-    u = chunk.usage.not_nil!
+    u = chunk.usage || raise "usage should not be nil"
     u.prompt_tokens.should eq(42)
     u.completion_tokens.should eq(7)
   end
@@ -117,7 +119,7 @@ describe Hcode::LLM::StreamChunk do
   it "parses Moonshot-proprietary usage from choices[0].usage" do
     chunk = Hcode::LLM::StreamChunk.from_json(%({"choices":[{"index":0,"usage":{"prompt_tokens":120,"completion_tokens":30,"total_tokens":150}}]}))
     chunk.usage.should be_nil
-    choice_usage = chunk.choices.first.usage.not_nil!
+    choice_usage = chunk.choices.first.usage || raise "usage should not be nil"
     choice_usage.prompt_tokens.should eq(120)
     choice_usage.completion_tokens.should eq(30)
   end
@@ -270,7 +272,7 @@ describe Hcode::LLM::ApiError do
     err = Hcode::LLM::ApiError.new(403, "quota exceeded", retryable: false)
     err.status_code.should eq(403)
     err.retryable?.should be_false
-    err.message.not_nil!.should contain("quota exceeded")
+    (err.message || "").should contain("quota exceeded")
   end
 
   describe ".extract_message" do

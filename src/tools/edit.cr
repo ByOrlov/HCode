@@ -69,7 +69,7 @@ module Hcode
         full_path = begin
           PathAccess.resolve(path, @work_dir, PathAccess::Mode::Write)
         rescue ex : PathAccess::AccessError
-          return ToolResult.error(ex.message.not_nil!)
+          return ToolResult.error(ex.message || "access error")
         end
         return ToolResult.error("File not found: #{path}") unless File.exists?(full_path)
         return ToolResult.error("#{path} is not a file.") unless File.file?(full_path)

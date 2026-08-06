@@ -303,8 +303,11 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
       # ------------------------------------------------------------------
 
       private def execute_background(input : JSON::Any, command : String) : ToolResult
-        svc = @task_service.not_nil!
-        session_dir = @session_dir.not_nil!
+        svc = @task_service
+        session_dir = @session_dir
+        if svc.nil? || session_dir.nil?
+          return ToolResult.error("Background execution is not available.")
+        end
 
         cwd = input["cwd"]?.try(&.to_s)
         effective_cwd = (cwd.nil? || cwd.empty?) ? @work_dir : cwd
@@ -432,7 +435,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         exit_ch.send(status)
         exit_ch.close
 
-        info = svc.get_task(task_id).not_nil!
+        info = svc.get_task(task_id) || raise "task not found: #{task_id}"
         now_ms = Time.utc.to_unix_ms
         info.ended_at = now_ms
 

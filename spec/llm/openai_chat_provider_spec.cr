@@ -136,9 +136,9 @@ describe Hcode::LLM::OpenAIChatProvider do
       models = provider.fetch_models
       models.should eq([] of String)
 
-      last = transport.last_uri.not_nil!
+      last = transport.last_uri || raise "last_uri should not be nil"
       last.to_s.should contain("/models")
-      transport.last_headers.not_nil!["Authorization"].should eq("Bearer test-key")
+      (transport.last_headers || raise "last_headers should not be nil")["Authorization"].should eq("Bearer test-key")
     end
   end
 end

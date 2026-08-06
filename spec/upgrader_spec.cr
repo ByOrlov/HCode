@@ -135,7 +135,7 @@ describe Hcode::Upgrader do
       }
       result = Hcode::Upgrader.background_check
       result.should_not be_nil
-      result.not_nil!.should contain("9999.99.99.99")
+      (result || "").should contain("9999.99.99.99")
       # Cache file should have been written.
       File.exists?(path).should be_true
     end

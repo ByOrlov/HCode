@@ -61,21 +61,27 @@ describe Hcode::Permission::Policies do
     it "parses a bare tool name" do
       parsed = Hcode::Permission::Policies.parse_pattern("Write")
       parsed.should_not be_nil
-      parsed.not_nil![:tool].should eq("Write")
-      parsed.not_nil![:args].should be_nil
+      if parsed
+        parsed[:tool].should eq("Write")
+        parsed[:args].should be_nil
+      end
     end
 
     it "parses a tool name with an arg pattern" do
       parsed = Hcode::Permission::Policies.parse_pattern("Bash(rm *)")
       parsed.should_not be_nil
-      parsed.not_nil![:tool].should eq("Bash")
-      parsed.not_nil![:args].should eq("rm *")
+      if parsed
+        parsed[:tool].should eq("Bash")
+        parsed[:args].should eq("rm *")
+      end
     end
 
     it "treats Tool() as tool-name only" do
       parsed = Hcode::Permission::Policies.parse_pattern("Write()")
       parsed.should_not be_nil
-      parsed.not_nil![:args].should be_nil
+      if parsed
+        parsed[:args].should be_nil
+      end
     end
 
     it "returns nil on malformed patterns" do
@@ -144,7 +150,7 @@ describe Hcode::Permission::Policies do
 
       match = rs.evaluate("Bash", %({"command": "rm -rf /"}))
       match.should_not be_nil
-      match.not_nil!.decision.deny?.should be_true
+      (match || raise "match should not be nil").decision.deny?.should be_true
     end
 
     it "returns nil when nothing matches" do

@@ -29,17 +29,19 @@ describe Hcode::TUI::DiffComputer do
     changed = Hcode::TUI::DiffComputer.changed_lines("foo = bar", "foo = baz")
     changed.any?(&.kind.delete?).should be_true
 
-    add = changed.find(&.kind.add?).not_nil!
+    add = changed.find!(&.kind.add?)
     span = add.highlight
     span.should_not be_nil
     # The changed region in "foo = baz" is "z" at the end (prefix "foo = ba").
-    span.not_nil!.start.should eq(8)
-    span.not_nil!.length.should eq(1)
+    if s = span
+      s.start.should eq(8)
+      s.length.should eq(1)
+    end
   end
 
   it "returns no highlight when the whole line changed" do
     changed = Hcode::TUI::DiffComputer.changed_lines("old", "new")
-    add = changed.find(&.kind.add?).not_nil!
+    add = changed.find!(&.kind.add?)
     add.highlight.should be_nil
   end
 
@@ -53,7 +55,7 @@ describe Hcode::TUI::DiffComputer do
     # "".split('\n') = [""] → one delete of empty + one add.
     changed.size.should eq(2)
     changed.any?(&.kind.add?).should be_true
-    changed.find(&.kind.add?).not_nil!.content.should eq("new line")
+    changed.find!(&.kind.add?).content.should eq("new line")
   end
 
   it "highlights only the middle changed words" do
@@ -61,8 +63,8 @@ describe Hcode::TUI::DiffComputer do
       "def hello_world",
       "def goodbye_world",
     )
-    add = changed.find(&.kind.add?).not_nil!
-    span = add.highlight.not_nil!
+    add = changed.find!(&.kind.add?)
+    span = add.highlight || raise "highlight should not be nil"
     # prefix "def " (4 chars), changed "goodbye", suffix "_world"
     add.content[span.start, span.length].should eq("goodbye")
   end

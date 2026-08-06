@@ -13,14 +13,14 @@ describe Hcode::Setup::Wizard do
     end
 
     it "marks local providers as not needing a key" do
-      ollama = Hcode::Setup::Wizard.choices.find { |c| c.name == "ollama" }.not_nil!
+      ollama = Hcode::Setup::Wizard.choices.find! { |c| c.name == "ollama" }
       ollama.needs_key?.should be_false
-      lmstudio = Hcode::Setup::Wizard.choices.find { |c| c.name == "lmstudio" }.not_nil!
+      lmstudio = Hcode::Setup::Wizard.choices.find! { |c| c.name == "lmstudio" }
       lmstudio.needs_key?.should be_false
     end
 
     it "marks cloud providers as needing a key" do
-      moonshot = Hcode::Setup::Wizard.choices.find { |c| c.name == "moonshot" }.not_nil!
+      moonshot = Hcode::Setup::Wizard.choices.find! { |c| c.name == "moonshot" }
       moonshot.needs_key?.should be_true
     end
 

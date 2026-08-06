@@ -244,7 +244,7 @@ module Hcode
         begin
           if File.exists?(dst)
             aside = File.join(File.dirname(dst), ".#{File.basename(dst)}.old-#{Random::Secure.hex(2)}")
-            File.rename(dst, aside.not_nil!)
+            File.rename(dst, aside)
           end
           File.copy(src, dst)
           File.chmod(dst, 0o755)

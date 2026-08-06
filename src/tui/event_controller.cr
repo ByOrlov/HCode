@@ -123,8 +123,8 @@ module Hcode
           @step_tool_count += 1
 
           if event.tool_name == "Read" && (group = @pending_read_group) && group.step == @current_step
-            group.read_group ||= [] of ReadGroupEntry
-            group.read_group.not_nil! << ReadGroupEntry.new(event.tool_call_id, event.tool_args)
+            reads = (group.read_group ||= [] of ReadGroupEntry)
+            reads << ReadGroupEntry.new(event.tool_call_id, event.tool_args)
           else
             msg = Message.new("tool", "")
             msg.tool_call_id = event.tool_call_id

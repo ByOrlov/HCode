@@ -62,7 +62,7 @@ describe Hcode::Loop::Agent do
       agent.run_goal_turn("Fix all failing tests", nil) { |e| events << e }
 
       # After completion, the goal record is cleared.
-      Hcode::Tools::Goal.service.not_nil!.get_goal.should be_nil
+      (Hcode::Tools::Goal.service || raise "Goal.service not initialized").get_goal.should be_nil
 
       # Three turns ran: initial + 2 continuations.
       turn_ends = events.count { |e| e.type.turn_end? }
@@ -119,9 +119,10 @@ describe Hcode::Loop::Agent do
 
       goal = service.get_goal
       goal.should_not be_nil
-      g = goal.not_nil!
-      g.status.blocked?.should be_true
-      (g.terminal_reason || "").should contain("budget")
+      if (g = goal)
+        g.status.blocked?.should be_true
+        (g.terminal_reason || "").should contain("budget")
+      end
     ensure
       Hcode::Tools::Goal.service = nil
       FileUtils.rm_rf(work_dir) if work_dir

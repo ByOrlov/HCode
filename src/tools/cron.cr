@@ -835,7 +835,7 @@ module Hcode
         service = Cron.service
         return ToolResult.error("Cron service is not initialized.") if service.nil?
 
-        svc = service.not_nil!
+        svc = service
 
         if svc.disabled?
           return ToolResult.error("Cron scheduling is disabled (HCODE_DISABLE_CRON=1).")
@@ -844,7 +844,7 @@ module Hcode
         cron_raw = input["cron"]?.try(&.to_s) || ""
         prompt = input["prompt"]?.try(&.to_s) || ""
         recurring_raw = input["recurring"]?.try(&.as_bool?)
-        recurring = recurring_raw.nil? ? true : recurring_raw.not_nil!
+        recurring = recurring_raw.nil? ? true : recurring_raw
 
         normalized = cron_raw.strip.split(/\s+/).join(" ")
         if normalized.empty?
@@ -878,9 +878,9 @@ module Hcode
         ideal = Cron.compute_next_cron_run(parsed, now_ms)
 
         if !recurring && !ideal.nil?
-          future_ms = ideal.not_nil! - now_ms
+          future_ms = ideal - now_ms
           if future_ms > Cron::ONE_SHOT_MAX_FUTURE_MS
-            return ToolResult.error("One-shot cron #{normalized.inspect} would not fire until #{Tools.format_local_iso_with_offset(ideal.not_nil!)} (more than a year out). Pass recurring: true or pick an earlier schedule.")
+            return ToolResult.error("One-shot cron #{normalized.inspect} would not fire until #{Tools.format_local_iso_with_offset(ideal)} (more than a year out). Pass recurring: true or pick an earlier schedule.")
           end
         end
 
@@ -891,9 +891,9 @@ module Hcode
 
         task = svc.add_task(CronTaskInit.new(cron: normalized, prompt: prompt, recurring: recurring))
 
-        display_next = ideal.nil? ? nil : svc.compute_display_next_fire(task, parsed, ideal.not_nil!)
+        display_next = ideal.nil? ? nil : svc.compute_display_next_fire(task, parsed, ideal)
         unless display_next.nil?
-          svc.set_next_fire_for_task(task.id, display_next.not_nil!) if svc.is_a?(InMemoryCronService)
+          svc.set_next_fire_for_task(task.id, display_next) if svc.is_a?(InMemoryCronService)
         end
 
         human = Cron.to_human(parsed)
@@ -905,7 +905,7 @@ module Hcode
         lines << "cron: #{normalized}"
         lines << "humanSchedule: #{human}"
         lines << "recurring: #{recurring}"
-        lines << "nextFireAt: #{display_next.nil? ? "null" : Tools.format_local_iso_with_offset(display_next.not_nil!)}"
+        lines << "nextFireAt: #{display_next.nil? ? "null" : Tools.format_local_iso_with_offset(display_next)}"
         ToolResult.success(lines.join('\n'))
       end
     end
@@ -939,7 +939,7 @@ module Hcode
         service = Cron.service
         return ToolResult.error("Cron service is not initialized.") if service.nil?
 
-        svc = service.not_nil!
+        svc = service
         tasks = svc.list
         return ToolResult.success("cron_jobs: 0\nNo cron jobs scheduled.") if tasks.empty?
 
@@ -1030,7 +1030,7 @@ module Hcode
           return ToolResult.error("Invalid cron job id #{id.inspect} — must be a ULID.")
         end
 
-        svc = service.not_nil!
+        svc = service
         removed = svc.remove_tasks([id])
         if removed.empty?
           return ToolResult.error("No cron job with id #{id}.")

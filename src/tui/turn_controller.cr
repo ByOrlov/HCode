@@ -51,7 +51,8 @@ module Hcode
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
 
-        spawn { @run_turn_cb.not_nil!.call(text, persisted) }
+        cb = @run_turn_cb || raise "run_turn_cb not initialized"
+        spawn { cb.call(text, persisted) }
       end
 
       # Shift one queued message (FIFO) and start a fresh turn for it.

@@ -147,7 +147,7 @@ module Hcode
         # First, drain the pending stop confirmation.
         if pending_stop_active?
           if key.key.char?
-            ch = key.char.not_nil!
+            ch = key.char || '\0'
             case ch
             when 'y', 'Y'
               task_id = @pending_stop_task_id
@@ -181,7 +181,7 @@ module Hcode
         end
 
         if key.key.char?
-          ch = key.char.not_nil!
+          ch = key.char || '\0'
           case ch
           when 'q', 'Q'
             @on_cancel.try(&.call)

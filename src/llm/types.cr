@@ -396,7 +396,7 @@ module Hcode
         json.object do
           json.field "role", @role
 
-          has_tool_calls = @tool_calls && !@tool_calls.not_nil!.empty?
+          has_tool_calls = @tool_calls.try(&.empty?.!) || false
           empty_text_only = non_think_parts.all? do |p|
             p.is_a?(TextContent) && p.text.strip.empty?
           end
@@ -535,8 +535,8 @@ module Hcode
             end
             tools = @tools
             extra = @extra_tools
-            has_tools = tools && !tools.not_nil!.empty?
-            has_extra = extra && !extra.not_nil!.empty?
+            has_tools = tools.try(&.empty?.!) || false
+            has_extra = extra.try(&.empty?.!) || false
             if has_tools || has_extra
               json.field "tools" do
                 json.array do

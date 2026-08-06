@@ -91,7 +91,7 @@ describe Hcode::Tools::Skill do
     memory.history.size.should be > 0
     injected = memory.history.find(&.origin.injection?)
     injected.should_not be_nil
-    text = injected.not_nil!.message.text
+    text = (injected || raise "injected should not be nil").message.text
     text.should contain("<hcode-skill-loaded")
     text.should contain(%(name="commit"))
     text.should contain(%(trigger="model-tool"))
@@ -138,7 +138,8 @@ describe Hcode::Tools::Skill do
     tool = Hcode::Tools::Skill.new
     tool.execute(JSON.parse(%q({ "skill": "x", "args": "a<b>&c\"d" })))
 
-    text = memory.history.find(&.origin.injection?).not_nil!.message.text
+    injected = memory.history.find(&.origin.injection?) || raise "injected should not be nil"
+    text = injected.message.text
     text.should contain(%(args="a&lt;b&gt;&amp;c&quot;d"))
   end
 
@@ -169,7 +170,8 @@ describe Hcode::Tools::Skill do
 
     tool = Hcode::Tools::Skill.new
     tool.execute(JSON.parse(%({ "skill": "x" })))
-    text = memory.history.find(&.origin.injection?).not_nil!.message.text
+    injected = memory.history.find(&.origin.injection?) || raise "injected should not be nil"
+    text = injected.message.text
     text.should contain(%(trigger="nested-skill"))
   end
 end
@@ -274,8 +276,10 @@ describe Hcode::Tools::SkillDiscovery do
       skills = Hcode::Tools::SkillDiscovery.discover("/nonexistent/home", work)
       skill = skills.find(&.name.==("lint"))
       skill.should_not be_nil
-      skill.not_nil!.description.should eq("Run linters")
-      skill.not_nil!.source.should eq("project")
+      if skill
+        skill.description.should eq("Run linters")
+        skill.source.should eq("project")
+      end
     ensure
       FileUtils.rm_r(work) if Dir.exists?(work)
     end

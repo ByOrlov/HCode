@@ -86,7 +86,7 @@ describe Hcode::Loop::SubagentAgentRunner do
       )
 
       outcome.status.aborted?.should be_true
-      outcome.error.not_nil!.should_not be_empty
+      (outcome.error || raise "error should not be nil").should_not be_empty
     end
   end
 
@@ -121,7 +121,7 @@ describe Hcode::Loop::SubagentAgentRunner do
       )
 
       outcome.status.failed?.should be_true
-      outcome.error.not_nil!.should contain("does not exist")
+      (outcome.error || raise "error should not be nil").should contain("does not exist")
     end
 
     it "resumes an existing child agent on its prior context" do
@@ -224,9 +224,11 @@ describe Hcode::Loop::SubagentAgentRunner do
       outcome.task_id.should_not be_nil
 
       # The task is registered as running.
-      task = task_service.get_task(outcome.task_id.not_nil!)
+      task = task_service.get_task(outcome.task_id || raise "task_id should not be nil")
       task.should_not be_nil
-      task.not_nil!.status.running?.should be_true
+      if task
+        task.status.running?.should be_true
+      end
     end
   end
 end
@@ -299,7 +301,7 @@ describe Hcode::Loop::SubagentSwarmRunner do
 
     result = runner.call(spec, ctx)
     result.status.failed?.should be_true
-    result.error.not_nil!.should contain("does not exist")
+    (result.error || raise "error should not be nil").should contain("does not exist")
   end
 end
 

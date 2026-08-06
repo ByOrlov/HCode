@@ -422,8 +422,9 @@ module Hcode
           return
         end
 
-        cmd = parsed.not_nil!.command
-        args = parsed.not_nil!.args
+        parsed = parsed || raise "parsed should not be nil"
+        cmd = parsed.command
+        args = parsed.args
 
         # Plugin slash commands: `/<plugin_id>:<command> [args]`
         if cmd.includes?(':')
@@ -628,7 +629,7 @@ module Hcode
         sub = args.strip.downcase
         case sub
         when "", "status"
-          snapshot = service.not_nil!.get_goal
+          snapshot = service.get_goal
           if snapshot
             @messages << Message.new("system", format_goal_snapshot(snapshot))
           else
@@ -636,21 +637,21 @@ module Hcode
           end
         when "pause"
           begin
-            snapshot = service.not_nil!.pause_goal
+            snapshot = service.pause_goal
             @messages << Message.new("system", "#{Hcode.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
             @messages << Message.new("error", Hcode.t("ui.cannot_pause", message: ex.message.to_s))
           end
         when "resume"
           begin
-            snapshot = service.not_nil!.resume_goal
+            snapshot = service.resume_goal
             @messages << Message.new("system", "#{Hcode.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
             @messages << Message.new("error", Hcode.t("ui.cannot_resume", message: ex.message.to_s))
           end
         when "cancel"
           begin
-            snapshot = service.not_nil!.cancel_goal
+            snapshot = service.cancel_goal
             @messages << Message.new("system", "#{Hcode.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}")
           rescue ex
             @messages << Message.new("error", Hcode.t("ui.cannot_cancel", message: ex.message.to_s))

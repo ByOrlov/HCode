@@ -40,16 +40,14 @@ module Hcode
           else_content = ""
 
           if em = body.match(/\{%\s*else\s*%\}/m)
-            split_pos = em.begin.not_nil!
-            if_content = body[0...split_pos]
-            else_content = body[em.end.not_nil!..]
+            parts = body.split(em[0], 2)
+            if_content = parts[0]
+            else_content = parts[1]? || ""
           end
 
           replacement = evaluate_condition(condition, vars) ? if_content : else_content
 
-          range_start = match.begin.not_nil!
-          range_end = match.end.not_nil!
-          result = result[0...range_start] + replacement + result[range_end..]
+          result = match.pre_match + replacement + match.post_match
         end
 
         result

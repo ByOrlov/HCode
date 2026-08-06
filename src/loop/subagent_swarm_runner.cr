@@ -70,7 +70,7 @@ module Hcode
             error: "Agent instance \"#{spec.agent_id}\" does not exist",
           )
         end
-        entry = entry.not_nil!
+        entry = entry || raise "entry should not be nil"
 
         if entry.running?
           return Tools::SwarmRunResult.new(

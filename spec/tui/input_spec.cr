@@ -8,7 +8,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([27_u8, 127_u8])
     consumed.should eq(2)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Backspace)
     key.alt?.should be_true
   end
@@ -17,7 +17,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([27_u8, 8_u8])
     consumed.should eq(2)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Backspace)
     key.alt?.should be_true
   end
@@ -26,7 +26,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([27_u8, 10_u8])
     consumed.should eq(2)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Enter)
     key.alt?.should be_true
   end
@@ -35,7 +35,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([127_u8])
     consumed.should eq(1)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Backspace)
     key.alt?.should be_false
   end
@@ -44,7 +44,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([97_u8]) # 'a'
     consumed.should eq(1)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Char)
     key.char.should eq('a')
   end
@@ -53,7 +53,7 @@ describe Hcode::TUI::Input do
     key, consumed = input.parse_one([27_u8, 98_u8]) # ESC + 'b'
     consumed.should eq(2)
     key.should_not be_nil
-    key = key.not_nil!
+    key = key || raise "key should not be nil"
     key.key.should eq(Hcode::TUI::Key::Char)
     key.char.should eq('b')
     key.alt?.should be_true

@@ -72,7 +72,7 @@ describe Hcode::Hooks::Engine do
       engine = Hcode::Hooks::Engine.new(hooks)
       block = engine.trigger_block("PreToolUse", "Bash")
       block.should_not be_nil
-      block.not_nil!.reason.should contain("err")
+      block.as(Hcode::Hooks::BlockDecision).reason.should contain("err")
     end
 
     it "returns nil when no hook blocks" do
@@ -91,7 +91,7 @@ describe Hcode::Hooks::Engine do
       engine = Hcode::Hooks::Engine.new(hooks)
       block = engine.trigger_block("PreToolUse", "Bash")
       block.should_not be_nil
-      block.not_nil!.reason.should eq("not allowed")
+      block.as(Hcode::Hooks::BlockDecision).reason.should eq("not allowed")
     end
 
     it "allows when permissionDecision is not deny" do

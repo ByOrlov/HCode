@@ -115,7 +115,7 @@ module Hcode
           skill_args: skill_args,
           skill_content: skill_content,
           skill_source: skill.source,
-          skill_dir: skill.path ? File.dirname(skill.path.not_nil!) : nil,
+          skill_dir: skill.path ? File.dirname(skill.path || "") : nil,
           trigger: trigger,
         )
 
@@ -337,7 +337,7 @@ module Hcode
               end
               name = body[i + 1, end_idx - (i + 1)]
               if argument_names.includes?(name)
-                idx = argument_names.index(name).not_nil!
+                idx = argument_names.index!(name)
                 io << escape_xml_tags(tokens[idx]? || "")
                 replaced_argument_placeholder = true
               else
@@ -466,7 +466,7 @@ module Hcode
                               args : String,
                               session_id : String?) : String
         renderer = Skill.new
-        skill_dir = skill.path ? File.dirname(skill.path.not_nil!) : nil
+        skill_dir = skill.path ? File.dirname(skill.path || "") : nil
         renderer.render_skill_prompt(skill, args, session_id, skill_dir)
       end
 

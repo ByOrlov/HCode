@@ -615,9 +615,11 @@ module Hcode
             OAuth.save_tokens("srv", "https://mcp.example.com", home, tokens)
             loaded = OAuth.load_tokens("srv", "https://mcp.example.com", home)
             loaded.should_not be_nil
-            loaded.not_nil!.access_token.should eq("access-123")
-            loaded.not_nil!.refresh_token.should eq("refresh-456")
-            loaded.not_nil!.expired?.should be_false
+            if l = loaded
+              l.access_token.should eq("access-123")
+              l.refresh_token.should eq("refresh-456")
+              l.expired?.should be_false
+            end
           ensure
             FileUtils.rm_r(home) rescue nil
           end
@@ -830,10 +832,12 @@ module Hcode
 
           loaded = ToolCache.load?("zai-coding-plan", "web-search")
           loaded.should_not be_nil
-          loaded.not_nil!.size.should eq(2)
-          loaded.not_nil![0].name.should eq("search")
-          loaded.not_nil![0].description.should eq("Search the web")
-          loaded.not_nil![1].name.should eq("read")
+          if l = loaded
+            l.size.should eq(2)
+            l[0].name.should eq("search")
+            l[0].description.should eq("Search the web")
+            l[1].name.should eq("read")
+          end
         ensure
           ENV.delete("HCODE_HOME")
           rm_r(home) rescue nil

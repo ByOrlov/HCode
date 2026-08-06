@@ -55,7 +55,9 @@ describe Hcode::Plugin::Store do
       read_back = Hcode::Plugin::Store.read(home)
       r = read_back[0]
       r.capabilities.should_not be_nil
-      r.capabilities.not_nil!.mcp_servers["server1"].enabled?.should be_false
+      if caps = r.capabilities
+        caps.mcp_servers["server1"].enabled?.should be_false
+      end
     end
   end
 end

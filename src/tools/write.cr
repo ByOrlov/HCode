@@ -46,7 +46,7 @@ module Hcode
         full_path = begin
           PathAccess.resolve(path, @work_dir, PathAccess::Mode::Write)
         rescue ex : PathAccess::AccessError
-          return ToolResult.error(ex.message.not_nil!)
+          return ToolResult.error(ex.message || "access error")
         end
 
         parent_error = ensure_parent_directory(full_path)

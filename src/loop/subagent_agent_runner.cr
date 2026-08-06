@@ -73,7 +73,7 @@ module Hcode
           return failure_outcome(agent_id, "subagent",
             "Agent instance \"#{agent_id}\" does not exist", spec[:description])
         end
-        entry = entry.not_nil!
+        entry = entry || raise "entry should not be nil"
 
         unless @registry.owned_by?(agent_id, PARENT_AGENT_ID)
           return failure_outcome(agent_id, "subagent",

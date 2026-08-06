@@ -22,11 +22,13 @@ describe Hcode::Tools::Edit do
 
     display = result.display
     display.should_not be_nil
-    display.not_nil!.kind.should eq("file_io")
-    display.not_nil!.operation.should eq("edit")
-    display.not_nil!.path.should eq("hcode-test-edit-disp.txt")
-    display.not_nil!.before.should eq("foo bar")
-    display.not_nil!.after.should eq("baz qux")
+    if display
+      display.kind.should eq("file_io")
+      display.operation.should eq("edit")
+      display.path.should eq("hcode-test-edit-disp.txt")
+      display.before.should eq("foo bar")
+      display.after.should eq("baz qux")
+    end
   end
 
   it "attaches display with replace_all too" do
@@ -36,7 +38,7 @@ describe Hcode::Tools::Edit do
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-disp2.txt","old_string":"dup","new_string":"x","replace_all":true})))
 
-    display = result.display.not_nil!
+    display = result.display || raise "display should not be nil"
     display.operation.should eq("edit")
     display.before.should eq("dup")
     display.after.should eq("x")

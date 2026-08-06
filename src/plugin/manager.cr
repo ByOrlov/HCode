@@ -124,11 +124,14 @@ module Hcode
         id, normalized_root, parsed, source_type, github, original_source =
           case resolved.kind
           in ResolvedSourceKind::LocalPath
-            install_from_local_path(resolved.path.not_nil!)
+            path = resolved.path || raise "path required for LocalPath"
+            install_from_local_path(path)
           in ResolvedSourceKind::ZipUrl
-            install_from_zip(resolved.path.not_nil!, source.strip)
+            path = resolved.path || raise "path required for ZipUrl"
+            install_from_zip(path, source.strip)
           in ResolvedSourceKind::Github
-            install_from_github(resolved.github.not_nil!, source.strip)
+            github = resolved.github || raise "github required for Github"
+            install_from_github(github, source.strip)
           end
 
         existing = @records[id]?
@@ -206,7 +209,7 @@ module Hcode
         skills = [] of Hcode::Tools::SkillDefinition
         @records.each_value do |record|
           next unless record.ok?
-          manifest = record.manifest.not_nil!
+          manifest = record.manifest || next
           manifest.skills.each do |skill_dir|
             discovered = Hcode::Tools::SkillDiscovery.discover_from_dir(skill_dir, "plugin")
             discovered.each { |s| skills << s }
@@ -230,7 +233,7 @@ module Hcode
         result = [] of Mcp::McpServerConfig
         @records.each_value do |record|
           next unless record.ok?
-          manifest = record.manifest.not_nil!
+          manifest = record.manifest || next
           manifest.mcp_servers.each do |name, config|
             next unless mcp_server_enabled?(record, name, config)
             runtime_name = "plugin-#{record.id}:#{name}"
@@ -253,7 +256,7 @@ module Hcode
         result = [] of Hcode::Hooks::HookDef
         @records.each_value do |record|
           next unless record.ok?
-          manifest = record.manifest.not_nil!
+          manifest = record.manifest || next
           manifest.hooks.each do |hook|
             env = {} of String => String
             env["KIMI_CODE_HOME"] = hcode_home_path
@@ -271,7 +274,7 @@ module Hcode
         result = [] of PluginCommandDef
         @records.each_value do |record|
           next unless record.ok?
-          manifest = record.manifest.not_nil!
+          manifest = record.manifest || next
           manifest.commands.each do |entry|
             cmd = CommandLoader.load(entry.path, record.id, entry.name)
             result << cmd if cmd
@@ -289,7 +292,7 @@ module Hcode
         parsed = ManifestParser.parse(source_root)
         raise "Cannot install plugin at #{source_root}: #{first_error(parsed)}" unless parsed.manifest
 
-        id = normalize_id(parsed.manifest.not_nil!.name)
+        id = normalize_id((parsed.manifest || raise "manifest required").name)
         managed_root = copy_to_managed(id, source_root)
         re_parsed = ManifestParser.parse(managed_root)
 
@@ -304,7 +307,7 @@ module Hcode
           parsed = ManifestParser.parse(detected_root)
           raise "Cannot install plugin from #{original_source}: #{first_error(parsed)}" unless parsed.manifest
 
-          id = normalize_id(parsed.manifest.not_nil!.name)
+          id = normalize_id((parsed.manifest || raise "manifest required").name)
           managed_root = copy_to_managed(id, detected_root)
           re_parsed = ManifestParser.parse(managed_root)
 
@@ -323,7 +326,7 @@ module Hcode
           parsed = ManifestParser.parse(detected_root)
           raise "Cannot install plugin from #{original_source}: #{first_error(parsed)}" unless parsed.manifest
 
-          id = normalize_id(parsed.manifest.not_nil!.name)
+          id = normalize_id((parsed.manifest || raise "manifest required").name)
           managed_root = copy_to_managed(id, detected_root)
           re_parsed = ManifestParser.parse(managed_root)
 

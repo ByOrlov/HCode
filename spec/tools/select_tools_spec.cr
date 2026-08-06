@@ -81,7 +81,7 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "refuses when disabled" do
-    service = Hcode::Tools::ToolSelect.service.not_nil!.as(Hcode::Tools::InMemoryToolSelectService)
+    service = Hcode::Tools::ToolSelect.service.as(Hcode::Tools::InMemoryToolSelectService)
     service.disable!
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
@@ -98,7 +98,7 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "marks tools as active after successful load" do
-    service = Hcode::Tools::ToolSelect.service.not_nil!.as(Hcode::Tools::InMemoryToolSelectService)
+    service = Hcode::Tools::ToolSelect.service.as(Hcode::Tools::InMemoryToolSelectService)
     tool = Hcode::Tools::SelectTools.new
     tool.execute(JSON.parse(%({ "names": ["a"] })))
     # Second call — a should now be already_available.

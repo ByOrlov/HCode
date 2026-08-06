@@ -40,8 +40,10 @@ describe Hcode::TUI::App do
 
     glob.should_not be_nil
     bash.should_not be_nil
-    glob.not_nil!.tool_result.should eq("a.cr")
-    bash.not_nil!.tool_result.should eq("hi")
+    if (g = glob) && (b = bash)
+      g.tool_result.should eq("a.cr")
+      b.tool_result.should eq("hi")
+    end
   end
 
   # Regression: on_event must render synchronously via render_now so every
@@ -60,7 +62,7 @@ describe Hcode::TUI::App do
     app.on_event(Hcode::Loop::Event.tool_call_start("c1", "Read", %({"path":"f.ts"})))
     tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
     tool.should_not be_nil
-    tool.not_nil!.tool_result.should be_nil
+    (tool || raise "tool should not be nil").tool_result.should be_nil
 
     # build_rendered_lines places it in the active zone (after log_lines).
     lines, _editor_line, log_size = app.build_rendered_lines(80)
@@ -71,7 +73,7 @@ describe Hcode::TUI::App do
     # tool_result → tool now has result, goes to log zone.
     app.on_event(Hcode::Loop::Event.tool_result("c1", "content", false))
     tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
-    tool.not_nil!.tool_result.should eq("content")
+    (tool || raise "tool should not be nil").tool_result.should eq("content")
 
     # build_rendered_lines now places it in the log zone.
     lines2, _editor_line2, log_size2 = app.build_rendered_lines(80)
@@ -114,7 +116,9 @@ describe Hcode::TUI::App do
 
     snapshot = app.@messages.find { |m| m.role == "todo_snapshot" }
     snapshot.should_not be_nil
-    snapshot.not_nil!.todo_items.should eq([{"Task A", "done"}, {"Task B", "done"}])
+    if (s = snapshot)
+      s.todo_items.should eq([{"Task A", "done"}, {"Task B", "done"}])
+    end
     todos.should be_empty
 
     # The snapshot renders in the LOG zone (with the Todos header), and the
@@ -247,7 +251,7 @@ describe Hcode::TUI::App do
 
     roles = app.@messages.map(&.role)
     roles.should eq(["user", "tool"])
-    tool_msg = app.@messages.find { |m| m.role == "tool" }.not_nil!
+    tool_msg = app.@messages.find { |m| m.role == "tool" } || raise "tool message not found"
     tool_msg.tool_call_id.should eq("tc1")
     tool_msg.tool_name.should eq("Glob")
     tool_msg.tool_result.should eq("a.cr\nb.cr")
@@ -275,7 +279,7 @@ describe Hcode::TUI::App do
 
     sys_msg = app.@messages.find { |m| m.role == "system" }
     sys_msg.should_not be_nil
-    sys_msg.not_nil!.content.should contain("[compacted]")
+    (sys_msg || raise "sys_msg should not be nil").content.should contain("[compacted]")
   end
 end
 
@@ -333,7 +337,8 @@ describe Hcode::TUI::App do
     # An exception message landed in the transcript.
     exc_msg = app.@messages.find { |m| m.role == "exception" }
     exc_msg.should_not be_nil
-    exc_msg.not_nil!.content.should contain("kaboom from BoomTool")
+    exc_msg_content = exc_msg.try(&.content) || ""
+    exc_msg_content.should contain("kaboom from BoomTool")
 
     # The spinner stopped — the TUI is back in an idle state.
     app.@spinner.active?.should be_false
@@ -341,7 +346,7 @@ describe Hcode::TUI::App do
     # Render it and verify the block visually: a red header line, the
     # exception class + message, and one line per rendered entry (the
     # renderer invariant: no embedded newlines).
-    rendered = app.render_message(exc_msg.not_nil!, 80)
+    rendered = app.render_message(exc_msg || raise("exc_msg should not be nil"), 80)
     text = rendered.map { |l| app_strip_ansi(l) }.join("\n")
     text.should contain("💥 Exception")
     text.should contain("kaboom from BoomTool")
@@ -507,8 +512,8 @@ describe Hcode::TUI::HelpPanel do
       bottom = lines.find { |l| l.includes?('└') }
       top.should_not be_nil
       bottom.should_not be_nil
-      Hcode::TUI::CharWidth.visible_width(top.not_nil!).should eq(
-        Hcode::TUI::CharWidth.visible_width(bottom.not_nil!)
+      Hcode::TUI::CharWidth.visible_width(top || raise "top not found").should eq(
+        Hcode::TUI::CharWidth.visible_width(bottom || raise "bottom not found")
       )
     end
 
@@ -548,7 +553,7 @@ describe Hcode::TUI::HelpPanel do
       # the logo fits inside without pushing the right border off-screen.
       top = lines.find { |l| l.includes?('╭') }
       top.should_not be_nil
-      Hcode::TUI::CharWidth.visible_width(top.not_nil!).should be >= 14
+      Hcode::TUI::CharWidth.visible_width(top || raise "top not found").should be >= 14
     end
   end
 end

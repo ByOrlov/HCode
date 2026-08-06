@@ -5,15 +5,19 @@ describe Hcode::TUI::CommandRegistry do
     it "parses command without args" do
       result = Hcode::TUI::CommandRegistry.parse("/help")
       result.should_not be_nil
-      result.not_nil!.command.should eq("/help")
-      result.not_nil!.args.should eq("")
+      if r = result
+        r.command.should eq("/help")
+        r.args.should eq("")
+      end
     end
 
     it "parses command with args" do
       result = Hcode::TUI::CommandRegistry.parse("/add-dir /tmp/foo")
       result.should_not be_nil
-      result.not_nil!.command.should eq("/add-dir")
-      result.not_nil!.args.should eq("/tmp/foo")
+      if r = result
+        r.command.should eq("/add-dir")
+        r.args.should eq("/tmp/foo")
+      end
     end
 
     it "returns nil for non-command input" do
@@ -50,7 +54,9 @@ describe Hcode::TUI::CommandRegistry do
     it "finds existing command" do
       cmd = Hcode::TUI::CommandRegistry.find("/exit")
       cmd.should_not be_nil
-      cmd.not_nil!.name.should eq("/exit")
+      if c = cmd
+        c.name.should eq("/exit")
+      end
     end
 
     it "returns nil for unknown command" do

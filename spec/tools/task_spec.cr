@@ -55,7 +55,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "lists tasks with all key fields" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(
       id: "bash-1",
       description: "npm run build",
@@ -74,7 +74,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "filters out terminal tasks when active_only=true (default)" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2", status: Hcode::Tools::AgentTaskStatus::Completed))
     tool = Hcode::Tools::TaskList.new
@@ -85,7 +85,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "includes terminal tasks when active_only=false" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2", status: Hcode::Tools::AgentTaskStatus::Completed))
     tool = Hcode::Tools::TaskList.new
@@ -94,7 +94,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "respects limit parameter" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2"))
     service.register(make_task(id: "bash-3"))
@@ -104,7 +104,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "rejects limit=0 (clamped to 1)" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "limit": 0 })))
@@ -113,7 +113,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "records separated by ---" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2"))
     tool = Hcode::Tools::TaskList.new
@@ -122,7 +122,7 @@ describe Hcode::Tools::TaskList do
   end
 
   it "converts CamelCase keys to snake_case" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1", pid: 123_i64, command: "x", exit_code: nil, stop_reason: "killed"))
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
@@ -160,7 +160,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns not_ready for running task (default block=false)" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
@@ -170,7 +170,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns timeout for running task with block=true" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "block": true })))
@@ -181,7 +181,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns success for terminal task" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1", status: Hcode::Tools::AgentTaskStatus::Completed, exit_code: 0))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
@@ -191,7 +191,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits terminal_reason=stopped for killed task with stop_reason" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Killed,
       stop_reason: "Killed manually"))
@@ -202,7 +202,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits terminal_reason=timed_out for TimedOut task" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1", status: Hcode::Tools::AgentTaskStatus::TimedOut))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
@@ -210,7 +210,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "omits terminal_reason for plain completed exit" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -220,7 +220,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits truncation banner when truncated with output_path" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -239,7 +239,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits no-full-log banner when truncated without persisted log" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -254,7 +254,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits [no output available] when preview is empty" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -265,7 +265,7 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "renders preview after [output] marker" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -302,7 +302,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "stops a running task with default reason" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
@@ -313,7 +313,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "stops a running task with custom reason" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "reason": "User killed" })))
@@ -321,7 +321,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "treats whitespace-only reason as default" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "reason": "   " })))
@@ -329,7 +329,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "returns status when task already terminal" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
@@ -342,7 +342,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "uses stored stop_reason when task already terminal and has one" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
       status: Hcode::Tools::AgentTaskStatus::Failed,
       stop_reason: "timed out"))
@@ -352,7 +352,7 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "suppresses terminal notification before stopping" do
-    service = Hcode::Tools::Task.service.not_nil!
+    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
     info = service.register(make_task(id: "bash-1"))
     info.terminal_notification_suppressed.should be_nil
     tool = Hcode::Tools::TaskStop.new
@@ -507,7 +507,7 @@ describe Hcode::Tools::InMemoryTaskService do
 
       path = store.task_meta_path("bash-1")
       File.exists?(path).should be_true
-      parsed = store.read_task_meta("bash-1").not_nil!
+      parsed = store.read_task_meta("bash-1") || raise "read_task_meta should not be nil"
       parsed["task_id"].to_s.should eq("bash-1")
       parsed["status"].to_s.should eq("running")
     end
@@ -528,7 +528,7 @@ describe Hcode::Tools::InMemoryTaskService do
       lost.size.should eq(1)
       lost.first.task_id.should eq("bash-old")
       lost.first.status.should eq(Hcode::Tools::AgentTaskStatus::Lost)
-      svc.get_task("bash-old").not_nil!.status.lost?.should be_true
+      svc.get_task("bash-old").try(&.status.lost?).should be_true
     end
   end
 
@@ -543,7 +543,7 @@ describe Hcode::Tools::InMemoryTaskService do
       lost = svc.mark_lost_on_resume
 
       lost.empty?.should be_true
-      svc.get_task("bash-done").not_nil!.status.completed?.should be_true
+      svc.get_task("bash-done").try(&.status.completed?).should be_true
     end
   end
 
@@ -594,7 +594,7 @@ describe Hcode::Session::Store do
       store = Hcode::Session::Store.new(File.join(tmp, "meta-store-#{Random::Secure.hex(4)}"))
       store.write_task_meta("task-1", %({"task_id":"task-1","status":"running"}))
 
-      meta = store.read_task_meta("task-1").not_nil!
+      meta = store.read_task_meta("task-1") || raise "read_task_meta should not be nil"
       meta["task_id"].to_s.should eq("task-1")
       meta["status"].to_s.should eq("running")
     end

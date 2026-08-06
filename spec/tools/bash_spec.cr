@@ -159,11 +159,11 @@ describe Hcode::Tools::Bash do
       result.content.should contain("task_id:")
 
       # Extract task_id.
-      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]).not_nil!
+      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]) || raise "task_id not found"
 
       # Wait for the process to finish (should be near-instant for echo).
       task_svc.wait(task_id, 5_000_i64)
-      info = task_svc.get_task(task_id).not_nil!
+      info = task_svc.get_task(task_id) || raise "task not found"
       info.status.completed?.should be_true
 
       # The output file should contain the echo output.
@@ -183,7 +183,7 @@ describe Hcode::Tools::Bash do
       bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir, delivery)
 
       result = bash.execute(JSON.parse(%({"command":"echo done","run_in_background":true})))
-      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]).not_nil!
+      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]) || raise "task_id not found"
 
       # Wait for the monitor fiber to finish.
       task_svc.wait(task_id, 5_000_i64)
@@ -209,17 +209,17 @@ describe Hcode::Tools::Bash do
       bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir)
 
       result = bash.execute(JSON.parse(%({"command":"sleep 100","run_in_background":true})))
-      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]).not_nil!
+      task_id = result.content.match(/task_id: (\S+)/).try(&.[1]) || raise "task_id not found"
 
       # The process should be running.
-      info = task_svc.get_task(task_id).not_nil!
+      info = task_svc.get_task(task_id) || raise "task not found"
       info.status.running?.should be_true
 
       # Stop it.
       task_svc.suppress_terminal_notification(task_id)
       stopped = task_svc.stop(task_id, "test stop")
       stopped.should_not be_nil
-      stopped.not_nil!.status.terminal?.should be_true
+      stopped.try(&.status.terminal?).should be_true
     end
   end
 end

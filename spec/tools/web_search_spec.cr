@@ -64,7 +64,7 @@ describe Hcode::Tools::WebSearch do
     result.content.should contain("Title: T2")
     # No Site/Date lines for second result.
     lines = result.content.lines
-    second_idx = lines.index("Title: T2").not_nil!
+    second_idx = lines.index("Title: T2") || raise "Title: T2 not found"
     ["Site:", "Date:"].each do |needle|
       lines[second_idx + 1].should_not contain(needle)
     end

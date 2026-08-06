@@ -137,7 +137,9 @@ module Hcode
                         input : Hash(String, JSON::Any) = {} of String => JSON::Any) : BlockDecision?
         results = trigger(event, matcher_value, input)
         block = results.find(&.block?)
-        BlockDecision.new(block.not_nil!.reason || block.not_nil!.message || "blocked by hook #{event}") if block
+        if b = block
+          BlockDecision.new(b.reason || b.message || "blocked by hook #{event}")
+        end
       end
 
       private def matching_hooks(event : String, matcher_value : String) : Array(HookDef)
@@ -215,9 +217,9 @@ module Hcode
       end
 
       private def hook_env(hook : HookDef) : Hash(String, String)?
-        return nil unless hook.env
+        return nil unless env_override = hook.env
         env = ENV.to_h
-        hook.env.not_nil!.each { |k, v| env[k] = v }
+        env_override.each { |k, v| env[k] = v }
         env
       end
 

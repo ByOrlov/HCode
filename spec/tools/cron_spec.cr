@@ -92,7 +92,7 @@ describe "Hcode::Tools::Cron.compute_next_cron_run" do
     now = Time.local(2026, 1, 1, 12, 3, 0).to_unix_ms
     nxt = Hcode::Tools::Cron.compute_next_cron_run(parsed, now)
     nxt.should_not be_nil
-    fired = Time.unix_ms(nxt.not_nil!).to_local
+    fired = Time.unix_ms(nxt || raise "nxt should not be nil").to_local
     fired.minute.should eq(5)
     fired.hour.should eq(12)
   end
@@ -103,7 +103,7 @@ describe "Hcode::Tools::Cron.compute_next_cron_run" do
     now = Time.local(2026, 1, 1, 14, 0, 0).to_unix_ms
     nxt = Hcode::Tools::Cron.compute_next_cron_run(parsed, now)
     nxt.should_not be_nil
-    fired = Time.unix_ms(nxt.not_nil!).to_local
+    fired = Time.unix_ms(nxt || raise "nxt should not be nil").to_local
     fired.hour.should eq(9)
     fired.minute.should eq(0)
     fired.day.should eq(2)
@@ -200,7 +200,7 @@ describe Hcode::Tools::CronCreate do
   end
 
   it "rejects when session cap reached" do
-    service = Hcode::Tools::Cron.service.not_nil!
+    service = Hcode::Tools::Cron.service || raise "Cron.service not initialized"
     Hcode::Tools::Cron::MAX_CRON_JOBS_PER_SESSION.times do
       service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "x"))
     end
@@ -214,7 +214,7 @@ describe Hcode::Tools::CronCreate do
   end
 
   it "honors killswitch (disabled)" do
-    service = Hcode::Tools::Cron.service.not_nil!.as(Hcode::Tools::InMemoryCronService)
+    service = Hcode::Tools::Cron.service.as(Hcode::Tools::InMemoryCronService)
     service.disable!
     tool = Hcode::Tools::CronCreate.new
     result = tool.execute(JSON.parse(%({
@@ -259,7 +259,7 @@ describe Hcode::Tools::CronList do
   end
 
   it "lists scheduled jobs with key fields" do
-    service = Hcode::Tools::Cron.service.not_nil!.as(Hcode::Tools::InMemoryCronService)
+    service = Hcode::Tools::Cron.service.as(Hcode::Tools::InMemoryCronService)
     task = service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "check the deploy"))
     # Set a next-fire time manually for deterministic output.
     service.set_next_fire_for_task(task.id, Time.utc(2026, 1, 1, 12, 5, 0).to_unix_ms)
@@ -275,7 +275,7 @@ describe Hcode::Tools::CronList do
   end
 
   it "records separated by ---" do
-    service = Hcode::Tools::Cron.service.not_nil!
+    service = Hcode::Tools::Cron.service || raise "Cron.service not initialized"
     service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "a"))
     service.add_task(Hcode::Tools::CronTaskInit.new(cron: "0 9 * * *", prompt: "b"))
     tool = Hcode::Tools::CronList.new
@@ -285,7 +285,7 @@ describe Hcode::Tools::CronList do
   end
 
   it "truncates prompt preview > 200 bytes (UTF-8 safe)" do
-    service = Hcode::Tools::Cron.service.not_nil!
+    service = Hcode::Tools::Cron.service || raise "Cron.service not initialized"
     long_prompt = "x" * 250
     service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: long_prompt))
     tool = Hcode::Tools::CronList.new
@@ -294,7 +294,7 @@ describe Hcode::Tools::CronList do
   end
 
   it "renders defensively on malformed cron stored task" do
-    service = Hcode::Tools::Cron.service.not_nil!.as(Hcode::Tools::InMemoryCronService)
+    service = Hcode::Tools::Cron.service.as(Hcode::Tools::InMemoryCronService)
     # Bypass add_task validation — directly inject malformed cron.
     task = Hcode::Tools::CronTask.new(
       id: "deadbeef",
@@ -336,7 +336,7 @@ describe Hcode::Tools::CronDelete do
   end
 
   it "deletes an existing job" do
-    service = Hcode::Tools::Cron.service.not_nil!
+    service = Hcode::Tools::Cron.service || raise "Cron.service not initialized"
     task = service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "x"))
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "#{task.id}" })))
@@ -353,7 +353,7 @@ describe Hcode::Tools::CronDelete do
   end
 
   it "accepts 26-char Crockford Base32 ULID shape" do
-    service = Hcode::Tools::Cron.service.not_nil!.as(Hcode::Tools::InMemoryCronService)
+    service = Hcode::Tools::Cron.service.as(Hcode::Tools::InMemoryCronService)
     # Inject a 26-char ULID-shaped task directly.
     task = Hcode::Tools::CronTask.new(
       id: "01HFG7K5ZPJTN4CPDQ8WQXHZQT",
@@ -438,7 +438,7 @@ describe "Hcode::Tools::LiveCronService" do
     # Extract the coalesced count value.
     match = xml.match(/coalescedCount="(\d+)"/)
     match.should_not be_nil
-    count = match.not_nil![1].to_i
+    count = (match || raise "match should not be nil")[1].to_i
     count.should be >= 2
   end
 

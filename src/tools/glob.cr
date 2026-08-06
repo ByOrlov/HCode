@@ -73,7 +73,7 @@ module Hcode
           search_root = PathAccess.resolve(base, @work_dir, PathAccess::Mode::Search,
             check_sensitive: false)
         rescue ex : PathAccess::AccessError
-          return ToolResult.error(ex.message.not_nil!)
+          return ToolResult.error(ex.message || "access error")
         end
         return ToolResult.error("#{base} does not exist") unless File.exists?(search_root)
         return ToolResult.error("#{base} is not a directory") unless File.directory?(search_root)

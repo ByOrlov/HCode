@@ -23,26 +23,26 @@ describe Hcode::TUI::Fuzzy do
     it "returns matched positions in ascending order" do
       res = Hcode::TUI::Fuzzy.match("g45", "glm-4.5")
       res.should_not be_nil
-      res = res.not_nil!
+      res = res || raise "res should not be nil"
       res.positions.should eq([0, 4, 6])
       res.score.should be > 0
     end
 
     it "scores a prefix/word-boundary match higher than a scattered one" do
-      prefix = Hcode::TUI::Fuzzy.match("glm", "glm-4.5").not_nil!.score
-      scattered = Hcode::TUI::Fuzzy.match("glm", "x-g-l-m").not_nil!.score
+      prefix = (Hcode::TUI::Fuzzy.match("glm", "glm-4.5") || raise "match failed").score
+      scattered = (Hcode::TUI::Fuzzy.match("glm", "x-g-l-m") || raise "match failed").score
       prefix.should be > scattered
     end
 
     it "scores consecutive matches higher than gapped ones" do
-      tight = Hcode::TUI::Fuzzy.match("air", "glm-4.5-air").not_nil!.score
-      gapped = Hcode::TUI::Fuzzy.match("air", "a___i___r").not_nil!.score
+      tight = (Hcode::TUI::Fuzzy.match("air", "glm-4.5-air") || raise "match failed").score
+      gapped = (Hcode::TUI::Fuzzy.match("air", "a___i___r") || raise "match failed").score
       tight.should be > gapped
     end
 
     it "rewards camelCase boundary matches" do
-      camel = Hcode::TUI::Fuzzy.match("gf", "glmFour").not_nil!.score
-      plain = Hcode::TUI::Fuzzy.match("gf", "glmfour").not_nil!.score
+      camel = (Hcode::TUI::Fuzzy.match("gf", "glmFour") || raise "match failed").score
+      plain = (Hcode::TUI::Fuzzy.match("gf", "glmfour") || raise "match failed").score
       camel.should be > plain
     end
 

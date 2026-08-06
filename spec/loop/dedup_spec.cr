@@ -59,7 +59,7 @@ describe Hcode::Loop::DedupTracker do
 
       history = tracker.@call_history["Edit"]?
       history.should_not be_nil
-      history.not_nil!.size.should eq(cap)
+      (history || raise "history should not be nil").size.should eq(cap)
     end
 
     it "treats the same canonical args as the same call regardless of size" do

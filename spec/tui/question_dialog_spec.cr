@@ -26,7 +26,7 @@ end
 private def expect_answers(ch) : Hash(String, String)
   received = ch.receive
   raise "expected non-nil answers" unless received
-  received.not_nil!
+  received.as(Hash(String, String))
 end
 
 describe Hcode::TUI::QuestionDialog do

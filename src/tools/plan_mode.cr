@@ -218,12 +218,12 @@ module Hcode
         case result.try(&.decision) || PlanReviewDecision::Dismissed
         in .approve?
           service.exit
-          res = result.not_nil!
+          res = result || raise "result should not be nil for approve"
           sel = options.try { |opts| opts.find { |o| o.label == res.selected_label } }
           prefix = sel ? "Selected approach: #{sel.label}\nExecute ONLY the selected approach. Do not execute any unselected alternatives.\n\n" : ""
           ToolResult.success(prefix + format_user_approved(plan, path))
         in .revise?
-          fb = result.not_nil!.feedback
+          fb = (result || raise "result should not be nil for revise").feedback
           msg = fb.empty? ? "User requested revisions. Plan mode remains active." : "User rejected the plan. Feedback:\n\n#{fb}"
           ToolResult.success(msg)
         in .reject_and_exit?
@@ -463,9 +463,10 @@ module Hcode
         raise "Already in plan mode" if @active
         @plan_id = id || generate_id
         @plan_path ||= File.join(@session_dir, "agents", @agent_id, "plans", "#{@plan_id}.md")
-        Dir.mkdir_p(File.dirname(@plan_path.not_nil!))
+        plan_path = @plan_path || raise "plan_path should not be nil"
+        Dir.mkdir_p(File.dirname(plan_path))
         @active = true
-        File.write(@plan_path.not_nil!, "") if create_file && !File.exists?(@plan_path.not_nil!)
+        File.write(plan_path, "") if create_file && !File.exists?(plan_path)
       end
 
       def cancel(id : String? = nil) : Nil

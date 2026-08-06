@@ -185,7 +185,7 @@ module Hcode
           on_event.call(Event.turn_end(cancelled))
         end
 
-        return_value.not_nil!
+        return_value || raise "return_value should not be nil after run_turn"
       end
 
       # Drives an active goal as a sequence of ordinary turns — the autonomous

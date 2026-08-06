@@ -190,7 +190,7 @@ describe Hcode::Session::Lifecycle do
       store = lc.create("/my/repo", "test title")
 
       File.exists?(File.join(store.session_dir, "state.json")).should be_true
-      meta = store.read_state.not_nil!
+      meta = store.read_state || raise "read_state should not be nil"
       meta.id.should_not be_empty
       meta.cwd.should eq("/my/repo")
       meta.title.should eq("test title")
@@ -210,7 +210,7 @@ describe Hcode::Session::Lifecycle do
       forked = lc.fork(src, "/repo")
       forked.session_dir.should_not eq(src.session_dir)
       File.exists?(File.join(forked.session_dir, "wire.jsonl")).should be_true
-      forked.read_state.not_nil!.title.should eq("Fork of original")
+      forked.read_state.try(&.title).should eq("Fork of original")
 
       # Replaying the fork reconstructs the original prompt.
       mem = Hcode::Context::Memory.new
@@ -226,7 +226,7 @@ describe Hcode::Session::Lifecycle do
     begin
       lc = Hcode::Session::Lifecycle.new(home)
       store = lc.create("/repo")
-      id = store.read_state.not_nil!.id
+      id = store.read_state.try(&.id) || raise "read_state should not be nil"
 
       lc.archive(id)
       lc.index.list.size.should eq(0)
@@ -244,10 +244,10 @@ describe Hcode::Session::Lifecycle do
     begin
       lc = Hcode::Session::Lifecycle.new(home)
       store = lc.create("/repo", "old")
-      id = store.read_state.not_nil!.id
+      id = store.read_state.try(&.id) || raise "read_state should not be nil"
 
       lc.rename(id, "new title")
-      entry = lc.index.get(id).not_nil!
+      entry = lc.index.get(id) || raise "index.get should not be nil"
       entry.title.should eq("new title")
     ensure
       FileUtils.rm_rf(home)
@@ -261,7 +261,7 @@ describe Hcode::Session::Store do
     begin
       store = Hcode::Session::Store.new_workspace_session(home, "/repo", "ws")
       File.exists?(File.join(store.session_dir, "state.json")).should be_true
-      meta = store.read_state.not_nil!
+      meta = store.read_state || raise "read_state should not be nil"
       meta.cwd.should eq("/repo")
       meta.workspace_id.should eq(Hcode::Session::Index.workspace_id("/repo"))
     ensure
@@ -276,7 +276,7 @@ describe Hcode::Session::Store do
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "meta.json"), %({"id":"legacy01","created_at":"2026-01-01T00:00:00Z"}))
       store = Hcode::Session::Store.new(dir)
-      meta = store.read_state.not_nil!
+      meta = store.read_state || raise "read_state should not be nil"
       meta.id.should eq("legacy01")
     ensure
       FileUtils.rm_rf(home)

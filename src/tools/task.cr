@@ -563,7 +563,7 @@ module Hcode
         limit_raw = input["limit"]?.try(&.as_i?) || 20
         limit = limit_raw.clamp(1, 100)
 
-        tasks = service.not_nil!.list(active_only, limit)
+        tasks = service.list(active_only, limit)
         ToolResult.success(format_task_list(tasks, active_only))
       end
 
@@ -654,7 +654,7 @@ module Hcode
         block = input["block"]?.try(&.as_bool?) || false
         timeout_s = input["timeout"]?.try(&.as_i?) || 30
 
-        svc = service.not_nil!
+        svc = service
         info = svc.get_task(task_id)
         return ToolResult.error("Task not found: #{task_id}") if info.nil?
 
@@ -813,7 +813,7 @@ module Hcode
         task_id = input["task_id"]?.try(&.to_s) || ""
         return ToolResult.error("`task_id` is required.") if task_id.empty?
 
-        svc = service.not_nil!
+        svc = service
         info = svc.get_task(task_id)
         return ToolResult.error("Task not found: #{task_id}") if info.nil?
 

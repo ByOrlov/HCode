@@ -262,7 +262,7 @@ module Hcode
         raise GoalError.new("goal.not_active") unless current.status.active?
         reason = input.try(&.reason)
         @goal = transition(current, GoalStatus::Paused, terminal_reason: reason)
-        @goal.not_nil!
+        @goal || raise "goal transition failed"
       end
 
       def resume_goal(input : ResumeGoalInput? = nil, actor : String = "model") : GoalSnapshot
@@ -272,7 +272,7 @@ module Hcode
           raise GoalError.new("goal.not_paused_or_blocked")
         end
         @goal = transition(current, GoalStatus::Active, terminal_reason: nil)
-        @goal.not_nil!
+        @goal || raise "goal transition failed"
       end
 
       def cancel_goal(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot
@@ -293,7 +293,7 @@ module Hcode
           wall_clock_budget_ms: input.budget_limits.wall_clock_budget_ms || current.budget_limits.wall_clock_budget_ms,
         )
         @goal = rebuild(current, budget_limits: merged)
-        @goal.not_nil!
+        @goal || raise "goal rebuild failed"
       end
 
       def mark_complete(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot?

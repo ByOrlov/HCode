@@ -60,8 +60,10 @@ describe "Hcode::Tools.sniff_image_dimensions" do
     header[23] = 0x58
     dims = Hcode::Tools.sniff_image_dimensions(header)
     dims.should_not be_nil
-    dims.not_nil!.width.should eq(800)
-    dims.not_nil!.height.should eq(600)
+    if dims
+      dims.width.should eq(800)
+      dims.height.should eq(600)
+    end
   end
 
   it "reads GIF dimensions" do
@@ -72,8 +74,10 @@ describe "Hcode::Tools.sniff_image_dimensions" do
     header[8] = 0x58
     dims = Hcode::Tools.sniff_image_dimensions(header)
     dims.should_not be_nil
-    dims.not_nil!.width.should eq(0x20)
-    dims.not_nil!.height.should eq(0x58)
+    if dims
+      dims.width.should eq(0x20)
+      dims.height.should eq(0x58)
+    end
   end
 end
 

@@ -336,7 +336,7 @@ describe Hcode::Loop::Agent do
       # auto-approval (step 4).
       exit_result = tool_results.find(&.includes?("Exited plan mode"))
       exit_result.should_not be_nil
-      exit_result.not_nil!.includes?("auto-approved").should be_true
+      (exit_result || raise "exit_result should not be nil").includes?("auto-approved").should be_true
 
       # The forbidden file was never created.
       File.exists?("/tmp/hcode-plan-block.txt").should be_false
@@ -392,8 +392,8 @@ describe Hcode::Loop::Agent do
     turn_ends.size.should eq(1)
 
     # turn_end comes after the Exception event in the stream.
-    exc_idx = events.index(&.type.exception?).not_nil!
-    te_idx = events.index(&.type.turn_end?).not_nil!
+    exc_idx = events.index!(&.type.exception?)
+    te_idx = events.index!(&.type.turn_end?)
     te_idx.should be > exc_idx
 
     # The agent is no longer busy after the turn.
