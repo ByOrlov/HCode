@@ -109,6 +109,8 @@ en:
     goal: "Show goal status"
     language: "Switch interface language"
     upgrade: "Update hcode to the latest release"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "help"
     subtitle: "· Esc / Enter / q to cancel · ↑↓ scroll"
@@ -234,6 +236,14 @@ en:
     help_commands: "/help for all commands"
     usage_queue: "/usage for tokens · /queue clear"
     ctrl_exit: "Ctrl+C twice to exit"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "Fork of %{base}"
     forked: "Forked session"

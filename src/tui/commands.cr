@@ -73,6 +73,8 @@ module Hcode
         CommandInfo.new("/memory", "Show memory profile of live collections", description_key: "memory"),
         CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]", "goal"),
         CommandInfo.new("/language", "Switch interface language", "[en|ru|es|zh|ja|pt|hi|fa|uk|be]", "language"),
+        CommandInfo.new("/sounds", "Toggle sound notifications", "on|off", "sounds"),
+        CommandInfo.new("/volume", "Set sound volume", "0-100", "volume"),
         CommandInfo.new("/upgrade", "Update hcode to the latest release", description_key: "upgrade"),
       ]
 

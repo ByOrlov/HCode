@@ -108,6 +108,8 @@ zh:
     memory: "显示活跃集合的内存占用"
     goal: "显示目标状态"
     language: "切换界面语言"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "帮助"
     subtitle: "· Esc / Enter / q 取消 · ↑↓ 滚动"
@@ -225,6 +227,14 @@ zh:
     help_commands: "/help 查看所有命令"
     usage_queue: "/usage 查看 tokens · /queue clear"
     ctrl_exit: "Ctrl+C 两次退出"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "派生自 %{base}"
     forked: "已派生会话"

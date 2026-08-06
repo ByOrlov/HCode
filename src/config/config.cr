@@ -171,6 +171,14 @@ module Hcode
         if lang = ENV["HCODE_LANG"]?
           config.language = lang
         end
+        # HCODE_SOUND=1 forces sound notifications on at startup (for demos /
+        # testing) without editing config.json.
+        if ENV["HCODE_SOUND"]? == "1"
+          config.notifications.sound_enabled = true
+        end
+        if vol = ENV["HCODE_VOLUME"]?.try(&.to_i?)
+          config.notifications.sound_volume = vol.clamp(0, 100)
+        end
         if proxy = ENV["HTTP_PROXY"]? || ENV["HTTPS_PROXY"]? || ENV["ALL_PROXY"]?
           config.proxy = proxy
         end
@@ -273,6 +281,7 @@ module Hcode
           config.notifications.condition = notif["condition"]?.try(&.as_s?) || config.notifications.condition
           if sound = notif["sound"]?.try(&.as_h?)
             config.notifications.sound_enabled = sound["enabled"]?.try(&.as_bool?) || config.notifications.sound_enabled?
+            config.notifications.sound_volume = sound["volume"]?.try(&.as_i?) || config.notifications.sound_volume
             config.notifications.sound_done = sound["done"]?.try(&.as_s?) || ""
             config.notifications.sound_input_required = sound["input_required"]?.try(&.as_s?) || ""
             config.notifications.sound_working = sound["working"]?.try(&.as_s?) || ""
@@ -453,6 +462,7 @@ module Hcode
                 json.field("sound") do
                   json.object do
                     json.field("enabled", @notifications.sound_enabled?)
+                    json.field("volume", @notifications.sound_volume)
                     json.field("done", @notifications.sound_done)
                     json.field("input_required", @notifications.sound_input_required)
                     json.field("working", @notifications.sound_working)

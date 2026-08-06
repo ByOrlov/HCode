@@ -109,6 +109,8 @@ ru:
     goal: "Показать статус цели"
     language: "Сменить язык интерфейса"
     upgrade: "Обновить hcode до последнего релиза"
+    sounds: "Включить/выключить звуковые уведомления"
+    volume: "Установить громкость звука"
   help:
     title: "справка"
     subtitle: "· Esc / Enter / q — закрыть · ↑↓ — прокрутка"
@@ -234,6 +236,14 @@ ru:
     help_commands: "/help для всех команд"
     usage_queue: "/usage для токенов · /queue clear"
     ctrl_exit: "Ctrl+C дважды для выхода"
+    sounds_on: "Звуковые уведомления: включены"
+    sounds_off: "Звуковые уведомления: выключены"
+    sounds_on_label: "вкл"
+    sounds_off_label: "выкл"
+    sounds_status: "Звук: %{state} (громкость: %{volume})"
+    sounds_usage: "Использование: /sounds on|off"
+    volume_set: "Громкость звука: %{value}"
+    volume_invalid: "Громкость должна быть 0-100. Текущая: %{current}"
   session:
     fork_of: "Ответвление от %{base}"
     forked: "Ответвлённая сессия"

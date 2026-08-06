@@ -108,6 +108,8 @@ hi:
     memory: "लाइव संग्रहों की मेमोरी प्रोफ़ाइल दिखाएँ"
     goal: "लक्ष्य स्थिति दिखाएँ"
     language: "इंटरफ़ेस भाषा बदलें"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "सहायता"
     subtitle: "· Esc / Enter / q — बंद करें · ↑↓ स्क्रॉल"
@@ -225,6 +227,14 @@ hi:
     help_commands: "सभी कमांड के लिए /help"
     usage_queue: "टोकन के लिए /usage · /queue clear"
     ctrl_exit: "बाहर निकलने के लिए Ctrl+C दो बार"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "%{base} की शाखा"
     forked: "शाखित सत्र"

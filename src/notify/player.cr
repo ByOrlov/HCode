@@ -1,78 +1,85 @@
 module Hcode
   module Notify
-    # Sound playback channel. No mature pure-Crystal audio shard exists, so this
-    # is a thin cross-platform dispatcher that shells out to the OS-native
-    # player. The first available command wins (probed once at init, cached).
-    # Playback runs in a detached fiber — a stuck/missing player must never
-    # block the agent loop.
+    # C bindings for the miniaudio bridge (vendor/miniaudio/miniaudio_bridge.c).
+    # Linked statically into the hcode binary — see Rakefile.
+    lib MiniAudio
+      fun ma_notify_init : Int32
+      fun ma_notify_is_ready : Int32
+      fun ma_notify_play(data : UInt8*, size : UInt64, volume : Float32)
+      fun ma_notify_shutdown
+    end
+
+    # In-process sound playback via miniaudio. The notification OGG is embedded
+    # directly in the binary (compile-time `read_file`), decoded at runtime by
+    # miniaudio's built-in Vorbis decoder, and played through the OS-native
+    # audio backend (CoreAudio / PulseAudio / ALSA / WASAPI) — no external
+    # programs or system libraries beyond what miniaudio dlopens itself.
+    #
+    # The audio engine is initialised lazily on the first `play` call. If init
+    # fails (headless server, no audio device) every subsequent play is a
+    # silent no-op so the agent loop is never affected.
     class Player
-      @cmd : {String, Array(String)}?
+      # Embedded default notification sound — Ogg Vorbis, mono 44.1 kHz, ~4.7 KB.
+      # `read_file` embeds the raw bytes at compile time; the String is just a
+      # byte buffer that miniaudio decodes.
+      DEFAULT_SOUND = {{ read_file("#{__DIR__}/../../sounds/notification.ogg") }}
+
+      property? enabled : Bool = true
+      property volume : Int32 = 70 # 0–100
+
+      @done_path : String = ""
+      @alert_path : String = ""
+      @working_path : String = ""
+      @init_failed : Bool = false
 
       def initialize(@done_path : String = "", @alert_path : String = "",
                      @working_path : String = "",
-                     probe : Bool = true,
-                     os : String = Player.detect_os)
-        @cmd = probe ? Player.resolve_player(os) : nil
+                     @enabled : Bool = true, @volume : Int32 = 70)
       end
 
       def play_for(event : String) : Nil
+        return unless @enabled
+        return if @init_failed
+
         path = case event
                when "turn_done"      then @done_path
                when "input_required" then @alert_path
                when "turn_started"   then @working_path
                else                       ""
                end
-        play(path) unless path.empty?
-      end
 
-      def play(path : String) : Nil
-        cmd = @cmd || return
-        return unless File.exists?(path)
-        spawn do
-          Process.run(cmd[0], args: cmd[1] + [path],
-            output: Process::Redirect::Close, error: Process::Redirect::Close)
-        end
-      end
-
-      # Probe the OS-native player. The first available command wins;
-      # `ffplay` is the final cross-platform fallback.
-      def self.resolve_player(os : String = Player.detect_os) : {String, Array(String)}?
-        Player.candidates_for(os).each do |cmd|
-          return cmd if command_available?(cmd[0])
-        end
-        nil
-      end
-
-      def self.command_available?(name : String) : Bool
-        !Process.find_executable(name).nil?
-      end
-
-      # Per-OS player candidate list, most-preferred first.
-      def self.candidates_for(os : String) : Array({String, Array(String)})
-        case os
-        when "macos"
-          [{"afplay", [] of String}, {"ffplay", ["-nodisp", "-autoexit", "-loglevel", "quiet"]}]
-        when "windows"
-          [{"powershell", ["-c"]}, {"ffplay", ["-nodisp", "-autoexit", "-loglevel", "quiet"]}]
+        if path.empty?
+          # No custom file → use the embedded default for user-facing events.
+          case event
+          when "turn_done", "input_required"
+            play_data(DEFAULT_SOUND)
+          end
         else
-          [
-            {"pw-play", [] of String},
-            {"paplay", [] of String},
-            {"aplay", [] of String},
-            {"ffplay", ["-nodisp", "-autoexit", "-loglevel", "quiet"]},
-          ]
+          play_file(path)
         end
       end
 
-      # Runtime OS detection via uname. Falls back to "unix".
-      def self.detect_os : String
-        {% if flag?(:darwin) %}
-          "macos"
-        {% elsif flag?(:win32) %}
-          "windows"
-        {% else %}
-          "unix"
-        {% end %}
+      private def play_data(data : String) : Nil
+        return if data.bytesize == 0
+        init_engine
+        vol = @volume.clamp(0, 100).to_f / 100.0
+        MiniAudio.ma_notify_play(data.to_unsafe, data.bytesize.to_u64, vol.to_f32)
+      end
+
+      private def play_file(path : String) : Nil
+        return unless File.exists?(path)
+        data = File.read(path)
+        play_data(data)
+      end
+
+      # Initialise the miniaudio engine on first play.  If init fails (no audio
+      # device), set `@init_failed` so we never retry — keeps the agent loop
+      # quiet on headless machines.
+      private def init_engine : Nil
+        return if MiniAudio.ma_notify_is_ready != 0
+        if MiniAudio.ma_notify_init != 0
+          @init_failed = true
+        end
       end
     end
   end

@@ -108,6 +108,8 @@ ja:
     memory: "ライブコレクションのメモリプロファイルを表示"
     goal: "ゴールのステータスを表示"
     language: "インターフェース言語を切替"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "ヘルプ"
     subtitle: "· Esc / Enter / q でキャンセル · ↑↓ スクロール"
@@ -225,6 +227,14 @@ ja:
     help_commands: "/help で全コマンド"
     usage_queue: "/usage でトークン · /queue clear"
     ctrl_exit: "Ctrl+C を 2 回で終了"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "%{base} のフォーク"
     forked: "セッションをフォークしました"

@@ -19,7 +19,7 @@ describe Hcode::Notify::Dispatcher do
     end
 
     it "fires the player for turn_done and input_required" do
-      player = Hcode::Notify::Player.new(probe: false)
+      player = Hcode::Notify::Player.new(enabled: false)
       config = Hcode::Notify::Config.default
       dispatcher = Hcode::Notify::Dispatcher.new(config, nil, player)
 

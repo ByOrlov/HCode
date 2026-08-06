@@ -698,6 +698,7 @@ module Hcode
                                      plugin_manager : Plugin::Manager = Plugin::Manager.new(home))
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
+      app.app_config = config
       app.model = agent.provider.model_name
       app.provider_name = config.provider_name.to_s
       app.permission_mode = config.permission_mode

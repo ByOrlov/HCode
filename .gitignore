@@ -10,3 +10,7 @@ kimi-code/
 tmp/
 
 *.deb
+
+# miniaudio build artifacts (source files are tracked, objects are not)
+vendor/miniaudio/*.o
+vendor/miniaudio/*.a

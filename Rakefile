@@ -6,9 +6,34 @@ def hcode_build_version
   tag.empty? ? "0.0.0-dev" : tag
 end
 
+MINIAUDIO_DIR = File.expand_path("vendor/miniaudio", __dir__)
+MINIAUDIO_LIB = File.join(MINIAUDIO_DIR, "libminiaudio_bridge.a")
+
+# Platform-specific linker flags for miniaudio. On Linux it dlopens the audio
+# backend (PulseAudio/ALSA) at runtime, so only -ldl/-lpthread/-lm are needed.
+def miniaudio_link_flags
+  case RUBY_PLATFORM
+  when /darwin/
+    "-framework CoreAudio -framework AudioToolbox -framework CoreFoundation"
+  else
+    "-ldl -lpthread -lm"
+  end
+end
+
+def build_miniaudio_bridge(release: false)
+  cflags = release ? "-O2" : "-O0 -g"
+  sh "cc -c #{cflags} -I#{MINIAUDIO_DIR} " \
+     "#{File.join(MINIAUDIO_DIR, "miniaudio_bridge.c")} " \
+     "-o #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
+  sh "ar rcs #{MINIAUDIO_LIB} #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
+end
+
 def build_hcode(output = "hcode", release: false)
+  build_miniaudio_bridge(release: release)
+  link_flags = "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{miniaudio_link_flags}"
   flags = ["--warnings none", "--no-color"]
   flags << "--release" if release
+  flags << "--link-flags \"#{link_flags}\""
   sh "HCODE_VERSION=#{hcode_build_version} crystal build src/hcode.cr -o #{output} #{flags.join(' ')}"
 end
 
@@ -40,7 +65,9 @@ task :run => "run:default"
 
 desc "Run the test suite"
 task :spec do
-  sh "crystal spec --warnings none --no-color"
+  build_miniaudio_bridge
+  link_flags = "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{miniaudio_link_flags}"
+  sh "crystal spec --warnings none --no-color --link-flags \"#{link_flags}\""
 end
 
 namespace :mock do
@@ -62,6 +89,11 @@ namespace :mock do
   desc "Run TUI with mock provider — markdown rendering demo"
   task :markdown => :build do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown ./hcode --tui-prompt 'mock' --yolo"
+  end
+
+  desc "Run TUI with mock provider — sound notification on turn completion"
+  task :sound => :build do
+    sh "HCODE_PROVIDER=mock HCODE_SOUND=1 ./hcode --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — sudo terminal exec demo (requires bin/mocksudo on PATH)"
@@ -118,4 +150,6 @@ end
 desc "Remove build artifacts"
 task :clean do
   rm_f "hcode"
+  rm_f File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")
+  rm_f MINIAUDIO_LIB
 end

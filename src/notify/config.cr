@@ -7,6 +7,7 @@ module Hcode
       property condition : String = "unfocused" # "unfocused" | "always" (terminal channel only)
 
       property? sound_enabled : Bool = false
+      property sound_volume : Int32 = 70 # 0–100
       property sound_done : String = ""
       property sound_input_required : String = ""
       property sound_working : String = ""

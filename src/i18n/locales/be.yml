@@ -108,6 +108,8 @@ be:
     memory: "Паказаць профіль памяці жывых калекцый"
     goal: "Паказаць статус мэты"
     language: "Змяніць мову інтэрфейсу"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "даведка"
     subtitle: "· Esc / Enter / q — закрыць · ↑↓ — пракрутка"
@@ -225,6 +227,14 @@ be:
     help_commands: "/help для ўсіх каманд"
     usage_queue: "/usage для токенаў · /queue clear"
     ctrl_exit: "Ctrl+C двойчы для выхаду"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "Адгалінаванне ад %{base}"
     forked: "Адгалінаваны сеанс"

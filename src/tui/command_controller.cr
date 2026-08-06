@@ -481,6 +481,61 @@ module Hcode
       private def cmd_memory : Nil
         @messages << Message.new("system", ProfiledMemory.format_report)
       end
+
+      private def cmd_sounds(args : String) : Nil
+        case args.strip.downcase
+        when "on"
+          if cfg = @app_config
+            cfg.notifications.sound_enabled = true
+            if disp = @notify_dispatcher
+              unless disp.player
+                disp.player = Notify::Player.new(
+                  done_path: cfg.notifications.sound_done,
+                  alert_path: cfg.notifications.sound_input_required,
+                  working_path: cfg.notifications.sound_working,
+                  volume: cfg.notifications.sound_volume,
+                )
+              end
+            end
+            cfg.save
+          end
+          @messages << Message.new("system", Hcode.t("ui.sounds_on"))
+        when "off"
+          if cfg = @app_config
+            cfg.notifications.sound_enabled = false
+            if disp = @notify_dispatcher
+              disp.player = nil
+            end
+            cfg.save
+          end
+          @messages << Message.new("system", Hcode.t("ui.sounds_off"))
+        when ""
+          enabled = @app_config.try(&.notifications.sound_enabled?) || false
+          volume = @app_config.try(&.notifications.sound_volume) || 70
+          state = Hcode.t(enabled ? "ui.sounds_on_label" : "ui.sounds_off_label")
+          @messages << Message.new("system", Hcode.t("ui.sounds_status", state: state, volume: volume))
+        else
+          @messages << Message.new("error", Hcode.t("ui.sounds_usage"))
+        end
+      end
+
+      private def cmd_volume(args : String) : Nil
+        val = args.strip.to_i?
+        if val.nil? || val < 0 || val > 100
+          current = @app_config.try(&.notifications.sound_volume) || 70
+          @messages << Message.new("error", Hcode.t("ui.volume_invalid", current: current))
+          return
+        end
+        if cfg = @app_config
+          cfg.notifications.sound_volume = val
+          # Update the live player if it currently exists.
+          if player = @notify_dispatcher.try(&.player)
+            player.volume = val
+          end
+          cfg.save
+        end
+        @messages << Message.new("system", Hcode.t("ui.volume_set", value: val))
+      end
     end
   end
 end

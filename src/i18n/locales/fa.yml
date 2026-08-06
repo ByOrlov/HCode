@@ -108,6 +108,8 @@ fa:
     memory: "نمایش پروفایل حافظه مجموعه‌های فعال"
     goal: "نمایش وضعیت هدف"
     language: "تغییر زبان رابط"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "راهنما"
     subtitle: "· Esc / Enter / q برای بستن · ↑↓ برای پیمایش"
@@ -225,6 +227,14 @@ fa:
     help_commands: "/help برای همه دستورات"
     usage_queue: "/usage برای توکن · /queue clear"
     ctrl_exit: "Ctrl+C دو بار برای خروج"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "انشعاب از %{base}"
     forked: "نشست منشعب"

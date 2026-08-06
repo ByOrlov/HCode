@@ -108,6 +108,8 @@ es:
     memory: "Mostrar el perfil de memoria de las colecciones activas"
     goal: "Mostrar el estado del objetivo"
     language: "Cambiar el idioma de la interfaz"
+    sounds: "Toggle sound notifications"
+    volume: "Set sound volume"
   help:
     title: "ayuda"
     subtitle: "· Esc / Enter / q para cancelar · ↑↓ desplazar"
@@ -225,6 +227,14 @@ es:
     help_commands: "/help para todos los comandos"
     usage_queue: "/usage para tokens · /queue clear"
     ctrl_exit: "Ctrl+C dos veces para salir"
+    sounds_on: "Sound notifications: on"
+    sounds_off: "Sound notifications: off"
+    sounds_on_label: "on"
+    sounds_off_label: "off"
+    sounds_status: "Sound: %{state} (volume: %{volume})"
+    sounds_usage: "Usage: /sounds on|off"
+    volume_set: "Sound volume: %{value}"
+    volume_invalid: "Volume must be 0-100. Current: %{current}"
   session:
     fork_of: "Bifurcación de %{base}"
     forked: "Sesión bifurcada"

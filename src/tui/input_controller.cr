@@ -491,6 +491,10 @@ module Hcode
           cmd_permission(args)
         when "/sudo"
           cmd_sudo(args)
+        when "/sounds"
+          cmd_sounds(args)
+        when "/volume"
+          cmd_volume(args)
         when "/effort"
           cmd_effort(args)
         when "/plan"

@@ -8,7 +8,17 @@ module Hcode
     class Dispatcher
       @config : Notify::Config
       @terminal : TerminalChannel?
-      @player : Player?
+      # Player is mutable at runtime: `/sounds on` sets it, `/sounds off` nils
+      # it out. When nil, the whole sound channel is inert — no Player object
+      # exists in memory.
+      getter player : Player?
+
+      # Replace the player at runtime. Pass nil to fully release the player
+      # (used by `/sounds off`).
+      def player=(p : Player?) : Player?
+        @player = p
+      end
+
       @webhook : Webhook?
 
       def initialize(@config : Notify::Config = Notify::Config.default,
@@ -32,6 +42,7 @@ module Hcode
             done_path: config.sound_done,
             alert_path: config.sound_input_required,
             working_path: config.sound_working,
+            volume: config.sound_volume,
           )
         end
         if config.enabled? && config.webhook_enabled? && !config.webhook_url.empty?

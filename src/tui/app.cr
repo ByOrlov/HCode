@@ -144,6 +144,11 @@ module Hcode
       # real transition out to the dispatcher. nil when notifications are
       # disabled (no dispatcher wired up) → transitions become no-ops.
       @status_tracker : Notify::StatusTracker?
+      # Direct reference to the notification dispatcher so slash commands can
+      # toggle the sound player at runtime without rebuilding the tracker.
+      property notify_dispatcher : Notify::Dispatcher? = nil
+      # Full config for persisting sound/volume changes via /sounds and /volume.
+      property app_config : Hcode::Config::Config? = nil
       @markdown : Markdown
       @provider_list : SelectList
       @model_list : SelectList
@@ -311,6 +316,7 @@ module Hcode
         # lives on the App so UI transitions (start_turn, turn_end, approval)
         # can drive it directly.
         if disp = dispatcher
+          @notify_dispatcher = disp
           @status_tracker = Notify::StatusTracker.new { |t| disp.on_transition(t) }
         end
       end
