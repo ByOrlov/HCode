@@ -273,16 +273,16 @@ module Hcode
         total_natural_width = natural_widths.sum + border_overhead
 
         if total_natural_width <= width
-          col_widths = natural_widths.map_with_index { |w, i| {w, min_column_widths[i]}.max }
+          col_widths = natural_widths.map_with_index { |w, idx| {w, min_column_widths[idx]}.max }
         else
           total_grow_potential = 0
-          natural_widths.each_with_index do |w, i|
-            total_grow_potential += {0, w - min_column_widths[i]}.max
+          natural_widths.each_with_index do |w, idx|
+            total_grow_potential += {0, w - min_column_widths[idx]}.max
           end
           extra_width = {0, available_for_cells - min_cells_width}.max
           col_widths = Array.new(num_cols, 0)
-          natural_widths.each_with_index do |nat_w, i|
-            min_w = min_column_widths[i]
+          natural_widths.each_with_index do |nat_w, idx|
+            min_w = min_column_widths[idx]
             min_delta = {0, nat_w - min_w}.max
             grow = total_grow_potential > 0 ? (min_delta * extra_width // total_grow_potential) : 0
             col_widths[i] = min_w + grow
