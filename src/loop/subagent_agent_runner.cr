@@ -152,7 +152,7 @@ module Hcode
         ticks = 0
 
         begin
-          result = agent.run_turn(prompt, @system_prompt) do |event|
+          agent.run_turn(prompt, @system_prompt) do |event|
             case event.type
             when .tool_call_start?, .tool_call_delta?, .step_begin?
               ticks += 1
@@ -215,7 +215,7 @@ module Hcode
         entry.running = true
         spawn do
           begin
-            result = entry.agent.run_turn(prompt, @system_prompt) { |_| }
+            entry.agent.run_turn(prompt, @system_prompt) { |_| }
             summary = latest_assistant_text(entry.context)
             info.status = Tools::AgentTaskStatus::Completed
             info.ended_at = Time.utc.to_unix_ms

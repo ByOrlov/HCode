@@ -224,7 +224,6 @@ module Hcode
           row_prompt = first ? prompt : "  "
           is_last_chunk = (ci == chunks.size - 1)
           has_cursor = false
-          local = 0
           if is_last_chunk
             has_cursor = cursor_col >= chunk_start
           else

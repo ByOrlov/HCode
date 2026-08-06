@@ -234,7 +234,6 @@ module Hcode
         tool_calls = Hash(Int32, {String, String, String}).new
         finish_reason = "end_turn"
         usage = Usage.new
-        model_name = @model
 
         stream_response(request, aborted?) do |chunk|
           chunk.choices.each do |choice|

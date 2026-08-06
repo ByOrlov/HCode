@@ -285,7 +285,7 @@ module Hcode
             min_w = min_column_widths[idx]
             min_delta = {0, nat_w - min_w}.max
             grow = total_grow_potential > 0 ? (min_delta * extra_width // total_grow_potential) : 0
-            col_widths[i] = min_w + grow
+            col_widths[idx] = min_w + grow
           end
 
           remaining = available_for_cells - col_widths.sum
@@ -733,8 +733,6 @@ module Hcode
                      when "json"                       then "json"
                      else                                   return "#{ANSI.color(@theme.colors.code, nil)}  #{line}#{ANSI.reset}"
                      end
-
-        result = line
 
         comment_re = COMMENT_RE[normalized]?
         kws = KEYWORDS[normalized]?

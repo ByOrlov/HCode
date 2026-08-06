@@ -36,8 +36,6 @@ module Hcode
       end
 
       private def self.try_resolve_latest_release_tag(owner : String, repo : String) : String?
-        url = "https://github.com/#{owner}/#{repo}/releases/latest"
-
         client = HTTP::Client.new(URI.parse("https://github.com"))
         client.connect_timeout = 15.seconds
         client.read_timeout = 15.seconds

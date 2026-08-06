@@ -771,7 +771,6 @@ module Hcode
         dc = ANSI.color(c.dim, nil)
         sc = ANSI.color(c.success, nil)
         ec = ANSI.color(c.error, nil)
-        wc = ANSI.color(c.warning, nil)
         tc = ANSI.color(c.text, nil)
         mc = ANSI.color(c.muted, nil)
         r = ANSI.reset
@@ -791,7 +790,6 @@ module Hcode
 
         description = extract_key_argument(tool_name, msg.tool_args) || tool_name
         running = members.any?(&.running?)
-        completed = members.count(&.completed?)
         failed = members.count(&.failed?)
 
         status_label =

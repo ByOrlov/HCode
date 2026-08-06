@@ -641,7 +641,6 @@ module Hcode
         return ToolResult.error("Goal service is not initialized.") if service.nil?
 
         current = service.get_goal
-        goal_was_active = current && current.status.active?
 
         case status
         when .active?

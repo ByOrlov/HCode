@@ -290,7 +290,7 @@ module Hcode
 
         @terminal.restore!
 
-        status = Process.run("#{editor_cmd} #{tmp_file}", shell: true)
+        Process.run("#{editor_cmd} #{tmp_file}", shell: true)
 
         content = File.exists?(tmp_file) ? File.read(tmp_file) : ""
         File.delete(tmp_file) rescue nil
@@ -923,7 +923,6 @@ module Hcode
           @effort_list.hide
           @dirty = true
           if cb = @on_set_effort
-            normalized = effort == "off" ? nil : effort
             cb.call(effort)
             @messages << Message.new("system", Hcode.t("ui.effort_set", name: effort))
           else

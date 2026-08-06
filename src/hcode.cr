@@ -1182,7 +1182,7 @@ module Hcode
         pending_tool_names = {} of String => String
 
         begin
-          result = agent.run_goal_turn(prompt_text, system_prompt) do |event|
+          agent.run_goal_turn(prompt_text, system_prompt) do |event|
             case event.type
             when .text_delta?
               app.on_event(Loop::Event.text_delta(event.text))

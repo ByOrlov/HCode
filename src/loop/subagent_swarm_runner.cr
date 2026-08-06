@@ -92,7 +92,7 @@ module Hcode
         entry.running = true
         ticks = 0
         begin
-          result = entry.agent.run_turn(spec.prompt, @system_prompt) do |event|
+          entry.agent.run_turn(spec.prompt, @system_prompt) do |event|
             case event.type
             when .tool_call_start?, .tool_call_delta?, .step_begin?
               ticks += 1

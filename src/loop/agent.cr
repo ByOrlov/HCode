@@ -151,7 +151,7 @@ module Hcode
             end
 
             if step_result.tool_use?
-              tool_results = run_tool_batch(step_result.tool_calls, on_event)
+              run_tool_batch(step_result.tool_calls, on_event)
             else
               # Stop hook: a block decision prevents the turn from ending and
               # injects the reason so the model continues with that context.

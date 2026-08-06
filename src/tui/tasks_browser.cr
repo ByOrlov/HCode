@@ -131,7 +131,7 @@ module Hcode
       end
 
       private def pending_stop_active? : Bool
-        return false unless pid = @pending_stop_task_id
+        return false if @pending_stop_task_id.nil?
         return false unless limit = @pending_stop_until
         Time.monotonic > limit ? (clear_pending_stop; false) : true
       end

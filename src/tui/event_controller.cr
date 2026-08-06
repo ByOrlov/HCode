@@ -289,7 +289,7 @@ module Hcode
 
           # Drain the next queued message if the user queued one during the
           # finished turn. Skipped during the dispatch-pending gap.
-          if (cb = @run_turn_cb) && !@dispatch_pending
+          if !@run_turn_cb.nil? && !@dispatch_pending
             drain_next_queued
           end
         end

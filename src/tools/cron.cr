@@ -60,7 +60,6 @@ module Hcode
 
       # Минимальный inter-fire period (мс) — для jitter cap.
       def min_period_ms : Int64
-        m = @minute.min
         step_min = @minute.size > 1 ? (@minute.max - @minute.min) // (@minute.size - 1) : 60
         step_min = 60 if step_min < 1
         step_min.to_i64 * 60_000

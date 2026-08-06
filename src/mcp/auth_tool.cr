@@ -60,7 +60,7 @@ module Hcode
 
       def execute(input : JSON::Any) : Tools::ToolResult
         @captured_auth_url = nil
-        result = OAuth.authorize(@server_url, @server_name, @home_dir,
+        OAuth.authorize(@server_url, @server_name, @home_dir,
           client_id: @oauth_client_id,
           client_secret: @oauth_client_secret,
           scopes: @oauth_scopes.empty? ? nil : @oauth_scopes) do |auth_url|

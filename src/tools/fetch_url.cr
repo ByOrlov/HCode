@@ -181,7 +181,6 @@ module Hcode
         }
 
         response = @transport.request("GET", uri, headers)
-        status_code = response.status_code
         content_type = response.headers["Content-Type"]? || ""
         content_encoding = response.headers["Content-Encoding"]? || ""
         if response.status_code >= 400

@@ -199,7 +199,7 @@ module Hcode
       # match but were previously skipped. Non-blocking — connections happen in
       # background fibres, mirroring the interactive startup path.
       def reconcile(active_provider : String?) : Nil
-        return unless registry = @registry
+        return if @registry.nil?
         @active_provider = active_provider
 
         # Disconnect entries that no longer match the active provider.

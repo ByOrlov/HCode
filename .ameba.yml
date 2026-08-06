@@ -1,0 +1,8 @@
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Naming/BlockParameterName:
+  Enabled: false
+
+Style/VerboseBlock:
+  Enabled: false
