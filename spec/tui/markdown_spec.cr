@@ -402,6 +402,23 @@ describe Hcode::TUI::Markdown do
       stripped.should_not contain("`src/hcode.cr`")
       stripped.should contain("src/hcode.cr")
     end
+
+    it "does not render a single pipe-bearing line as a table" do
+      # Regression: a Crystal line like `arr.each do | o |` ends with `|`
+      # and was misdetected as a (header-only) GFM table, drawing a stray
+      # Unicode box around it. A real table needs a delimiter row.
+      text = md_render_text(md, "arr.each do | o |")
+      text.should_not contain("┌")
+      text.should_not contain("│")
+      text.should contain("arr.each do | o |")
+    end
+
+    it "does not render pipe-bearing lines without a delimiter as a table" do
+      text = md_render_text(md, "| A | B |\n| C | D |")
+      text.should_not contain("┌")
+      text.should contain("A")
+      text.should contain("D")
+    end
   end
 
   describe "blockquotes" do

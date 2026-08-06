@@ -206,14 +206,18 @@ module Hcode
 
         sep_idx = parsed.index { |cells| cells.all? { |c| c.strip.match(/\A:?-{2,}:?\z/) || c.strip.match(/\A:?-+:?\z/) } }
 
-        header = sep_idx ? parsed[0] : parsed[0]?
-        data_rows = if sep_idx
-                      parsed[(sep_idx + 1)..]
-                    elsif parsed.size > 1
-                      parsed[1..]
-                    else
-                      [] of Array(String)
-                    end
+        # GFM: a table requires a header row followed by a delimiter row.
+        # Without a delimiter (e.g. a lone line like `arr.each do | o |` that
+        # merely ends with `|`), this is plain text — render it as such so it
+        # is not boxed into a stray Unicode table.
+        unless sep_idx
+          raw_text = rows.join('\n')
+          wrap_line(raw_text, {1, width}.max).each { |l| lines << "  #{l}" }
+          return lines
+        end
+
+        header = parsed[0]
+        data_rows = parsed[(sep_idx + 1)..]
 
         header = header || [] of String
         return if header.empty?
