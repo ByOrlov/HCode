@@ -183,14 +183,35 @@ module Hcode
         env = hook_env(hook)
 
         process = Process.new(hook.command, shell: true,
-          input: :pipe, output: stdout, error: stderr, chdir: cwd)
+          input: :pipe, output: stdout, error: stderr, chdir: cwd, env: env)
         process.input << json
         process.input.close
 
-        status = process.wait
-        result_from_exit(status.exit_code, stdout.to_s, stderr.to_s)
+        wait_ch = Channel(Process::Status).new
+        spawn { wait_ch.send(process.wait) }
+
+        select
+        when status = wait_ch.receive
+          result_from_exit(status.exit_code, stdout.to_s, stderr.to_s)
+        when timeout(timeout.seconds)
+          kill_process(process, wait_ch)
+          HookResult.new(stdout: stdout.to_s, stderr: stderr.to_s, timed_out: true)
+        end
       rescue ex
         HookResult.new(stdout: "", stderr: ex.message.to_s)
+      end
+
+      # Graceful shutdown: SIGTERM → grace period → SIGKILL, always reaping
+      # the zombie so the wait fiber finishes cleanly.
+      private def kill_process(process : Process, wait_ch : Channel(Process::Status)) : Nil
+        process.terminate rescue nil
+        select
+        when wait_ch.receive
+          nil
+        when timeout(KILL_GRACE_MS.milliseconds)
+          ProcessPort.default.force_kill(process)
+          wait_ch.receive rescue nil
+        end
       end
 
       private def hook_env(hook : HookDef) : Hash(String, String)?

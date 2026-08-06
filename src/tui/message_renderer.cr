@@ -633,6 +633,7 @@ module Hcode
         header = ""
         header += "#{ANSI.bold}#{ANSI.color(@theme.colors.success, nil)}+#{added} #{ANSI.reset}" if added > 0
         header += "#{ANSI.bold}#{ANSI.color(@theme.colors.error, nil)}-#{removed} #{ANSI.reset}" if removed > 0
+        lines.unshift(header) unless header.empty?
 
         changed.each do |dl|
           case dl.kind

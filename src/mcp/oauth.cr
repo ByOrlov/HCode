@@ -242,7 +242,7 @@ module Hcode
           "client_id"     => registered_cid,
           "code_verifier" => verifier,
         })
-        token_params += "&client_secret=#{URI.encode_www_form(client_secret)}" if client_secret
+        token_params += "&client_secret=#{URI.encode_www_form(registered_secret)}" if registered_secret
 
         unless token_ep = metadata.token_endpoint
           raise OAuthError.new("OAuth: no token_endpoint in server metadata")
