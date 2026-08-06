@@ -39,7 +39,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should eq("No search results found.")
   end
 
@@ -54,7 +54,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Title: T1")
     result.content.should contain("Site: SiteA")
     result.content.should contain("Date: 2026-01-01")
@@ -78,7 +78,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Search failed (authentication)")
   end
 
@@ -89,7 +89,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Search failed (network)")
   end
 
@@ -100,7 +100,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Search timed out")
   end
 
@@ -111,7 +111,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Search failed:")
     result.content.should contain("internal server error")
   end
@@ -121,7 +121,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("no search provider is configured")
   end
 
@@ -134,7 +134,7 @@ describe Hcode::Tools::WebSearch do
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.size.should be < (Hcode::Tools::WebSearch::MAX_CHARS + 200)
     result.content.should contain(Hcode::Tools::WebSearch::TRUNCATION_MARKER)
     result.truncated?.should be_true

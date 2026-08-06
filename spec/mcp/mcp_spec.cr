@@ -489,7 +489,7 @@ module Hcode
           proxy.name.should eq("mcp__srv__echo")
           proxy.description.should eq("d")
           r = proxy.execute(JSON.parse(%({"q":1})))
-          r.is_error.should be_false
+          r.is_error?.should be_false
           r.content.should eq("42")
         end
       end

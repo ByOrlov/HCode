@@ -167,14 +167,14 @@ describe Hcode::Tools::ReadMediaFile do
   it "rejects empty path" do
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("cannot be empty")
   end
 
   it "rejects non-existent file" do
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "/nope.png" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not exist")
   end
 
@@ -183,7 +183,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("test.txt", "hello world\nthis is text".to_slice)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "test.txt" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("text file")
     result.content.should contain("Use Read")
   end
@@ -193,7 +193,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("blob.bin", Bytes[0x00, 0x01, 0x02, 0x03, 0xFF])
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "blob.bin" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not a supported")
   end
 
@@ -203,7 +203,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("img.png", make_png(100, 100))
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "img.png" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not support image input")
   end
 
@@ -215,7 +215,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("v.mp4", mp4_header)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "v.mp4" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not support video input")
   end
 
@@ -226,7 +226,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("v.mp4", mp4_header)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "v.mp4", "region": { "x": 0, "y": 0, "width": 10, "height": 10 } })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("apply only to image files")
   end
 
@@ -235,7 +235,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("img.png", make_png(100, 200))
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "img.png" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("<image path=\"img.png\">")
     result.content.should contain("</image>")
     result.content.should contain("data:image/png;base64,")
@@ -254,7 +254,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("big.png", big)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "big.png" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("exceeds the maximum 100MB")
   end
 
@@ -263,7 +263,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("empty.png", Bytes.empty)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "empty.png" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("empty")
   end
 
@@ -282,7 +282,7 @@ describe Hcode::Tools::ReadMediaFile do
     fs.add("big.png", big)
     tool = Hcode::Tools::ReadMediaFile.new
     result = tool.execute(JSON.parse(%({ "path": "big.png", "full_resolution": true })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("so full_resolution cannot be honored")
   end
 

@@ -206,14 +206,14 @@ module Hcode
             false
           end
         when .enter?
-          if key.shift
+          if key.shift?
             insert_newline
             true
           else
             false
           end
         when .backspace?
-          if key.alt
+          if key.alt?
             delete_word_back
           else
             backspace

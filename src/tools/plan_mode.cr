@@ -191,7 +191,7 @@ module Hcode
         return options if options.is_a?(ToolResult) # validation error
 
         resolved = resolve_plan(status)
-        return resolved if resolved.is_error
+        return resolved if resolved.is_error?
 
         mode = PlanMode.permission_mode
         if mode && mode.auto?
@@ -432,13 +432,9 @@ module Hcode
     # Lightweight permission-mode reference — ввёл, чтобы не тянуть тяжёлый
     # `Permission::Manager` в чистый tool. Auto-mode → true.
     struct PermissionModeRef
-      property auto : Bool = false
+      property? auto : Bool = false
 
       def initialize(@auto : Bool = false)
-      end
-
-      def auto? : Bool
-        @auto
       end
     end
 

@@ -149,7 +149,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "*/5 * * * *",
       "prompt": "check the deploy"
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("id:")
     result.content.should contain("cron: */5 * * * *")
     result.content.should contain("humanSchedule: every 5 minutes")
@@ -174,7 +174,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "not-a-cron",
       "prompt": "x"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Invalid cron expression")
   end
 
@@ -184,7 +184,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "0 0 30 2 *",
       "prompt": "x"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("no fire within 5 years")
   end
 
@@ -195,7 +195,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "*/5 * * * *",
       "prompt": "#{long_prompt}"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("exceeds #{Hcode::Tools::Cron::MAX_PROMPT_BYTES} bytes")
   end
 
@@ -209,7 +209,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "*/5 * * * *",
       "prompt": "x"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("cap reached")
   end
 
@@ -221,7 +221,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "*/5 * * * *",
       "prompt": "x"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("disabled")
   end
 
@@ -232,7 +232,7 @@ describe Hcode::Tools::CronCreate do
       "cron": "*/5 * * * *",
       "prompt": "x"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end
@@ -254,7 +254,7 @@ describe Hcode::Tools::CronList do
   it "returns empty message when no jobs" do
     tool = Hcode::Tools::CronList.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should eq("cron_jobs: 0\nNo cron jobs scheduled.")
   end
 
@@ -306,7 +306,7 @@ describe Hcode::Tools::CronList do
     service.insert_task(task)
     tool = Hcode::Tools::CronList.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("cron: garbage cron expr here")
     result.content.should contain("nextFireAt: null")
   end
@@ -330,7 +330,7 @@ describe Hcode::Tools::CronDelete do
   it "rejects invalid id shape" do
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "not-a-ulid" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Invalid cron job id")
     result.content.should contain("ULID")
   end
@@ -340,7 +340,7 @@ describe Hcode::Tools::CronDelete do
     task = service.add_task(Hcode::Tools::CronTaskInit.new(cron: "*/5 * * * *", prompt: "x"))
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "#{task.id}" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Deleted cron job #{task.id}")
     service.list.empty?.should be_true
   end
@@ -348,7 +348,7 @@ describe Hcode::Tools::CronDelete do
   it "returns not-found error for unknown id" do
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "deadbeef" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("No cron job with id deadbeef")
   end
 
@@ -365,14 +365,14 @@ describe Hcode::Tools::CronDelete do
     service.insert_task(task)
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "01HFG7K5ZPJTN4CPDQ8WQXHZQT" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
   end
 
   it "fails when no service is registered" do
     Hcode::Tools::Cron.service = nil
     tool = Hcode::Tools::CronDelete.new
     result = tool.execute(JSON.parse(%({ "id": "deadbeef" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end

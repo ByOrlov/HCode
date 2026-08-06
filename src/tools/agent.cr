@@ -210,7 +210,7 @@ module Hcode
           description: processed.description,
           subagent_type: processed.subagent_type,
           resume_agent_id: processed.resume,
-          run_in_background: processed.run_in_background,
+          run_in_background: processed.run_in_background?,
         )
 
         begin
@@ -262,7 +262,7 @@ module Hcode
             description: args.description,
             subagent_type: DEFAULT_PROFILE_NAME,
             resume: args.resume,
-            run_in_background: args.run_in_background,
+            run_in_background: args.run_in_background?,
           )
         end
 
@@ -273,7 +273,7 @@ module Hcode
             description: args.description,
             subagent_type: nil,
             resume: args.resume,
-            run_in_background: args.run_in_background,
+            run_in_background: args.run_in_background?,
           )
         end
 
@@ -285,7 +285,7 @@ module Hcode
           raise ValidationError.new(RESUME_WITH_TYPE_UNAVAILABLE)
         end
 
-        if args.run_in_background && !@@background_enabled
+        if args.run_in_background? && !@@background_enabled
           raise ValidationError.new(BACKGROUND_AGENT_UNAVAILABLE)
         end
 
@@ -351,7 +351,7 @@ module Hcode
         lines << "status: failed"
         lines << ""
         lines << "subagent error: #{msg}"
-        if outcome.timed_out
+        if outcome.timed_out?
           lines << "resume_hint: Continue with Agent(resume=\"#{outcome.agent_id}\", prompt=\"continue\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
         end
         lines.join("\n")
@@ -401,7 +401,7 @@ module Hcode
       getter description : String
       getter subagent_type : String?
       getter resume : String?
-      getter run_in_background : Bool
+      getter? run_in_background : Bool
 
       def initialize(@prompt : String,
                      @description : String,
@@ -484,7 +484,7 @@ module Hcode
       getter description : String
       getter summary : String?
       getter error : String?
-      getter timed_out : Bool
+      getter? timed_out : Bool
       getter task_id : String?
 
       def initialize(@agent_id : String,

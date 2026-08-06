@@ -25,7 +25,7 @@ describe Hcode::Tools::Glob do
 
     glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("a.cr")
     result.content.should contain("b.cr")
     result.content.should_not contain("c.txt")
@@ -34,13 +34,13 @@ describe Hcode::Tools::Glob do
   it "returns error for empty pattern" do
     glob = Hcode::Tools::Glob.new("/tmp")
     result = glob.execute(JSON.parse("{}"))
-    result.is_error.should be_true
+    result.is_error?.should be_true
   end
 
   it "returns error for non-existent directory" do
     glob = Hcode::Tools::Glob.new("/tmp")
     result = glob.execute(JSON.parse(%({"pattern": "*.xyz", "path": "/nonexistent-hcode-glob-spec"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not exist")
   end
 
@@ -49,7 +49,7 @@ describe Hcode::Tools::Glob do
     glob_write("#{dir}/afile")
     glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*", "path": "afile"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not a directory")
   end
 
@@ -57,7 +57,7 @@ describe Hcode::Tools::Glob do
     dir = glob_fresh_dir("escape")
     glob = Hcode::Tools::Glob.new(dir)
     result = glob.execute(JSON.parse(%({"pattern": "*", "path": "../"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
   end
 
   context "sensitive-file filtering" do
@@ -68,7 +68,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
       result.content.should_not contain(".env")
     end
@@ -83,7 +83,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
       result.content.should_not contain("env.production")
       result.content.should contain("Filtered 1 sensitive file(s)")
@@ -96,7 +96,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
       result.content.should contain("Filtered 1 sensitive file(s)")
     end
@@ -107,7 +107,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain(".env.example")
     end
 
@@ -119,7 +119,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
       result.content.should_not contain("id_rsa\n")
     end
@@ -137,7 +137,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
       result.content.should_not contain(".git")
       result.content.should_not contain("inside.cr")
@@ -157,7 +157,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
     end
 
@@ -168,7 +168,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr", "include_ignored": true})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("keep.cr")
     end
   end
@@ -184,7 +184,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
 
       lines = result.content.split('\n').reject(&.starts_with?('['))
       # Drop any summary trailer lines (e.g. "Filtered N sensitive…").
@@ -205,7 +205,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.{ts,tsx}"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("a.ts")
       result.content.should contain("b.tsx")
       result.content.should_not contain("c.cr")
@@ -221,7 +221,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "src/**/*.ts"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("a.ts")
       result.content.should contain("b.ts")
       result.content.should_not contain("c.ts")
@@ -235,7 +235,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.cr"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Truncated at 100 matches")
       result.content.should contain("Only the first 100 matches are returned")
     end
@@ -248,7 +248,7 @@ describe Hcode::Tools::Glob do
 
       glob = Hcode::Tools::Glob.new(dir)
       result = glob.execute(JSON.parse(%({"pattern": "*.nomatch"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("No matches")
     end
   end

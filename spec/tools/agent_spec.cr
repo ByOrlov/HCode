@@ -56,7 +56,7 @@ describe Hcode::Tools::Agent do
       "prompt": "do something",
       "description": "test"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("no subagent runtime is registered")
   end
 
@@ -68,7 +68,7 @@ describe Hcode::Tools::Agent do
       "resume": "agent-1",
       "subagent_type": "coder"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Cannot set subagent_type when resuming")
   end
 
@@ -79,7 +79,7 @@ describe Hcode::Tools::Agent do
       "description": "test",
       "run_in_background": true
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Background agent execution is not available")
   end
 
@@ -98,7 +98,7 @@ describe Hcode::Tools::Agent do
       "description": "test",
       "subagent_type": "unknown_profile"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Unknown agent type")
   end
 
@@ -116,7 +116,7 @@ describe Hcode::Tools::Agent do
       "prompt": "go",
       "description": "test"
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     runner.calls.first[:subagent_type].should eq("coder")
     result.content.should contain("actual_subagent_type: coder")
     result.content.should contain("status: completed")
@@ -138,7 +138,7 @@ describe Hcode::Tools::Agent do
       "prompt": "go",
       "description": "refactor"
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("agent_id: agent-42")
     result.content.should contain("actual_subagent_type: coder")
     result.content.should contain("status: completed")
@@ -162,7 +162,7 @@ describe Hcode::Tools::Agent do
       "prompt": "go",
       "description": "test"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("agent_id: agent-9")
     result.content.should contain("status: failed")
     result.content.should contain("subagent error: Agent timed out after 2 hours.")
@@ -186,7 +186,7 @@ describe Hcode::Tools::Agent do
       "prompt": "go",
       "description": "test"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("subagent error: boom")
     result.content.should_not contain("resume_hint:")
   end
@@ -210,7 +210,7 @@ describe Hcode::Tools::Agent do
       "description": "long-running job",
       "run_in_background": true
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("task_id: task-5")
     result.content.should contain("status: running")
     result.content.should contain("agent_id: agent-100")
@@ -242,7 +242,7 @@ describe Hcode::Tools::Agent do
       "prompt": "go",
       "description": "test"
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("subagent error: boom")
   end
 end

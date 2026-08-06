@@ -27,7 +27,7 @@ describe Hcode::Tools::CreateGoal do
       "objective": "Ship the release",
       "completionCriterion": "Tagged v1.0"
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("goal":))
     result.content.should contain(%("objective": "Ship the release"))
     result.content.should contain(%("completionCriterion": "Tagged v1.0"))
@@ -45,7 +45,7 @@ describe Hcode::Tools::CreateGoal do
   it "fails on empty objective" do
     tool = Hcode::Tools::CreateGoal.new
     result = tool.execute(JSON.parse(%({ "objective": "   " })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("must not be empty")
   end
 
@@ -53,7 +53,7 @@ describe Hcode::Tools::CreateGoal do
     tool = Hcode::Tools::CreateGoal.new
     long = "x" * (Hcode::Tools::Goal::MAX_OBJECTIVE_LENGTH + 1)
     result = tool.execute(JSON.parse(%({ "objective": "#{long}" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("maximum length")
   end
 
@@ -61,7 +61,7 @@ describe Hcode::Tools::CreateGoal do
     tool = Hcode::Tools::CreateGoal.new
     tool.execute(JSON.parse(%({ "objective": "first" })))
     result = tool.execute(JSON.parse(%({ "objective": "second" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("already exists")
   end
 
@@ -69,7 +69,7 @@ describe Hcode::Tools::CreateGoal do
     tool = Hcode::Tools::CreateGoal.new
     first = tool.execute(JSON.parse(%({ "objective": "first" })))
     second = tool.execute(JSON.parse(%({ "objective": "second", "replace": true })))
-    second.is_error.should be_false
+    second.is_error?.should be_false
     second.content.should contain(%("objective": "second"))
   end
 
@@ -77,7 +77,7 @@ describe Hcode::Tools::CreateGoal do
     Hcode::Tools::Goal.service = nil
     tool = Hcode::Tools::CreateGoal.new
     result = tool.execute(JSON.parse(%({ "objective": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end
@@ -89,7 +89,7 @@ describe Hcode::Tools::GetGoal do
     Hcode::Tools::Goal.service = Hcode::Tools::AgentGoalService.new
     tool = Hcode::Tools::GetGoal.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("goal": null))
   end
 
@@ -100,7 +100,7 @@ describe Hcode::Tools::GetGoal do
 
     tool = Hcode::Tools::GetGoal.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("objective": "ship"))
     result.content.should contain(%("status": "active"))
   end
@@ -115,14 +115,14 @@ describe Hcode::Tools::UpdateGoal do
   it "rejects invalid status" do
     tool = Hcode::Tools::UpdateGoal.new
     result = tool.execute(JSON.parse(%({ "status": "paused" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Invalid goal status")
   end
 
   it "returns missing-goal message when no goal and status=active" do
     tool = Hcode::Tools::UpdateGoal.new
     result = tool.execute(JSON.parse(%({ "status": "active" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("not resumed: no current goal")
   end
 
@@ -133,7 +133,7 @@ describe Hcode::Tools::UpdateGoal do
 
     tool = Hcode::Tools::UpdateGoal.new
     result = tool.execute(JSON.parse(%({ "status": "complete" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Goal completed successfully")
     result.content.should contain("0 turns")
     result.content.should contain("0 tokens")
@@ -146,7 +146,7 @@ describe Hcode::Tools::UpdateGoal do
 
     tool = Hcode::Tools::UpdateGoal.new
     result = tool.execute(JSON.parse(%({ "status": "blocked" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Goal blocked")
     result.content.should contain("input or change")
   end
@@ -179,7 +179,7 @@ describe Hcode::Tools::SetGoalBudget do
 
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 20, "unit": "turns" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Goal budget set: 20 turns")
   end
 
@@ -190,7 +190,7 @@ describe Hcode::Tools::SetGoalBudget do
 
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 500000, "unit": "tokens" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("500000 tokens")
   end
 
@@ -201,7 +201,7 @@ describe Hcode::Tools::SetGoalBudget do
 
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 30, "unit": "minutes" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("30 minutes")
   end
 
@@ -213,28 +213,28 @@ describe Hcode::Tools::SetGoalBudget do
     tool = Hcode::Tools::SetGoalBudget.new
     # 100ms — слишком короткий.
     result = tool.execute(JSON.parse(%({ "value": 100, "unit": "milliseconds" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("not a reasonable goal budget")
   end
 
   it "returns missing-goal when no current goal" do
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 10, "unit": "turns" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("no current goal")
   end
 
   it "rejects invalid unit" do
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 10, "unit": "weeks" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Unsupported unit")
   end
 
   it "rejects non-positive value" do
     tool = Hcode::Tools::SetGoalBudget.new
     result = tool.execute(JSON.parse(%({ "value": 0, "unit": "turns" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("positive number")
   end
 

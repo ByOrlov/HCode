@@ -98,7 +98,7 @@ module Hcode
 
     struct ToolResult
       property content : String
-      property is_error : Bool = false
+      property? is_error : Bool = false
       property? truncated : Bool = false
       property display : ToolDisplay? = nil
 

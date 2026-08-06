@@ -8,7 +8,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write.txt","content":"hello world\n"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Wrote 12 bytes")
     result.content.should contain("hcode-test-write.txt")
 
@@ -23,7 +23,7 @@ describe Hcode::Tools::Write do
     # "héllo" is 6 UTF-8 bytes (h=1, é=2, l=1, l=1, o=1) + "\n" = 7 bytes,
     # but 6 characters if counted by size.
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-utf8.txt","content":"héllo\n"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Wrote 7 bytes")
   end
 
@@ -33,7 +33,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-over.txt","content":"new\n"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Wrote 4 bytes")
 
     File.read(path).should eq("new\n")
@@ -45,7 +45,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-append.txt","content":"second","mode":"append"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Appended 6 bytes")
 
     File.read(path).should eq("first\nsecond")
@@ -57,7 +57,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-empty.txt","content":""})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Wrote 0 bytes")
 
     File.read(path).should eq("")
@@ -69,7 +69,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-nested/deep/sub/file.txt","content":"nested\n"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     File.read(path).should eq("nested\n")
   end
 
@@ -79,7 +79,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-blocker/child.txt","content":"x"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not a directory")
     result.content.should contain("hcode-test-write-blocker")
   end
@@ -90,7 +90,7 @@ describe Hcode::Tools::Write do
 
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"hcode-test-write-envdir/.env","content":"SECRET=1"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("sensitive")
     File.exists?(path).should be_false
   end
@@ -98,7 +98,7 @@ describe Hcode::Tools::Write do
   it "blocks relative paths that escape the working directory" do
     tool = Hcode::Tools::Write.new("/tmp")
     result = tool.execute(JSON.parse(%q({"path":"../escape.txt","content":"x"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("outside")
   end
 end

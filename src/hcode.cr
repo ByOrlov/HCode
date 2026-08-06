@@ -618,8 +618,8 @@ module Hcode
               assistant_open = false
             end
             name, args = pending_calls.delete(event.tool_call_id) || {"Tool", ""}
-            render_tool_block(name, args, event.text, event.is_error)
-            if line = CLI.ram_line(name, event.text.bytesize, event.is_error)
+            render_tool_block(name, args, event.text, event.is_error?)
+            if line = CLI.ram_line(name, event.text.bytesize, event.is_error?)
               puts line.colorize.yellow
             end
           when .info?
@@ -704,7 +704,7 @@ module Hcode
       app.max_context_tokens = agent.context.max_context_tokens
       app.home = home
       app.work_dir = work_dir
-      app.debug_zones = config.debug_zones
+      app.debug_zones = config.debug_zones?
 
       # Wire subagent lifecycle events from the runners into the TUI so the
       # swarm progress panel animates live. Each event is routed to
@@ -1213,7 +1213,7 @@ module Hcode
               tname = pending_tool_names.delete(event.tool_call_id) || "Tool"
               # Attach the RAM line so the TUI renders it inside the tool
               # block rather than as a separate info message.
-              event.ram_line = CLI.ram_line(tname, event.text.bytesize, event.is_error)
+              event.ram_line = CLI.ram_line(tname, event.text.bytesize, event.is_error?)
               app.on_event(event)
               # Keep the TUI's plan-mode flag in sync with the service: the
               # model can toggle it directly via EnterPlanMode/ExitPlanMode,
@@ -1419,7 +1419,7 @@ module Hcode
       String.build do |s|
         s << "Installed plugins (#{plugins.size}):\n"
         plugins.each do |r|
-          status = r.enabled ? (r.ok? ? "enabled" : "error") : "disabled"
+          status = r.enabled? ? (r.ok? ? "enabled" : "error") : "disabled"
           s << "  #{r.id} (#{r.display_name}"
           s << " v#{r.version}" if r.version
           s << ") [#{status}]"
@@ -1441,7 +1441,7 @@ module Hcode
         s << "Plugin: #{record.display_name} (#{record.id})\n"
         s << "Version: #{record.version || "unknown"}\n"
         s << "Source: #{record.source}\n"
-        s << "State: #{record.ok? ? "ok" : "error"} (#{record.enabled ? "enabled" : "disabled"})\n"
+        s << "State: #{record.ok? ? "ok" : "error"} (#{record.enabled? ? "enabled" : "disabled"})\n"
         s << "Root: #{record.root}\n"
         s << "Installed: #{record.installed_at}\n"
         s << "Updated: #{record.updated_at}\n" if record.updated_at

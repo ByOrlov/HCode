@@ -357,7 +357,7 @@ module Hcode
       getter question : String
       getter header : String
       getter options : Array(QuestionOption)
-      getter multi_select : Bool
+      getter? multi_select : Bool
 
       def initialize(@question : String,
                      @options : Array(QuestionOption),

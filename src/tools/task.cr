@@ -155,8 +155,8 @@ module Hcode
       property output_path : String?
       property output_size_bytes : Int32
       property preview_bytes : Int32
-      property truncated : Bool
-      property full_output_available : Bool
+      property? truncated : Bool
+      property? full_output_available : Bool
       property preview : String
 
       def initialize(@output_path : String? = nil,
@@ -270,7 +270,7 @@ module Hcode
           output_size_bytes: snap.output_size_bytes,
           preview_bytes: max_preview_bytes,
           truncated: true,
-          full_output_available: snap.full_output_available,
+          full_output_available: snap.full_output_available?,
           preview: tail,
         )
       end
@@ -285,7 +285,7 @@ module Hcode
       end
 
       def notification_suppressed?(task_id : String) : Bool
-        @handles[task_id]?.try(&.suppressed) || false
+        @handles[task_id]?.try(&.suppressed?) || false
       end
 
       def stop(task_id : String, reason : String? = nil) : AgentTaskInfo?
@@ -455,11 +455,7 @@ module Hcode
       property process : Process?
       property exit_channel : Channel(Process::Status)?
       property output_path : String?
-      property suppressed : Bool = false
-
-      def suppressed? : Bool
-        @suppressed
-      end
+      property? suppressed : Bool = false
 
       def initialize
       end
@@ -696,8 +692,8 @@ module Hcode
         pairs << {"outputPath", output.output_path}
         pairs << {"outputSizeBytes", output.output_size_bytes.to_s}
         pairs << {"outputPreviewBytes", output.preview_bytes.to_s}
-        pairs << {"outputTruncated", output.truncated.to_s}
-        pairs << {"fullOutputAvailable", output.full_output_available.to_s}
+        pairs << {"outputTruncated", output.truncated?.to_s}
+        pairs << {"fullOutputAvailable", output.full_output_available?.to_s}
 
         hint = full_output_hint(output)
         unless hint.nil?
@@ -713,8 +709,8 @@ module Hcode
         String.build do |io|
           io << body
           io << "\n\n"
-          if output.truncated
-            if output.full_output_available && (path = output.output_path)
+          if output.truncated?
+            if output.full_output_available? && (path = output.output_path)
               io << "[Truncated. Full output: #{path}]"
             else
               io << "[Truncated. No persisted full log is available for this task.]"
@@ -750,8 +746,8 @@ module Hcode
       end
 
       def full_output_hint(output : AgentTaskOutputSnapshot) : String?
-        return nil if !output.full_output_available || output.output_path.nil?
-        if output.truncated
+        return nil if !output.full_output_available? || output.output_path.nil?
+        if output.truncated?
           "Only the last #{Task::OUTPUT_PREVIEW_BYTES} bytes are shown above. Use the Read tool with the output_path to page through the full log (parameters: path, line_offset, n_lines; read about #{Task::PAGING_HINT_LINES} lines per page)."
         else
           "The preview above is the complete output. Use the Read tool with the output_path if you need to re-read the full log later (parameters: path, line_offset, n_lines; read about #{Task::PAGING_HINT_LINES} lines per page)."

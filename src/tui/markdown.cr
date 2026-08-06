@@ -20,7 +20,7 @@ module Hcode
         raw_lines.each_with_index do |line, idx|
           # --- code fence ---
           if line.strip.starts_with?("```") || (line.strip.size >= 3 && line.strip.starts_with?("```"))
-            if state.in_code_block
+            if state.in_code_block?
               flush_table(state, content_width, lines)
               state.in_code_block = false
               state.code_lang = ""
@@ -35,7 +35,7 @@ module Hcode
             next
           end
 
-          if state.in_code_block
+          if state.in_code_block?
             lines << highlight_code(line, state.code_lang)
             next
           end
@@ -46,7 +46,7 @@ module Hcode
             state.in_table = true
             state.last_block = :table
             next
-          elsif state.in_table
+          elsif state.in_table?
             flush_table(state, content_width, lines)
           end
 
@@ -143,7 +143,7 @@ module Hcode
         end
 
         # Flush any pending table at end of input (streaming safety)
-        flush_table(state, content_width, lines) if state.in_table
+        flush_table(state, content_width, lines) if state.in_table?
 
         lines
       end
@@ -786,9 +786,9 @@ module Hcode
       # ------------------------------------------------------------------------
 
       private class RenderState
-        property in_code_block : Bool = false
+        property? in_code_block : Bool = false
         property code_lang : String = ""
-        property in_table : Bool = false
+        property? in_table : Bool = false
         property table_rows : Array(String) = [] of String
         property last_block : Symbol = :none
       end

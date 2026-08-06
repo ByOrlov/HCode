@@ -24,17 +24,17 @@ module Hcode
         player = nil
         webhook = nil
 
-        if config.enabled && config.terminal_enabled
+        if config.enabled? && config.terminal_enabled?
           terminal = TerminalChannel.new(output, config.condition)
         end
-        if config.enabled && config.sound_enabled
+        if config.enabled? && config.sound_enabled?
           player = Player.new(
             done_path: config.sound_done,
             alert_path: config.sound_input_required,
             working_path: config.sound_working,
           )
         end
-        if config.enabled && config.webhook_enabled && !config.webhook_url.empty?
+        if config.enabled? && config.webhook_enabled? && !config.webhook_url.empty?
           webhook = Webhook.new(
             url: config.webhook_url,
             method: config.webhook_method,
@@ -48,7 +48,7 @@ module Hcode
       end
 
       def on_transition(payload : Transition) : Nil
-        return unless @config.enabled
+        return unless @config.enabled?
 
         # Terminal: only user-facing transitions (done, input_required).
         # `turn_started` is intentionally silent on the terminal channel.

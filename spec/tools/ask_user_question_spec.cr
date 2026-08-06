@@ -55,7 +55,7 @@ describe Hcode::Tools::AskUserQuestion do
   it "fails when questions is missing" do
     tool = Hcode::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("questions")
   end
 
@@ -63,7 +63,7 @@ describe Hcode::Tools::AskUserQuestion do
     tool = Hcode::Tools::AskUserQuestion.new
     qs = (1..5).map { |i| %( {"question":"Q#{i}?","options":[{"label":"a"},{"label":"b"}]} ) }.join(",")
     result = tool.execute(JSON.parse(%({ "questions": [#{qs}] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("between 1 and 4")
   end
 
@@ -72,7 +72,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question": "Q?", "options": [{"label": "alone"}]}]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("between 2 and 4")
   end
 
@@ -81,7 +81,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question": "", "options": [{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("question")
   end
 
@@ -93,7 +93,7 @@ describe Hcode::Tools::AskUserQuestion do
         {"question": "Same?", "options": [{"label":"c"},{"label":"d"}]}
       ]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("duplicate question text")
     result.content.should contain("Rephrase the duplicates")
   end
@@ -105,7 +105,7 @@ describe Hcode::Tools::AskUserQuestion do
         {"question": "Q?", "options": [{"label":"a"},{"label":"a"}]}
       ]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("duplicate option label")
   end
 
@@ -124,7 +124,7 @@ describe Hcode::Tools::AskUserQuestion do
         {"question": "Q2?", "options": [{"label":"a"},{"label":"b"}]}
       ]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("Q1?":"a"))
     result.content.should contain(%("Q2?":"a"))
   end
@@ -140,7 +140,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"DB?","options":[{"label":"SQLite"},{"label":"Postgres"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("answers":))
     result.content.should contain(%("DB?":"SQLite"))
     result.content.should_not contain("method")
@@ -153,7 +153,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("User dismissed the question")
     result.content.should contain(%("answers":{}))
     result.content.should contain(%("note":))
@@ -168,7 +168,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("dismissed")
   end
 
@@ -181,7 +181,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Do NOT call this tool again")
   end
 
@@ -194,7 +194,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("dismissed")
     result.content.should_not contain("Do NOT call")
   end
@@ -204,7 +204,7 @@ describe Hcode::Tools::AskUserQuestion do
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not support interactive questions")
   end
 
@@ -233,7 +233,7 @@ describe Hcode::Tools::AskUserQuestion do
       "background": true,
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("task_id: task-1")
     result.content.should contain("status: running")
     result.content.should contain("automatic_notification: true")
@@ -253,7 +253,7 @@ describe Hcode::Tools::AskUserQuestion do
       "background": true,
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%("answers":))
   end
 

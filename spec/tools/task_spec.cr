@@ -42,14 +42,14 @@ describe Hcode::Tools::TaskList do
   it "returns 'No background tasks' when empty" do
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should eq("active_background_tasks: 0\nNo background tasks found.")
   end
 
   it "uses 'background_tasks' label when active_only=false" do
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "active_only": false })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("background_tasks: 0")
     result.content.should_not contain("active_background_tasks")
   end
@@ -64,7 +64,7 @@ describe Hcode::Tools::TaskList do
     ))
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("active_background_tasks: 1")
     result.content.should contain("task_id: bash-1")
     result.content.should contain("description: npm run build")
@@ -108,7 +108,7 @@ describe Hcode::Tools::TaskList do
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "limit": 0 })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("active_background_tasks: 1")
   end
 
@@ -135,7 +135,7 @@ describe Hcode::Tools::TaskList do
     Hcode::Tools::Task.service = nil
     tool = Hcode::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end
@@ -164,7 +164,7 @@ describe Hcode::Tools::TaskOutput do
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("retrieval_status: not_ready")
     result.content.should contain("status: running")
   end
@@ -174,7 +174,7 @@ describe Hcode::Tools::TaskOutput do
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "block": true })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("retrieval_status: timeout")
     result.content.should contain("next_step:")
     result.content.should contain("Do not block on it again")
@@ -278,7 +278,7 @@ describe Hcode::Tools::TaskOutput do
   it "returns Task not found for unknown id" do
     tool = Hcode::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "nope" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Task not found: nope")
   end
 end
@@ -306,7 +306,7 @@ describe Hcode::Tools::TaskStop do
     service.register(make_task(id: "bash-1"))
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("task_id: bash-1")
     result.content.should contain("status: killed")
     result.content.should contain("reason: Stopped by TaskStop")
@@ -335,7 +335,7 @@ describe Hcode::Tools::TaskStop do
       exit_code: 0))
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("task_id: bash-1")
     result.content.should contain("status: completed")
     result.content.should contain("reason: Task already in terminal state")
@@ -363,7 +363,7 @@ describe Hcode::Tools::TaskStop do
   it "returns Task not found for unknown id" do
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "nope" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Task not found: nope")
   end
 
@@ -371,7 +371,7 @@ describe Hcode::Tools::TaskStop do
     Hcode::Tools::Task.service = nil
     tool = Hcode::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "x" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end

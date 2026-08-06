@@ -56,13 +56,13 @@ describe Hcode::Plugin::Manager do
         mgr = Hcode::Plugin::Manager.new(home)
         mgr.load
         record = mgr.install(source)
-        record.enabled.should be_true
+        record.enabled?.should be_true
 
         mgr.set_enabled("toggle-test", false)
-        mgr.get("toggle-test").not_nil!.enabled.should be_false
+        mgr.get("toggle-test").not_nil!.enabled?.should be_false
 
         mgr.set_enabled("toggle-test", true)
-        mgr.get("toggle-test").not_nil!.enabled.should be_true
+        mgr.get("toggle-test").not_nil!.enabled?.should be_true
       end
     end
   end

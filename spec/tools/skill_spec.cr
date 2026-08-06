@@ -36,7 +36,7 @@ describe Hcode::Tools::Skill do
   it "fails when catalog is missing" do
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "commit" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("catalog is not initialized")
   end
 
@@ -44,7 +44,7 @@ describe Hcode::Tools::Skill do
     Hcode::Tools::Skill.catalog = Hcode::Tools::InMemorySkillCatalog.new
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "missing" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain(%(Skill "missing" not found))
   end
 
@@ -54,7 +54,7 @@ describe Hcode::Tools::Skill do
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "commit" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("can only be triggered by the user")
   end
 
@@ -64,7 +64,7 @@ describe Hcode::Tools::Skill do
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "flow" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not an inline skill")
   end
 
@@ -74,7 +74,7 @@ describe Hcode::Tools::Skill do
     ])
     tool = Hcode::Tools::Skill.new
     result = tool.execute(JSON.parse(%({ "skill": "commit" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%(loaded inline))
   end
 

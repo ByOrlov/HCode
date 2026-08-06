@@ -171,7 +171,7 @@ describe Hcode::Config::Config do
       begin
         config.save(path)
         reloaded = Hcode::Config::Config.parse_json(File.read(path))
-        reloaded.debug_zones.should be_true
+        reloaded.debug_zones?.should be_true
       ensure
         File.delete(path) rescue nil
       end

@@ -45,7 +45,7 @@ describe Hcode::Loop do
         Hcode::Tools::ToolResult.success("done after 3s")
       end
 
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("done after 3s")
     end
 
@@ -57,7 +57,7 @@ describe Hcode::Loop do
       end
 
       result.content.should eq("instant")
-      result.is_error.should be_false
+      result.is_error?.should be_false
     end
 
     it "arms grace timeout immediately when already aborted before start" do
@@ -69,7 +69,7 @@ describe Hcode::Loop do
         Hcode::Tools::ToolResult.success("never")
       end
 
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("grace period")
     end
 
@@ -82,7 +82,7 @@ describe Hcode::Loop do
         Hcode::Tools::ToolResult.success("never")
       end
 
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("grace period")
     end
 
@@ -99,7 +99,7 @@ describe Hcode::Loop do
         Hcode::Tools::ToolResult.success("finished during grace")
       end
 
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("finished during grace")
     end
   end

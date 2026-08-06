@@ -46,7 +46,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "do {{item}}",
       "items": ["only one"]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("at least 2 items")
   end
 
@@ -56,7 +56,7 @@ describe Hcode::Tools::AgentSwarm do
       "description": "test swarm",
       "items": ["a", "b"]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("prompt_template is required")
   end
 
@@ -67,7 +67,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "no placeholder here",
       "items": ["a", "b"]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("must include the {{item}}")
   end
 
@@ -78,7 +78,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "static prompt about {{item}}",
       "items": ["x", "x"]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Duplicate subagent prompts")
     result.content.should contain("items 1 and 2")
   end
@@ -90,7 +90,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "review {{item}}",
       "items": ["a.ts", "b.ts"]
     })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("no subagent runtime is registered")
   end
 
@@ -111,7 +111,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "Review {{item}} for regressions.",
       "items": ["src/a.ts", "src/b.ts"]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("<agent_swarm_result>")
     result.content.should contain("</agent_swarm_result>")
     result.content.should contain("<summary>completed: 2</summary>")
@@ -142,7 +142,7 @@ describe Hcode::Tools::AgentSwarm do
       "prompt_template": "Review {{item}}.",
       "items": ["a", "b"]
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("<resume_hint>")
     result.content.should contain("completed: 1")
     result.content.should contain("failed: 1")
@@ -198,7 +198,7 @@ describe Hcode::Tools::AgentSwarm do
       "description": "resume one",
       "resume_agent_ids": { "agent-42": "continue" }
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain(%(mode="resume"))
     result.content.should contain(%(agent_id="agent-42"))
     result.content.should contain("resumed")
@@ -222,7 +222,7 @@ describe Hcode::Tools::AgentSwarm do
       "items": ["one", "two"],
       "resume_agent_ids": { "r-1": "go", "r-2": "go2" }
     })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     calls.size.should eq(4)
     # First two are resumes, next two are spawns, indices 1..4.
     calls[0].is_a?(Hcode::Tools::ResumeSpec).should be_true

@@ -133,7 +133,7 @@ module Hcode
               return
             end
           end
-          if ch == ' ' && question.multi_select
+          if ch == ' ' && question.multi_select?
             activate_option(current_cursor, "space")
             return
           end
@@ -258,7 +258,7 @@ module Hcode
           return
         end
 
-        if question.multi_select
+        if question.multi_select?
           set = @multi_selections[qidx]
           if set.includes?(option_idx)
             set.delete(option_idx)
@@ -295,7 +295,7 @@ module Hcode
         @other_drafts[qidx] = value
         @committed_other[qidx] = value
 
-        if question.multi_select
+        if question.multi_select?
           @multi_selections[qidx].add(other_option_index(qidx))
         else
           @single_selections[qidx] = other_option_index(qidx)
@@ -305,7 +305,7 @@ module Hcode
         @editing_other = false
         @review_message = nil
 
-        advance_after_single_select(qidx) unless question.multi_select
+        advance_after_single_select(qidx) unless question.multi_select?
       end
 
       private def advance_after_single_select(qidx : Int32) : Nil
@@ -327,7 +327,7 @@ module Hcode
         question = @questions[qidx]?
         return unless question
 
-        if question.multi_select
+        if question.multi_select?
           labels = [] of String
           set = @multi_selections[qidx]
           other_idx = other_option_index(qidx)
@@ -429,11 +429,11 @@ module Hcode
           num = i + 1
           is_cursor = i == cursor
           is_other = opt[:kind] == :other
-          is_selected = question.multi_select ? multi_set.includes?(i) : single_sel == i
+          is_selected = question.multi_select? ? multi_set.includes?(i) : single_sel == i
 
           if editing_other? && is_cursor && is_other
             # Inline editing line: shows the Other label + live buffer + caret.
-            prefix = question.multi_select ? "  [#{is_selected ? '✓' : ' '}] #{opt[:label]}: " : "  → [#{num}] #{opt[:label]}: "
+            prefix = question.multi_select? ? "  [#{is_selected ? '✓' : ' '}] #{opt[:label]}: " : "  → [#{num}] #{opt[:label]}: "
             color = is_selected ? success : accent
             lines << "#{ANSI.color(color, nil)}#{ANSI.bold if is_selected}#{prefix}#{@other_input}█#{ANSI.reset}"
             next
@@ -441,7 +441,7 @@ module Hcode
 
           label = render_option_label(qidx, opt, is_cursor)
 
-          if question.multi_select
+          if question.multi_select?
             checked = is_selected ? '✓' : ' '
             prefix = "  [#{checked}] "
             color = if is_selected && is_cursor
@@ -574,7 +574,7 @@ module Hcode
 
         option_count = Math.min(display_options(qidx).size, 9)
         number_hint = option_count <= 1 ? "1" : "1-#{option_count}"
-        parts = ["↑↓ select", "#{number_hint} / ↵ #{question.multi_select ? "toggle" : "choose"}"]
+        parts = ["↑↓ select", "#{number_hint} / ↵ #{question.multi_select? ? "toggle" : "choose"}"]
         parts << "←/→/tab switch" if total_tabs > 1
         parts << "esc cancel"
         "#{ANSI.color(dim, nil)}  #{parts.join("  ")}#{ANSI.reset}"

@@ -32,9 +32,9 @@ module Hcode
       property key : Key
       property char : Char?
       property text : String?
-      property ctrl : Bool = false
-      property shift : Bool = false
-      property alt : Bool = false
+      property? ctrl : Bool = false
+      property? shift : Bool = false
+      property? alt : Bool = false
 
       def initialize(@key : Key, @char : Char? = nil, @text : String? = nil)
       end

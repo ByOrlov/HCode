@@ -17,7 +17,7 @@ module Hcode
       property id : String
       property root : String
       property source : PluginSource
-      property enabled : Bool
+      property? enabled : Bool
       property installed_at : String
       property updated_at : String?
       property original_source : String?
@@ -45,7 +45,7 @@ module Hcode
       end
 
       def ok? : Bool
-        enabled && state.ok? && !@manifest.nil?
+        enabled? && state.ok? && !@manifest.nil?
       end
 
       def skill_count : Int32
@@ -99,7 +99,7 @@ module Hcode
             @records[record.id] = record
           rescue ex
             record = PluginRecord.new(entry.id, entry.root, source_from_string(entry.source),
-              enabled: entry.enabled, installed_at: entry.installed_at)
+              enabled: entry.enabled?, installed_at: entry.installed_at)
             record.diagnostics << PluginDiagnostic.new(DiagnosticSeverity::Error,
               "Failed to materialize: #{ex.message}")
             @records[record.id] = record
@@ -138,7 +138,7 @@ module Hcode
           id: id,
           root: normalized_root,
           source: source_type,
-          enabled: existing.try(&.enabled) || true,
+          enabled: existing.try(&.enabled?) || true,
           installed_at: existing.try(&.installed_at) || now,
           updated_at: now,
           original_source: original_source,
@@ -156,7 +156,7 @@ module Hcode
         key = normalize_id(id)
         record = @records[key]?
         raise "Plugin \"#{id}\" is not installed" unless record
-        return if record.enabled == enabled
+        return if record.enabled? == enabled
         record.enabled = enabled
         record.updated_at = Time.utc.to_rfc3339
         persist
@@ -353,7 +353,7 @@ module Hcode
           id: entry.id,
           root: entry.root,
           source: source_from_string(entry.source),
-          enabled: entry.enabled,
+          enabled: entry.enabled?,
           installed_at: entry.installed_at,
           updated_at: entry.updated_at,
           original_source: entry.original_source,
@@ -396,7 +396,7 @@ module Hcode
         records = @records.values.map do |r|
           Store::InstalledRecord.new(
             id: r.id, root: r.root, source: r.source.to_s,
-            enabled: r.enabled, installed_at: r.installed_at,
+            enabled: r.enabled?, installed_at: r.installed_at,
             updated_at: r.updated_at, original_source: r.original_source,
             capabilities: r.capabilities, github: r.github,
           )

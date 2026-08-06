@@ -238,7 +238,7 @@ module Hcode
         # Exit code 0 with structured JSON output may also block.
         if exit_code == 0
           structured = parse_structured(stdout)
-          if structured && structured.block
+          if structured && structured.block?
             return HookResult.new(
               action: "block",
               message: structured.message,
@@ -260,7 +260,7 @@ module Hcode
       end
 
       private struct StructuredOutput
-        getter block : Bool
+        getter? block : Bool
         getter message : String?
         getter reason : String?
 

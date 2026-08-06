@@ -35,7 +35,7 @@ describe Hcode::Plugin::Store do
       r0.id.should eq("my-plugin")
       r0.root.should eq("/some/path")
       r0.source.should eq("local-path")
-      r0.enabled.should be_true
+      r0.enabled?.should be_true
       r0.installed_at.should eq("2026-01-01T00:00:00Z")
       r0.original_source.should eq("/original")
     end

@@ -39,7 +39,7 @@ describe Hcode::Tools::FetchURL do
   it "returns error on empty url" do
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("URL is required")
   end
 
@@ -50,7 +50,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("full response body, returned verbatim")
     result.content.should contain("cite this page as a markdown link")
     result.content.should contain("plain text content")
@@ -63,7 +63,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("main text extracted from the page")
     result.content.should contain("# Title")
   end
@@ -75,7 +75,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should eq("The response body is empty.")
   end
 
@@ -86,7 +86,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Failed to fetch URL. Status: 404")
     result.content.should contain("Not Found")
   end
@@ -98,7 +98,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("network error")
     result.content.should contain("Connection refused")
   end
@@ -111,7 +111,7 @@ describe Hcode::Tools::FetchURL do
 
     tool = Hcode::Tools::FetchURL.new
     result = tool.execute(JSON.parse(%({ "url": "https://example.com" })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.size.should be < (Hcode::Tools::FetchURL::MAX_CHARS + 200)
     result.content.should contain(Hcode::Tools::FetchURL::TRUNCATION_MARKER)
     result.content.should contain(Hcode::Tools::FetchURL::TRUNCATION_MESSAGE)

@@ -10,7 +10,7 @@ describe Hcode::TUI::Input do
     key.should_not be_nil
     key = key.not_nil!
     key.key.should eq(Hcode::TUI::Key::Backspace)
-    key.alt.should be_true
+    key.alt?.should be_true
   end
 
   it "parses a standalone ESC followed by BS as Alt+Backspace" do
@@ -19,7 +19,7 @@ describe Hcode::TUI::Input do
     key.should_not be_nil
     key = key.not_nil!
     key.key.should eq(Hcode::TUI::Key::Backspace)
-    key.alt.should be_true
+    key.alt?.should be_true
   end
 
   it "parses Alt+Enter (ESC + LF) as alt-flagged Enter" do
@@ -28,7 +28,7 @@ describe Hcode::TUI::Input do
     key.should_not be_nil
     key = key.not_nil!
     key.key.should eq(Hcode::TUI::Key::Enter)
-    key.alt.should be_true
+    key.alt?.should be_true
   end
 
   it "parses a lone DEL as plain Backspace" do
@@ -37,7 +37,7 @@ describe Hcode::TUI::Input do
     key.should_not be_nil
     key = key.not_nil!
     key.key.should eq(Hcode::TUI::Key::Backspace)
-    key.alt.should be_false
+    key.alt?.should be_false
   end
 
   it "parses a printable ASCII char as Char" do
@@ -56,6 +56,6 @@ describe Hcode::TUI::Input do
     key = key.not_nil!
     key.key.should eq(Hcode::TUI::Key::Char)
     key.char.should eq('b')
-    key.alt.should be_true
+    key.alt?.should be_true
   end
 end

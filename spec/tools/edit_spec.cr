@@ -7,7 +7,7 @@ describe Hcode::Tools::Edit do
 
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit.txt","old_string":"foo bar","new_string":"baz qux"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Edited")
 
     File.read(path).should eq("hello world\nbaz qux\n")
@@ -49,7 +49,7 @@ describe Hcode::Tools::Edit do
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-disp3.txt","old_string":"missing","new_string":"x"})))
 
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.display.should be_nil
   end
 
@@ -59,7 +59,7 @@ describe Hcode::Tools::Edit do
 
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit2.txt","old_string":"nonexistent","new_string":"x"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not found")
     result.content.should contain("Read Tool")
   end
@@ -70,7 +70,7 @@ describe Hcode::Tools::Edit do
 
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit3.txt","old_string":"dup","new_string":"x"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("2 occurrences")
     result.content.should contain("replace_all=true")
   end
@@ -81,7 +81,7 @@ describe Hcode::Tools::Edit do
 
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit4.txt","old_string":"hello","new_string":"hello"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("No changes")
   end
 
@@ -91,7 +91,7 @@ describe Hcode::Tools::Edit do
 
     edit = Hcode::Tools::Edit.new("/tmp")
     result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-dir","old_string":"x","new_string":"y"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not a file")
   end
 
@@ -102,7 +102,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp")
       result = edit.execute(JSON.parse(%({"filePath":"hcode-test-edit-legacy.txt","oldString":"foo bar","newString":"baz qux"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       File.read(path).should eq("hello world\nbaz qux\n")
     end
   end
@@ -114,7 +114,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp")
       result = edit.execute(JSON.parse(%({"path":"hcode-test-edit5.txt","old_string":"dup","new_string":"x","replace_all":true})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("3 occurrences")
 
       File.read(path).should eq("x\nx\nx\n")
@@ -126,7 +126,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp")
       result = edit.execute(JSON.parse(%({"path":"hcode-test-edit6.txt","old_string":"missing","new_string":"x","replace_all":true})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("not found")
     end
   end
@@ -138,7 +138,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp")
       result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-crlf.txt","old_string":"foo bar","new_string":"baz qux"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
 
       File.read(path).should eq("hello world\r\nbaz qux\r\n")
     end
@@ -149,7 +149,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp")
       result = edit.execute(JSON.parse(%({"path":"hcode-test-edit-crlf2.txt","old_string":"dup","new_string":"x","replace_all":true})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
 
       File.read(path).should eq("x\r\nx\r\n")
     end
@@ -163,7 +163,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp/hcode-test-edit-env")
       result = edit.execute(JSON.parse(%({"path":".env","old_string":"SECRET=1","new_string":"SECRET=2"})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("sensitive-file pattern")
       result.content.should contain(".env")
 
@@ -177,7 +177,7 @@ describe Hcode::Tools::Edit do
         File.write("/tmp/hcode-test-edit-keys/#{name}", body)
         edit = Hcode::Tools::Edit.new("/tmp/hcode-test-edit-keys")
         result = edit.execute(JSON.parse(%({"path":"#{name}","old_string":"#{body}","new_string":"z"})))
-        result.is_error.should be_true
+        result.is_error?.should be_true
         result.content.should contain("sensitive-file pattern")
       end
     end
@@ -188,7 +188,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp/hcode-test-edit-exempt")
       result = edit.execute(JSON.parse(%({"path":".env.example","old_string":"foo","new_string":"bar"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       File.read("/tmp/hcode-test-edit-exempt/.env.example").should eq("bar\n")
     end
 
@@ -198,7 +198,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp/hcode-test-edit-ws")
       result = edit.execute(JSON.parse(%({"path":"../escape-target.txt","old_string":"hello","new_string":"bye"})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("not an absolute path")
       # Untouched
       File.read("/tmp/escape-target.txt").should eq("hello\n")
@@ -210,7 +210,7 @@ describe Hcode::Tools::Edit do
 
       edit = Hcode::Tools::Edit.new("/tmp/hcode-test-edit-ws2")
       result = edit.execute(JSON.parse(%({"path":"/tmp/hcode-test-edit-abs.txt","old_string":"hello","new_string":"bye"})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       File.read("/tmp/hcode-test-edit-abs.txt").should eq("bye\n")
     end
   end

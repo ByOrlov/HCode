@@ -104,17 +104,17 @@ module Hcode
         run_result = run_rg(cmd)
 
         stdout_text = run_result.stdout
-        if run_result.stdout_truncated || run_result.timed_out
+        if run_result.stdout_truncated? || run_result.timed_out?
           stdout_text = omit_incomplete_trailing(stdout_text, mode)
         end
-        if run_result.timed_out && stdout_text.strip.empty?
+        if run_result.timed_out? && stdout_text.strip.empty?
           return ToolResult.error(
             "Grep timed out after #{DEFAULT_TIMEOUT_S}s. Try a more specific path or pattern.",
           )
         end
 
         # rg exit codes: 0 = matches, 1 = no matches, 2 = error.
-        if run_result.exit_code != 0 && run_result.exit_code != 1 && !run_result.timed_out
+        if run_result.exit_code != 0 && run_result.exit_code != 1 && !run_result.timed_out?
           return ToolResult.error(format_rg_error(run_result))
         end
 
@@ -123,7 +123,7 @@ module Hcode
         filtered_sensitive = [] of String
         kept = filter_sensitive(raw_lines, mode, filtered_sensitive)
 
-        ordered = (mode == "files_with_matches" && !run_result.timed_out) ? sort_by_mtime(kept) : kept
+        ordered = (mode == "files_with_matches" && !run_result.timed_out?) ? sort_by_mtime(kept) : kept
 
         offset_val = (input["offset"]?.try(&.as_i?) || 0).to_i32
         head_limit = (input["head_limit"]?.try(&.as_i?) || DEFAULT_HEAD_LIMIT).to_i32
@@ -151,11 +151,11 @@ module Hcode
           mode == "count_matches" ? header_lines << notice : messages << notice
         end
 
-        if run_result.stdout_truncated
+        if run_result.stdout_truncated?
           messages << "[stdout truncated at #{MAX_OUTPUT_BYTES} bytes; incomplete trailing line omitted]"
         end
 
-        if run_result.timed_out
+        if run_result.timed_out?
           messages << "Grep timed out after #{DEFAULT_TIMEOUT_S}s; partial results returned"
         end
 
@@ -387,7 +387,7 @@ module Hcode
         lines = stderr.lines.map(&.strip).reject(&.empty?)
         summary = lines.reverse.find { |l| l.downcase.starts_with?("error:") } || lines.last? || "ripgrep error"
         msg = ["Failed to grep: #{summary}", "", "ripgrep stderr:", stderr] of String
-        if result.stderr_truncated
+        if result.stderr_truncated?
           msg << "[stderr truncated at #{MAX_OUTPUT_BYTES} bytes]"
         end
         msg.join('\n')
@@ -665,9 +665,9 @@ module Hcode
         getter exit_code : Int32
         getter stdout : String
         getter stderr : String
-        getter stdout_truncated : Bool
-        getter stderr_truncated : Bool
-        getter timed_out : Bool
+        getter? stdout_truncated : Bool
+        getter? stderr_truncated : Bool
+        getter? timed_out : Bool
 
         def initialize(@exit_code : Int32, @stdout : String, @stderr : String,
                        @stdout_truncated : Bool, @stderr_truncated : Bool, @timed_out : Bool)

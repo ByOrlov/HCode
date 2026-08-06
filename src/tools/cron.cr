@@ -70,7 +70,7 @@ module Hcode
       property id : String
       property cron : String
       property prompt : String
-      property recurring : Bool
+      property? recurring : Bool
       property created_at : Int64
       property last_fired_at : Int64?
       property coalesced_count : Int32
@@ -118,7 +118,7 @@ module Hcode
     struct CronTaskInit
       getter cron : String
       getter prompt : String
-      getter recurring : Bool
+      getter? recurring : Bool
 
       def initialize(@cron : String, @prompt : String, @recurring : Bool = true)
       end
@@ -179,7 +179,7 @@ module Hcode
           id: generate_id,
           cron: init.cron,
           prompt: init.prompt,
-          recurring: init.recurring,
+          recurring: init.recurring?,
           created_at: now,
         )
         @tasks << task
@@ -218,7 +218,7 @@ module Hcode
       end
 
       def stale?(task : CronTask) : Bool
-        return false unless task.recurring
+        return false unless task.recurring?
         return false if ENV.has_key?("HCODE_CRON_NO_STALE")
         (now - task.created_at) >= Cron::STALE_THRESHOLD_MS
       end
@@ -415,7 +415,7 @@ module Hcode
         @last_seen_at[task.id] = last_ideal
         persist!
 
-        if stale || !task.recurring
+        if stale || !task.recurring?
           remove_tasks([task.id])
         end
       end
@@ -435,7 +435,7 @@ module Hcode
           s << "<cron-fire"
           s << %( jobId="#{escape_attr(task.id)}")
           s << %( cron="#{escape_attr(task.cron)}")
-          s << %( recurring="#{task.recurring}")
+          s << %( recurring="#{task.recurring?}")
           s << %( coalescedCount="#{coalesced}")
           s << %( stale="#{stale}")
           s << ">\n"
@@ -451,7 +451,7 @@ module Hcode
       # ----------------------------------------------------------------
 
       private def apply_jitter(task : CronTask, parsed : ParsedCronExpression, ideal_ms : Int64) : Int64
-        if task.recurring
+        if task.recurring?
           period = parsed.min_period_ms
           cap = Math.min((period * 0.1).to_i64, JITTER_CAP_MS.to_i64)
           cap = 0_i64 if cap < 0
@@ -970,7 +970,7 @@ module Hcode
         lines << "humanSchedule: #{human_schedule}"
         lines << %(prompt: #{preview_prompt(task.prompt).inspect})
         lines << "nextFireAt: #{next_fire_iso}"
-        lines << "recurring: #{task.recurring}"
+        lines << "recurring: #{task.recurring?}"
         lines << "ageDays: #{age_days}"
         lines << "stale: #{stale}"
         lines.join('\n')

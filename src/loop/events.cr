@@ -34,7 +34,7 @@ module Hcode
       property tool_call_id : String = ""
       property tool_name : String = ""
       property tool_args : String = ""
-      property is_error : Bool = false
+      property? is_error : Bool = false
       property tool_display : Tools::ToolDisplay? = nil
       # Optional RAM-usage line attached by the CLI (--ram flag) so the TUI
       # can render it inside the tool block instead of as a separate info

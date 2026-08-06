@@ -34,7 +34,7 @@ describe Hcode::Tools::EnterPlanMode do
       service.enter
       tool = Hcode::Tools::EnterPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("already active")
     end
   end
@@ -43,7 +43,7 @@ describe Hcode::Tools::EnterPlanMode do
     with_plan_service do |service|
       tool = Hcode::Tools::EnterPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Plan mode is now active")
       result.content.should contain("Plan file:")
       result.content.should contain("Write the plan to the plan file")
@@ -57,7 +57,7 @@ describe Hcode::Tools::EnterPlanMode do
     Hcode::Tools::PlanMode.plan_service = service
     tool = Hcode::Tools::EnterPlanMode.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("no plan file path is available")
     Hcode::Tools::PlanMode.plan_service = nil
   end
@@ -66,7 +66,7 @@ describe Hcode::Tools::EnterPlanMode do
     Hcode::Tools::PlanMode.plan_service = nil
     tool = Hcode::Tools::EnterPlanMode.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Plan service is not initialized")
   end
 end
@@ -85,7 +85,7 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service|
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("can only be called while plan mode is active")
     end
   end
@@ -95,7 +95,7 @@ describe Hcode::Tools::ExitPlanMode do
       service.enter
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("No plan file found")
       result.content.should contain("plan.md")
     end
@@ -111,7 +111,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
       result.content.should contain("auto-approved without user review")
       result.content.should contain("## Plan (auto-approved")
@@ -130,7 +130,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
       result.content.should contain("## Approved Plan:")
       result.content.should contain("Plan body.")
@@ -150,7 +150,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
       result.content.should contain("## Approved Plan:")
       result.content.should contain("The plan.")
@@ -172,7 +172,7 @@ describe Hcode::Tools::ExitPlanMode do
       result = tool.execute(JSON.parse(%({
         "options": [{"label": "Approach A", "description": "first"}, {"label": "Approach B"}]
       })))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Selected approach: Approach A")
       result.content.should contain("Execute ONLY the selected approach")
       result.content.should contain("## Approved Plan:")
@@ -191,7 +191,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("User rejected the plan. Feedback:")
       result.content.should contain("Add more detail to step 2")
       # Plan mode stays active.
@@ -210,7 +210,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("User requested revisions. Plan mode remains active.")
       service.status.should_not be_nil
     end
@@ -227,7 +227,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("Plan rejected by user. Plan mode deactivated.")
       service.status.should be_nil
     end
@@ -244,7 +244,7 @@ describe Hcode::Tools::ExitPlanMode do
 
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Plan approval dismissed. Plan mode remains active.")
       service.status.should_not be_nil
     end
@@ -261,7 +261,7 @@ describe Hcode::Tools::ExitPlanMode do
           {"label": "approach a"}
         ]
       })))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("Option labels must be unique")
     end
   end
@@ -274,7 +274,7 @@ describe Hcode::Tools::ExitPlanMode do
       result = tool.execute(JSON.parse(%({
         "options": [{"label": "Reject"}]
       })))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("reserved approval labels")
     end
   end
@@ -287,7 +287,7 @@ describe Hcode::Tools::ExitPlanMode do
       result = tool.execute(JSON.parse(%({
         "options": [{"label":"A"},{"label":"B"},{"label":"C"},{"label":"D"}]
       })))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("between 1 and 3")
     end
   end
@@ -300,7 +300,7 @@ describe Hcode::Tools::ExitPlanMode do
       result = tool.execute(JSON.parse(%({
         "options": [{"label": ""}]
       })))
-      result.is_error.should be_true
+      result.is_error?.should be_true
       result.content.should contain("label")
     end
   end
@@ -309,7 +309,7 @@ describe Hcode::Tools::ExitPlanMode do
     Hcode::Tools::PlanMode.plan_service = nil
     tool = Hcode::Tools::ExitPlanMode.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Plan service is not initialized")
   end
 end

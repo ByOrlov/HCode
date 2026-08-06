@@ -24,7 +24,7 @@ describe Hcode::Tools::SelectTools do
   it "loads requested tools and reports already-available" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a", "b", "c"] })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Loaded: a, b")
     result.content.should contain("Already available: c")
   end
@@ -32,7 +32,7 @@ describe Hcode::Tools::SelectTools do
   it "reports unknown tools" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["x", "y"] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Unknown tool: x.")
     result.content.should contain("Unknown tool: y.")
     result.content.should contain("Pick from the latest announced tools list")
@@ -41,7 +41,7 @@ describe Hcode::Tools::SelectTools do
   it "partial case: mixed load + already-available + unknown" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a", "c", "z"] })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Loaded: a")
     result.content.should contain("Already available: c")
     result.content.should contain("Unknown tool: z.")
@@ -50,33 +50,33 @@ describe Hcode::Tools::SelectTools do
   it "is_error true when only unknown" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["unknown_tool"] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
   end
 
   it "is_error false when at least one loaded or already-available" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
   end
 
   it "rejects empty names array" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": [] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("must be a non-empty array")
   end
 
   it "rejects missing names field" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("must be a non-empty array")
   end
 
   it "filters out empty strings in names" do
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["", "a"] })))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Loaded: a")
   end
 
@@ -85,7 +85,7 @@ describe Hcode::Tools::SelectTools do
     service.disable!
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not available for the current model")
   end
 
@@ -93,7 +93,7 @@ describe Hcode::Tools::SelectTools do
     Hcode::Tools::ToolSelect.service = nil
     tool = Hcode::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 

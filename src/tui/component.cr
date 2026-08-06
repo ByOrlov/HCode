@@ -3,7 +3,7 @@ module Hcode
     abstract class Component
       getter width : Int32 = 0
       getter height : Int32 = 0
-      property visible : Bool = true
+      property? visible : Bool = true
 
       def render(io : IO) : Nil
       end

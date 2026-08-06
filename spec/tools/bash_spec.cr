@@ -26,7 +26,7 @@ describe Hcode::Tools::Bash do
   it "runs a command and returns stdout" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"printf hello"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("hello")
   end
 
@@ -41,14 +41,14 @@ describe Hcode::Tools::Bash do
     Dir.mkdir_p("/tmp/hcode-bash-cwd")
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"pwd","cwd":"/tmp/hcode-bash-cwd"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("/tmp/hcode-bash-cwd")
   end
 
   it "marks non-zero exit codes as errors with an [exit code: N] trailer" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"exit 2"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("[exit code: 2]")
   end
 
@@ -87,20 +87,20 @@ describe Hcode::Tools::Bash do
     bash = Hcode::Tools::Bash.new("/tmp")
     # `cat` with no input reads stdin; if stdin stayed open it would hang.
     result = bash.execute(JSON.parse(%({"command":"cat"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.strip.should eq("")
   end
 
   it "clamps an over-limit timeout to MAX_TIMEOUT_S" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"true","timeout":99999})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
   end
 
   it "kills a command that exceeds its timeout" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 30","timeout":1})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("timed out after 1s")
   end
 
@@ -115,7 +115,7 @@ describe Hcode::Tools::Bash do
     result = bash.execute(JSON.parse(%({"command":"sleep 30","timeout":60})))
     elapsed = Time.monotonic - started
 
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("interrupted by user")
     # Kill ladder (poll + SIGTERM + SIGKILL grace) should be well under the
     # 30s sleep — assert a generous ceiling that still catches a regression.
@@ -125,14 +125,14 @@ describe Hcode::Tools::Bash do
   it "rejects an empty command" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":""})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("empty")
   end
 
   it "rejects run_in_background=true when no task service is wired" do
     bash = Hcode::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 10","run_in_background":true})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("Background execution is not available")
   end
 
@@ -154,7 +154,7 @@ describe Hcode::Tools::Bash do
       bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir)
 
       result = bash.execute(JSON.parse(%({"command":"echo hello-bg","run_in_background":true})))
-      result.is_error.should be_false
+      result.is_error?.should be_false
       result.content.should contain("Background task started.")
       result.content.should contain("task_id:")
 

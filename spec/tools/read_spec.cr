@@ -21,7 +21,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-basic.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("1\talpha")
     result.content.should contain("2\tbeta")
     result.content.should contain("3\tgamma")
@@ -36,7 +36,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"filePath":"hcode-test-read-legacy.txt","offset":2,"limit":2})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("2\ttwo")
     result.content.should contain("3\tthree")
     result.content.should_not contain("1\tone")
@@ -46,14 +46,14 @@ describe Hcode::Tools::Read do
   it "errors when path is missing" do
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("No path provided")
   end
 
   it "errors when file does not exist" do
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-missing.txt"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("does not exist")
   end
 
@@ -63,7 +63,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-dir"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not a file")
   end
 
@@ -74,7 +74,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp/hcode-test-read-env")
     result = read.execute(JSON.parse(%({"path":".env"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("sensitive")
     result.content.should_not contain("shhh")
   end
@@ -86,14 +86,14 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp/hcode-test-read-envex")
     result = read.execute(JSON.parse(%({"path":".env.example"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("SECRET=placeholder")
   end
 
   it "rejects relative paths that escape the workspace" do
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"../hcode-test-read-escape.txt"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not an absolute path")
   end
 
@@ -103,7 +103,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-nul.bin"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not readable as UTF-8 text")
   end
 
@@ -115,7 +115,7 @@ describe Hcode::Tools::Read do
     File.write(path, Bytes[0xff, 0xfe, 0xfd])
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-badutf8.bin"})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
     result.content.should contain("not readable as UTF-8 text")
   end
 
@@ -125,7 +125,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-window.txt","line_offset":4,"n_lines":3})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("4\t4")
     result.content.should contain("5\t5")
     result.content.should contain("6\t6")
@@ -139,7 +139,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-tail.txt","line_offset":-3})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("8\t8")
     result.content.should contain("9\t9")
     result.content.should contain("10\t10")
@@ -152,7 +152,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-crlf.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("1\talpha")
     result.content.should contain("2\tbeta")
     result.content.should_not contain("\r")
@@ -165,7 +165,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-mixed.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     # Lone CR inside "beta\rgamma" must be rendered as literal `\r`.
     result.content.should contain("\\r")
     result.content.should contain("carriage-return line endings are shown as")
@@ -178,7 +178,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-long.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("...")
     result.content.should contain("were truncated.")
   end
@@ -191,7 +191,7 @@ describe Hcode::Tools::Read do
     File.write(path, (1..600).map { line }.join('\n') + '\n')
 
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-bytes.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Max #{Hcode::Tools::Read::MAX_BYTES} bytes reached.")
   end
 
@@ -201,7 +201,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-cap.txt","n_lines":5000})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Max #{Hcode::Tools::Read::MAX_LINES} lines reached.")
     result.content.should contain("Total lines in file: 3000.")
   end
@@ -212,7 +212,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-eof.txt","n_lines":50})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("End of file reached.")
   end
 
@@ -222,7 +222,7 @@ describe Hcode::Tools::Read do
 
     read = Hcode::Tools::Read.new("/tmp")
     result = read.execute(JSON.parse(%({"path":"hcode-test-read-empty.txt"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("No lines read from file.")
     result.content.should contain("Total lines in file: 0.")
   end

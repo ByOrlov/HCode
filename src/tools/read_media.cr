@@ -286,8 +286,8 @@ module Hcode
     # ------------------------------------------------------------------
 
     struct ModelCapabilities
-      getter image_in : Bool
-      getter video_in : Bool
+      getter? image_in : Bool
+      getter? video_in : Bool
 
       def initialize(@image_in : Bool = false, @video_in : Bool = false)
       end
@@ -457,8 +457,8 @@ module Hcode
 
       def build_capability_tail : String
         caps = Media.capabilities
-        image_in = caps.try(&.image_in) || false
-        video_in = caps.try(&.video_in) || false
+        image_in = caps.try(&.image_in?) || false
+        video_in = caps.try(&.video_in?) || false
 
         if image_in && video_in
           "- This tool supports image and video files for the current model."
@@ -508,11 +508,11 @@ module Hcode
         when MediaKind::Unknown
           return ToolResult.error(%("#{path}" is not a supported image or video file. Use Read for text files, or Bash or an MCP tool for other binary formats.))
         when MediaKind::Image
-          unless capabilities.image_in
+          unless capabilities.image_in?
             return ToolResult.error("The current model does not support image input. Tell the user to use a model with image input capability.")
           end
         when MediaKind::Video
-          unless capabilities.video_in
+          unless capabilities.video_in?
             return ToolResult.error("The current model does not support video input. Tell the user to use a model with video input capability.")
           end
         end

@@ -98,7 +98,7 @@ module Hcode
           return ToolResult.error("Skill \"#{skill_name}\" not found in the current skill listing.")
         end
 
-        if skill.metadata.disable_model_invocation
+        if skill.metadata.disable_model_invocation?
           return ToolResult.error("Skill \"#{skill.name}\" can only be triggered by the user (model invocation is disabled).")
         end
 
@@ -382,7 +382,7 @@ module Hcode
       property description : String?
       property when_to_use : String?
       property arguments : String? | Array(String)?
-      property disable_model_invocation : Bool
+      property? disable_model_invocation : Bool
 
       def initialize(@type : String? = nil,
                      @name : String? = nil,
@@ -476,7 +476,7 @@ module Hcode
         return "" if @skills.empty?
         lines = ["DISREGARD any earlier skill listings. Current available skills:"]
         @skills.values.each do |skill|
-          next if skill.metadata.disable_model_invocation
+          next if skill.metadata.disable_model_invocation?
           lines << "- #{skill.name}: #{truncate(skill.description, 80)}"
           if w = skill.when_to_use
             lines << "  When to use: #{w}"

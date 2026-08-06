@@ -58,7 +58,7 @@ module Hcode
               # zone, not here — the log is append-only. Once the result
               # arrives the complete entry appears below. See TUI_ZONES.md.
               return lines unless has_result
-              lines << tool_header(name, msg.tool_args, msg.tool_result, has_result, msg.is_error)
+              lines << tool_header(name, msg.tool_args, msg.tool_result, has_result, msg.is_error?)
               if args = msg.tool_args
                 # The header already shows the key argument for most tools;
                 # keep the body preview only when there is no header argument
@@ -420,7 +420,7 @@ module Hcode
         lines = [] of String
         total = group.size
         pending = group.count { |e| e.tool_result.nil? }
-        failed = group.count { |e| e.is_error }
+        failed = group.count { |e| e.is_error? }
         done_lines = group.sum { |e| count_non_empty_lines(e.tool_result) }
 
         header = String.build do |s|
@@ -447,7 +447,7 @@ module Hcode
           path = read_group_file_path(entry.tool_args) || "?"
           tail = if entry.tool_result.nil?
                    " · reading…"
-                 elsif entry.is_error
+                 elsif entry.is_error?
                    " · failed"
                  else
                    line_count = count_non_empty_lines(entry.tool_result)
@@ -781,7 +781,7 @@ module Hcode
         # Header: ● AgentSwarm (description) — Working... / Completed.
         has_result = !msg.tool_result.nil?
         bullet =
-          if msg.is_error
+          if msg.is_error?
             "#{ec}✗ #{r}"
           elsif has_result
             "#{sc}● #{r}"

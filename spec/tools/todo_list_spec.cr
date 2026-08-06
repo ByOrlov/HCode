@@ -21,7 +21,7 @@ describe Hcode::Tools::TodoList do
   it "creates a todo list with JS status markers" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"task A","status":"pending"},{"title":"task B","status":"done"}]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("task A")
     result.content.should contain("task B")
     result.content.should contain("[pending]")
@@ -31,7 +31,7 @@ describe Hcode::Tools::TodoList do
   it "appends the write reminder after a mutation" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"x","status":"in_progress"}]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("in_progress")
     result.content.should contain("Ensure that you continue to use the todo list")
   end
@@ -39,7 +39,7 @@ describe Hcode::Tools::TodoList do
   it "accepts in_progress status" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"active","status":"in_progress"}]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("[in_progress]")
   end
 
@@ -49,7 +49,7 @@ describe Hcode::Tools::TodoList do
     todo.execute(JSON.parse(%({"todos":[{"title":"a","status":"pending"}]})))
     # Then clear
     result = todo.execute(JSON.parse(%({"todos":[]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("cleared")
   end
 
@@ -57,7 +57,7 @@ describe Hcode::Tools::TodoList do
     todo = Hcode::Tools::TodoList.new
     todo.execute(JSON.parse(%({"todos":[{"title":"read me","status":"pending"}]})))
     result = todo.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("read me")
     result.content.should contain("[pending]")
     # No write reminder in query mode.
@@ -67,21 +67,21 @@ describe Hcode::Tools::TodoList do
   it "query mode on an empty list" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("empty")
   end
 
   it "accepts the legacy `completed` status as an alias for `done`" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"old","status":"completed"}]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("[done]")
   end
 
   it "defaults status to pending when missing" do
     todo = Hcode::Tools::TodoList.new
     result = todo.execute(JSON.parse(%({"todos":[{"title":"no status"}]})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("[pending]")
   end
 end

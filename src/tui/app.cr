@@ -56,13 +56,13 @@ module Hcode
       @run_turn_cb : (String, Bool -> Nil)?
       # Plan mode mirrors TS: while on, tools that mutate state are blocked
       # and the agent only researches. Toggled via `/plan` or `EnterPlanMode`.
-      property plan_mode : Bool = false
+      property? plan_mode : Bool = false
       @queue : Array(QueuedMessage) = [] of QueuedMessage
       @spin_phase : Int32 = 0
       @dirty : Bool = true
       # When true, a terminal-exec (sudo) session owns the screen — skip TUI
       # rendering so it doesn't clobber the alt-screen output.
-      property terminal_exec_active : Bool = false
+      property? terminal_exec_active : Bool = false
       @last_render : Time::Span = Time.monotonic
       # Serializes rendering across fibers. STDOUT writes can yield to the
       # scheduler (when the kernel write buffer is full), so without this guard

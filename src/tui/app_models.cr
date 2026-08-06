@@ -4,7 +4,7 @@ module Hcode
       property tool_call_id : String
       property tool_args : String
       property tool_result : String?
-      property is_error : Bool = false
+      property? is_error : Bool = false
 
       def initialize(@tool_call_id : String, @tool_args : String)
       end
@@ -122,7 +122,7 @@ module Hcode
       property tool_args : String?
       property tool_result : String?
       property tool_display : Tools::ToolDisplay? = nil
-      property is_error : Bool = false
+      property? is_error : Bool = false
       property? expanded : Bool = false
       property step : Int32 = 0
       property read_group : Array(ReadGroupEntry)?

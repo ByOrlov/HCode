@@ -5,7 +5,7 @@ module Hcode
       property index : Int32
       property tool_call_id : String
       property content : String
-      property is_error : Bool
+      property? is_error : Bool
       property display : Tools::ToolDisplay? = nil
       # An unexpected exception raised inside the fiber. When non-nil, the
       # caller must re-raise it on the main fiber so the loop-level interceptor
@@ -73,7 +73,7 @@ module Hcode
         approved.size.times do
           result = channel.receive
           results_by_index[result.index] = result
-          on_event.call(Event.tool_result(result.tool_call_id, result.content, result.is_error, result.display))
+          on_event.call(Event.tool_result(result.tool_call_id, result.content, result.is_error?, result.display))
         end
 
         # Re-raise the first unexpected exception on the main fiber so the
@@ -185,7 +185,7 @@ module Hcode
           # PostToolUse hook: fire-and-forget (not blocking). Lets external
           # tooling observe completed tool calls.
           if engine = @hooks
-            event_type = result.is_error ? "PostToolUseFailure" : "PostToolUse"
+            event_type = result.is_error? ? "PostToolUseFailure" : "PostToolUse"
             spawn(same_thread: true) do
               engine.trigger(event_type, tc.name,
                 {"tool_name"   => JSON::Any.new(tc.name),
@@ -194,7 +194,7 @@ module Hcode
             end
           end
 
-          channel.send(ToolBatchResult.new(pc.index, tc.id, budgeted_content, result.is_error, result.display))
+          channel.send(ToolBatchResult.new(pc.index, tc.id, budgeted_content, result.is_error?, result.display))
         rescue ex : UserCancellationError
           channel.send(ToolBatchResult.new(pc.index, tc.id, "Cancelled: #{ex.reason}", true))
         rescue ex

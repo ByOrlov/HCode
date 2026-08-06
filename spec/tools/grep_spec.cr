@@ -18,14 +18,14 @@ describe Hcode::Tools::Grep do
   it "returns error for empty pattern" do
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({})))
-    result.is_error.should be_true
+    result.is_error?.should be_true
   end
 
   it "searches content and returns matching lines" do
     File.write(File.join(test_dir, "a.txt"), "hello world\nfoo bar\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "hello", "output_mode": "content"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("hello world")
     result.content.should_not contain("foo bar")
   end
@@ -34,7 +34,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "b.txt"), "searchterm here\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "searchterm"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("b.txt")
     result.content.should_not contain("searchterm here")
   end
@@ -43,7 +43,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "c.txt"), "dup\ndup\ndup\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "dup", "output_mode": "count_matches"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Found")
     result.content.should contain("occurrence")
   end
@@ -52,7 +52,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "d.txt"), "Hello World\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "hello", "output_mode": "content", "-i": true})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("Hello World")
   end
 
@@ -60,7 +60,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "e.txt"), "line1\nMATCH\nline3\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "MATCH", "output_mode": "content", "-A": 1})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("MATCH")
     result.content.should contain("line3")
   end
@@ -69,7 +69,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "f.txt"), "line1\nMATCH\nline3\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "MATCH", "output_mode": "content", "-B": 1})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("line1")
     result.content.should contain("MATCH")
   end
@@ -79,7 +79,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "g.txt"), "crystal_match\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "crystal_match", "glob": "*.cr"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("g.cr")
     result.content.should_not contain("g.txt")
   end
@@ -88,7 +88,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, ".env"), "SECRET_KEY=hunter2\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "SECRET_KEY", "output_mode": "content"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should_not contain("hunter2")
     result.content.should_not contain("SECRET_KEY")
   end
@@ -97,7 +97,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, ".env.local"), "API_TOKEN=xyz\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "API_TOKEN"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     # Content must never leak, but the filtered-file notice (listing the path) is expected.
     result.content.should_not contain("xyz")
   end
@@ -108,7 +108,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(vcs_dir, "config"), "vcs_secret_data\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "vcs_secret_data"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should_not contain("vcs_secret_data")
   end
 
@@ -116,7 +116,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "h.txt"), "pagetest\npagetest\npagetest\npagetest\npagetest\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "pagetest", "output_mode": "content", "head_limit": 2})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("truncated")
   end
 
@@ -124,7 +124,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "i.txt"), "offsetline\noffsetline\noffsetline\noffsetline\noffsetline\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "offsetline", "output_mode": "content", "head_limit": 0})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should_not contain("truncated")
   end
 
@@ -132,7 +132,7 @@ describe Hcode::Tools::Grep do
     File.write(File.join(test_dir, "j.txt"), "some content\n")
     grep = Hcode::Tools::Grep.new(test_dir)
     result = grep.execute(JSON.parse(%({"pattern": "ZZZ_NOT_FOUND_ZZZ", "output_mode": "content"})))
-    result.is_error.should be_false
+    result.is_error?.should be_false
     result.content.should contain("No matches")
   end
 

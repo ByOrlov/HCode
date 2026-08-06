@@ -150,7 +150,7 @@ module Hcode
                 if eidx = group.index { |e| e.tool_call_id == event.tool_call_id }
                   entry = group[eidx]
                   entry.tool_result = tool_preview_text(event.text)
-                  entry.is_error = event.is_error
+                  entry.is_error = event.is_error?
                   group[eidx] = entry
                   msg.read_group = group
                   @messages[i] = msg
@@ -158,7 +158,7 @@ module Hcode
                 end
               elsif msg.tool_call_id == event.tool_call_id
                 msg.tool_result = tool_preview_text(event.text)
-                msg.is_error = event.is_error
+                msg.is_error = event.is_error?
                 # The full structured display (e.g. Edit diff) can be large.
                 # /debug has the full output; the TUI renders from the preview.
                 msg.tool_display = nil
@@ -280,7 +280,7 @@ module Hcode
 
           # A cancelled turn ends the dispatch chain: drop queued messages
           # so they don't leak into the next prompt the user types fresh.
-          if event.is_error
+          if event.is_error?
             unless @queue.empty?
               @queue.clear
               @messages << Message.new("system", "[Queue cleared on interrupt]")

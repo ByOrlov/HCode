@@ -478,7 +478,7 @@ module Hcode
       property model : String
       property messages : Array(Message)
       property tools : Array(ToolDefinition)?
-      property stream : Bool = true
+      property? stream : Bool = true
       property temperature : Float64?
       property max_tokens : Int32?
       # Preferred over the legacy `max_tokens` alias on the wire (matches the

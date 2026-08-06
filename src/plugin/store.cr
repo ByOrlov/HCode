@@ -18,7 +18,7 @@ module Hcode
         property id : String
         property root : String
         property source : String
-        property enabled : Bool
+        property? enabled : Bool
         property installed_at : String
         property updated_at : String?
         property original_source : String?
@@ -100,7 +100,7 @@ module Hcode
           obj["id"] = JSON::Any.new(r.id)
           obj["root"] = JSON::Any.new(r.root)
           obj["source"] = JSON::Any.new(r.source)
-          obj["enabled"] = JSON::Any.new(r.enabled)
+          obj["enabled"] = JSON::Any.new(r.enabled?)
           obj["installedAt"] = JSON::Any.new(r.installed_at)
           obj["updatedAt"] = JSON::Any.new(r.updated_at) if r.updated_at
           obj["originalSource"] = JSON::Any.new(r.original_source) if r.original_source

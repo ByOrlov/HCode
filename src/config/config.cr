@@ -45,7 +45,7 @@ module Hcode
       property temperature : Float64? = nil
       property proxy : String? = nil
       property language : String? = nil
-      property debug_zones : Bool = false
+      property? debug_zones : Bool = false
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
       property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
@@ -269,19 +269,19 @@ module Hcode
         end
 
         if notif = root["notifications"]?.try(&.as_h?)
-          config.notifications.enabled = notif["enabled"]?.try(&.as_bool?) || config.notifications.enabled
+          config.notifications.enabled = notif["enabled"]?.try(&.as_bool?) || config.notifications.enabled?
           config.notifications.condition = notif["condition"]?.try(&.as_s?) || config.notifications.condition
           if sound = notif["sound"]?.try(&.as_h?)
-            config.notifications.sound_enabled = sound["enabled"]?.try(&.as_bool?) || config.notifications.sound_enabled
+            config.notifications.sound_enabled = sound["enabled"]?.try(&.as_bool?) || config.notifications.sound_enabled?
             config.notifications.sound_done = sound["done"]?.try(&.as_s?) || ""
             config.notifications.sound_input_required = sound["input_required"]?.try(&.as_s?) || ""
             config.notifications.sound_working = sound["working"]?.try(&.as_s?) || ""
           end
           if term = notif["terminal"]?.try(&.as_h?)
-            config.notifications.terminal_enabled = term["enabled"]?.try(&.as_bool?) || config.notifications.terminal_enabled
+            config.notifications.terminal_enabled = term["enabled"]?.try(&.as_bool?) || config.notifications.terminal_enabled?
           end
           if webhook = notif["webhook"]?.try(&.as_h?)
-            config.notifications.webhook_enabled = webhook["enabled"]?.try(&.as_bool?) || config.notifications.webhook_enabled
+            config.notifications.webhook_enabled = webhook["enabled"]?.try(&.as_bool?) || config.notifications.webhook_enabled?
             config.notifications.webhook_url = webhook["url"]?.try(&.as_s?) || ""
             config.notifications.webhook_method = webhook["method"]?.try(&.as_s?) || "POST"
             config.notifications.webhook_timeout_ms = webhook["timeout_ms"]?.try(&.as_i?) || 5000
@@ -448,11 +448,11 @@ module Hcode
 
             json.field("notifications") do
               json.object do
-                json.field("enabled", @notifications.enabled)
+                json.field("enabled", @notifications.enabled?)
                 json.field("condition", @notifications.condition)
                 json.field("sound") do
                   json.object do
-                    json.field("enabled", @notifications.sound_enabled)
+                    json.field("enabled", @notifications.sound_enabled?)
                     json.field("done", @notifications.sound_done)
                     json.field("input_required", @notifications.sound_input_required)
                     json.field("working", @notifications.sound_working)
@@ -460,12 +460,12 @@ module Hcode
                 end
                 json.field("terminal") do
                   json.object do
-                    json.field("enabled", @notifications.terminal_enabled)
+                    json.field("enabled", @notifications.terminal_enabled?)
                   end
                 end
                 json.field("webhook") do
                   json.object do
-                    json.field("enabled", @notifications.webhook_enabled)
+                    json.field("enabled", @notifications.webhook_enabled?)
                     json.field("url", @notifications.webhook_url)
                     json.field("method", @notifications.webhook_method)
                     json.field("timeout_ms", @notifications.webhook_timeout_ms)
