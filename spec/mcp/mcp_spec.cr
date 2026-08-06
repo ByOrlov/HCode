@@ -114,12 +114,12 @@ module Hcode
             JSON
             servers = ConfigLoader.parse_mcp_json(home)
             servers.size.should eq(2)
-            gh = servers.find { |s| s.name == "github" }.not_nil!
+            gh = servers.find! { |s| s.name == "github" }
             gh.command.should eq("npx")
             gh.args.should eq(["-y", "@modelcontextprotocol/server-github"])
             gh.env["GITHUB_TOKEN"].should eq("ghp_secret")
             gh.stdio?.should be_true
-            servers.find(&.name.==("empty")).not_nil!.command.should eq("")
+            servers.find!(&.name.==("empty")).command.should eq("")
           ensure
             FileUtils.rm_r(home) rescue nil
           end
@@ -168,7 +168,7 @@ module Hcode
             merged = ConfigLoader.load(home, cwd: home)
             names = merged.map(&.name).sort!
             names.should eq(["github", "postgres"])
-            gh = merged.find(&.name.==("github")).not_nil!
+            gh = merged.find!(&.name.==("github"))
             gh.command.should eq("node")
           ensure
             FileUtils.rm_r(home) rescue nil
@@ -205,9 +205,9 @@ module Hcode
               }
             JSON
             servers = ConfigLoader.parse_mcp_json(home)
-            multi = servers.find(&.name.==("zai-search")).not_nil!
+            multi = servers.find!(&.name.==("zai-search"))
             multi.providers.should eq(["zai", "zai-coding-plan"])
-            single = servers.find(&.name.==("single")).not_nil!
+            single = servers.find!(&.name.==("single"))
             single.providers.should eq(["moonshot"])
           ensure
             FileUtils.rm_r(home) rescue nil
@@ -233,9 +233,9 @@ module Hcode
               }
             JSON
             servers = ConfigLoader.parse_mcp_json(home)
-            servers.find(&.name.==("zai-search")).not_nil!.providers
+            servers.find!(&.name.==("zai-search")).providers
               .should eq(["zai", "zai-coding-plan"])
-            servers.find(&.name.==("moon-only")).not_nil!.providers
+            servers.find!(&.name.==("moon-only")).providers
               .should eq(["moonshot"])
           ensure
             FileUtils.rm_r(home) rescue nil
@@ -295,7 +295,7 @@ module Hcode
       describe JsonRpcClient do
         it "correlates requests by id and returns the result" do
           t = SmartLoopback.new
-          t.handlers["ping"] = ->(p : JSON::Any) { JSON.parse(%({"pong": 1})) }
+          t.handlers["ping"] = ->(_p : JSON::Any) { JSON.parse(%({"pong": 1})) }
           rpc = JsonRpcClient.new(t)
 
           result = rpc.call("ping")
@@ -309,7 +309,7 @@ module Hcode
 
         it "raises RpcError on an error envelope" do
           t = SmartLoopback.new
-          t.handlers["boom"] = ->(p : JSON::Any) {
+          t.handlers["boom"] = ->(_p : JSON::Any) {
             JSON.parse(%({"error":{"code":-32000,"message":"kaboom"}}))
           }
           rpc = JsonRpcClient.new(t)
@@ -331,13 +331,13 @@ module Hcode
       describe Client do
         it "connects, lists tools, and calls a tool (text result)" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) {
             JSON.parse(%({"protocolVersion":"2025-06-18","capabilities":{}}))
           }
-          t.handlers["tools/list"] = ->(p : JSON::Any) {
+          t.handlers["tools/list"] = ->(_p : JSON::Any) {
             JSON.parse(%({"tools":[{"name":"echo","description":"echoes","inputSchema":{"type":"object"}}]}))
           }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"text","text":"hello"}],"isError":false}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -358,9 +358,9 @@ module Hcode
 
         it "embeds image/audio/resource content blocks as data URIs and text" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"text","text":"ok"},{"type":"image","mimeType":"image/png","data":"iVBOR"},{"type":"resource","resource":{"uri":"file:///a","text":"res-text"}}]}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -373,9 +373,9 @@ module Hcode
 
         it "handles resource_link as a URL reference, not inline blob" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"resource_link","uri":"https://example.com/img.png","mimeType":"image/png"}]}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -387,10 +387,10 @@ module Hcode
 
         it "captures negotiated protocol version from initialize" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) {
             JSON.parse(%({"protocolVersion":"2025-03-26","capabilities":{}}))
           }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
           client = Client.new("test", t, JsonRpcClient.new(t))
           client.negotiated_version.should be_nil
           client.connect
@@ -399,9 +399,9 @@ module Hcode
 
         it "decodes resource blob as data URI" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"resource","resource":{"uri":"file:///b","mimeType":"application/pdf","blob":"SEVMTE8="}}]}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -412,9 +412,9 @@ module Hcode
 
         it "propagates isError from the server" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"text","text":"boom"}],"isError":true}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -426,9 +426,9 @@ module Hcode
 
         it "handles legacy { toolResult } shape" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"toolResult":"legacy string result"}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -440,9 +440,9 @@ module Hcode
 
         it "handles legacy { toolResult } with object" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) { JSON.parse(%({"tools":[]})) }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) { JSON.parse(%({"tools":[]})) }
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"toolResult":{"key":"val"}}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -454,8 +454,8 @@ module Hcode
 
         it "defaults non-object inputSchema to empty object" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) {
             JSON.parse(%({"tools":[{"name":"bad","description":"d","inputSchema":null},{"name":"arr","description":"d","inputSchema":[1,2]},{"name":"ok","description":"d","inputSchema":{"type":"object"}}]}))
           }
           client = Client.new("test", t, JsonRpcClient.new(t))
@@ -474,11 +474,11 @@ module Hcode
       describe McpProxyTool do
         it "executes via the client and maps errors to ToolResult.error" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) {
             JSON.parse(%({"tools":[{"name":"echo","description":"d","inputSchema":{"type":"object"}}]}))
           }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"text","text":"42"}]}))
           }
           client = Client.new("srv", t, JsonRpcClient.new(t))
@@ -778,11 +778,11 @@ module Hcode
       describe McpProxyTool do
         it "propagates truncated flag on oversized output" do
           t = SmartLoopback.new
-          t.handlers["initialize"] = ->(p : JSON::Any) { JSON.parse("{}") }
-          t.handlers["tools/list"] = ->(p : JSON::Any) {
+          t.handlers["initialize"] = ->(_p : JSON::Any) { JSON.parse("{}") }
+          t.handlers["tools/list"] = ->(_p : JSON::Any) {
             JSON.parse(%({"tools":[{"name":"chatty","description":"d","inputSchema":{"type":"object"}}]}))
           }
-          t.handlers["tools/call"] = ->(p : JSON::Any) {
+          t.handlers["tools/call"] = ->(_p : JSON::Any) {
             JSON.parse(%({"content":[{"type":"text","text":"#{("a" * (Output::MAX_OUTPUT_CHARS + 500))}"}]}))
           }
           client = Client.new("srv", t, JsonRpcClient.new(t))
