@@ -112,7 +112,7 @@ module Hcode
           dc = ANSI.color(@theme.colors.dim, nil)
           r = ANSI.reset
           lines << "#{ec}💥 Exception#{r}"
-          msg.content.split('\n').each_with_index do |l, idx|
+          msg.content.split('\n').each do |l|
             lines << "#{dc}  #{l}#{r}" unless l.empty?
           end
           lines << ""
@@ -205,6 +205,13 @@ module Hcode
         mc = ANSI.color(@theme.colors.muted, nil)
         r = ANSI.reset
 
+        # Khaki vertical bar mirroring `render_streaming_text`, so the live
+        # thinking preview shares the active-zone mutable-region marker.
+        kc = ANSI.color(@theme.colors.logo, nil)
+        # `lead` is visually 2 cols (bar + space), matching THINKING_INDENT, so
+        # the wrapping math below stays correct.
+        lead = "#{kc}#{STREAMING_BAR}#{r} "
+
         lines << ""
 
         content_lines = wrap_thinking(@streaming_thinking, cols - THINKING_INDENT.size)
@@ -215,6 +222,7 @@ module Hcode
         end
 
         lines << String.build do |s|
+          s << lead
           s << pc
           s << Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
           s << r
@@ -225,7 +233,7 @@ module Hcode
         end
 
         preview_lines.each do |cl|
-          lines << "#{THINKING_INDENT}#{dc}#{ANSI.italic}#{cl}#{r}"
+          lines << "#{lead}#{dc}#{ANSI.italic}#{cl}#{r}"
         end
 
         lines
@@ -776,6 +784,13 @@ module Hcode
         mc = ANSI.color(c.muted, nil)
         r = ANSI.reset
 
+        # Khaki vertical bar mirroring `render_streaming_text` /
+        # `render_running_tool`, so swarm calls share the active-zone
+        # mutable-region marker.
+        kc = ANSI.color(c.logo, nil)
+        lead = "#{kc}#{STREAMING_BAR}#{r} "
+        rest_indent = "  "
+
         members = msg.swarm_members
 
         # Header: ● AgentSwarm (description) — Working... / Completed.
@@ -812,7 +827,7 @@ module Hcode
 
         tool_label = "#{pc}#{ANSI.bold}#{tool_name}#{r}"
         arg_str = "#{dc} (#{description})#{r}"
-        lines << "#{bullet}#{tool_label}#{arg_str}"
+        lines << "#{lead}#{bullet}#{tool_label}#{arg_str}"
 
         # Per-member rows.
         max_ticks = members.max_of(&.ticks)
@@ -862,7 +877,7 @@ module Hcode
             end
           end
 
-          lines << "  #{mark} #{bar} #{tc}#{item}#{r} #{phase_str}"
+          lines << "#{lead}#{mark} #{bar} #{tc}#{item}#{r} #{phase_str}"
 
           # For a single-agent call, show 2 extra streaming preview lines below
           # the member row so the user sees ~3 lines of live output (the first
@@ -871,13 +886,13 @@ module Hcode
           if sm.running? && members.size == 1 && preview_lines.size > 1
             max_preview_w = {cols - 6, 10}.max
             preview_lines[1..].each do |pline|
-              lines << "    #{dc}#{CharWidth.truncate_to_width(pline, max_preview_w)}#{r}"
+              lines << "#{lead}#{rest_indent}#{dc}#{CharWidth.truncate_to_width(pline, max_preview_w)}#{r}"
             end
           end
         end
 
         # Footer: aggregate status line.
-        lines << "  #{dc}#{status_label}#{status_word}#{r}"
+        lines << "#{lead}#{dc}#{status_label}#{status_word}#{r}"
         lines << ""
       end
 

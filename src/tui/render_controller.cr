@@ -194,7 +194,10 @@ module Hcode
         end
 
         if @spinner.active? && @streaming_thinking.empty?
+          kc = ANSI.color(@theme.colors.logo, nil)
+          lead = "#{kc}#{MessageRenderer::STREAMING_BAR}#{ANSI.reset} "
           active_lines << String.build do |s|
+            s << lead
             s << ANSI.color(@theme.colors.primary, nil)
             s << Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
             s << ANSI.reset
