@@ -25,6 +25,10 @@ module Hcode
       property ticks : Int32 = 0
       property item_text : String = ""
       property swarm_index : Int32 = 0
+      # Streaming assistant text from the child agent, capped to avoid unbounded
+      # growth. The TUI renders the last 1–3 non-empty lines of this buffer as a
+      # live preview in the active zone (mirrors kimi-code's latestModelText).
+      property latest_text : String = ""
 
       def initialize(@agent_id : String, @phase : String = "Running")
       end

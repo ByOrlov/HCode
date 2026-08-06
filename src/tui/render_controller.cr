@@ -164,7 +164,7 @@ module Hcode
           end
           @messages.each do |msg|
             next if msg.role == "tool" && msg.tool_name && msg.tool_result.nil? &&
-                    msg.read_group.nil? && msg.swarm_members.empty?
+                    msg.read_group.nil?
             @log_lines_cache.concat(render_message(msg, cols))
           end
           @log_cache_dirty = false
@@ -184,8 +184,11 @@ module Hcode
         # Pending tool calls (no result yet) live in the active zone — they
         # migrate to the log zone once their result arrives. See TUI_ZONES.md.
         @messages.each do |m|
-          if m.role == "tool" && m.tool_name && m.tool_result.nil? &&
-             m.read_group.nil? && m.swarm_members.empty?
+          next unless m.role == "tool" && (name = m.tool_name) && m.tool_result.nil? &&
+                      m.read_group.nil?
+          if !m.swarm_members.empty?
+            active_lines.concat(render_swarm_progress(m, name, cols))
+          else
             active_lines.concat(render_running_tool(m, cols))
           end
         end

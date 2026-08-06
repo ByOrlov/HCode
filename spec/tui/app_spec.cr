@@ -590,6 +590,56 @@ describe Hcode::TUI::App do
     end
   end
 
+  # A pending Agent/AgentSwarm call (no tool_result yet) must render its live
+  # progress grid in the repainted ACTIVE zone so the spinner/braille animation
+  # updates each frame — not in the append-only LOG zone, where lines are written
+  # once and frozen. Once the result arrives, the entry migrates into the log as
+  # a final snapshot, exactly like a regular tool call. See docs/TUI_ZONES.md.
+  describe "swarm progress zone routing" do
+    it "renders a pending swarm in the active zone, then migrates to log on result" do
+      app = Hcode::TUI::App.new
+      tc = "call_swarm_routing"
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "AgentSwarm", %({"description":"do work"})))
+      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
+
+      # Pending (no tool_result yet): swarm progress lives in the active zone.
+      log, active, _ = app.build_rendered_lines_split(80)
+      log.any?(&.includes?("AgentSwarm")).should be_false
+      active.any?(&.includes?("AgentSwarm")).should be_true
+
+      # Result arrives: the entry migrates into the append-only log.
+      app.on_event(Hcode::Loop::Event.tool_result(tc, "all done", false))
+      log, active, _ = app.build_rendered_lines_split(80)
+      log.any?(&.includes?("AgentSwarm")).should be_true
+      active.any?(&.includes?("AgentSwarm")).should be_false
+    end
+  end
+
+  # Streaming assistant text from a child agent is forwarded via SubagentText
+  # events and accumulated in SwarmMember#latest_text. The TUI renders the last
+  # few non-empty lines as a live preview in the active zone — mirrors
+  # kimi-code's latestModelText.
+  describe "subagent streaming text preview" do
+    it "accumulates latest_text and renders it in the active zone" do
+      app = Hcode::TUI::App.new
+      tc = "call_stream"
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "Agent", %({"description":"review"})))
+      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-1"))
+
+      member = app.@messages.last.swarm_members.first
+      member.latest_text.should eq("")
+
+      # Simulate streaming deltas forwarded by the runner.
+      app.on_event(Hcode::Loop::Event.subagent_text(tc, "agent-1", "First line\nSecond line"))
+      member = app.@messages.last.swarm_members.first
+      member.latest_text.should eq("First line\nSecond line")
+
+      # The latest line appears in the active-zone rendering.
+      _, active, _ = app.build_rendered_lines_split(80)
+      active.any?(&.includes?("Second line")).should be_true
+    end
+  end
+
   # The welcome banner is rendered from @show_welcome.  It must stay in the
   #  render array after the first message so it scrolls off naturally as
   #  content grows — it must never be *removed* from the array (which would

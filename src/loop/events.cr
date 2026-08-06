@@ -18,6 +18,7 @@ module Hcode
       CompactionCancelled
       SubagentStarted
       SubagentProgress
+      SubagentText
       SubagentCompleted
       SubagentFailed
       # An unexpected Crystal exception escaped a turn. Carries the formatted
@@ -222,6 +223,20 @@ module Hcode
         e.agent_id = agent_id
         e.subagent_ticks = ticks
         e.phase = "Running"
+        e
+      end
+
+      # A streaming assistant-text chunk from a child agent. The swarm/agent
+      # runner forwards `text_delta` events so the TUI can render a live preview
+      # of each subagent's output in the active zone (mirrors kimi-code's
+      # latestModelText). `text` carries the accumulated snapshot, not a single
+      # delta — the runner owns the buffer so the event stays self-contained.
+      def self.subagent_text(tool_call_id : String, agent_id : String,
+                             text : String) : Event
+        e = new(EventType::SubagentText)
+        e.tool_call_id = tool_call_id
+        e.agent_id = agent_id
+        e.text = text
         e
       end
 

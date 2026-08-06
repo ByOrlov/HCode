@@ -251,6 +251,8 @@ module Hcode
           handle_subagent_started(event)
         when .subagent_progress?
           handle_subagent_progress(event)
+        when .subagent_text?
+          handle_subagent_text(event)
         when .subagent_completed?
           handle_subagent_terminal(event, "Completed")
         when .subagent_failed?
@@ -362,6 +364,23 @@ module Hcode
             msg.swarm_members[i] = sm
             changed = true
           end
+        end
+        @messages[idx] = msg if changed
+        @dirty = true if changed
+      end
+
+      private def handle_subagent_text(event : Loop::Event) : Nil
+        idx = find_swarm_message(event.tool_call_id)
+        return unless idx
+        msg = @messages[idx]
+        changed = false
+        # SwarmMember is a struct — see handle_subagent_progress for the
+        # mutate-via-index pattern.
+        msg.swarm_members.each_with_index do |sm, i|
+          next unless sm.agent_id == event.agent_id
+          sm.latest_text = event.text
+          msg.swarm_members[i] = sm
+          changed = true
         end
         @messages[idx] = msg if changed
         @dirty = true if changed

@@ -8,6 +8,10 @@ module Hcode
     # `Tools::PlanReviewResult` through a callback and hides.
     class PlanReviewDialog
       ACTIONS = ["View full plan", "Approve", "Revise", "Reject & Exit", "Cancel"]
+      # Max plan-body lines rendered inline in the review dialog; longer plans
+      # are truncated with a header/footer indicator so the user knows to open
+      # the full viewer.
+      PREVIEW_LINES = 40
 
       @plan : String = ""
       @path : String?
@@ -243,8 +247,15 @@ module Hcode
         if body_lines.empty?
           lines << "#{ANSI.color(dim, nil)}   (empty plan)#{ANSI.reset}"
         else
-          body_lines.first(40).each do |bl|
+          truncated = body_lines.size > PREVIEW_LINES
+          if truncated
+            lines << "#{ANSI.color(dim, nil)}  First #{PREVIEW_LINES} lines of a PLAN#{ANSI.reset}"
+          end
+          body_lines.first(PREVIEW_LINES).each do |bl|
             lines << "  #{bl}"
+          end
+          if truncated
+            lines << "#{ANSI.color(dim, nil)}  #{"." * 11}#{ANSI.reset}"
           end
         end
         lines << ""

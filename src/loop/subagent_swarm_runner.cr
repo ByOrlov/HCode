@@ -91,12 +91,18 @@ module Hcode
 
         entry.running = true
         ticks = 0
+        text_buf = ""
         begin
           entry.agent.run_turn(spec.prompt, @system_prompt) do |event|
             case event.type
             when .tool_call_start?, .tool_call_delta?, .step_begin?
               ticks += 1
               emit(Event.subagent_progress(tool_call_id, entry.agent_id, ticks))
+            when .text_delta?
+              text_buf += event.text
+              # Cap the buffer so a very long response doesn't grow unbounded.
+              text_buf = text_buf[-2000..] if text_buf.size > 2000
+              emit(Event.subagent_text(tool_call_id, entry.agent_id, text_buf))
             end
           end
           summary = latest_assistant_text(entry.context)

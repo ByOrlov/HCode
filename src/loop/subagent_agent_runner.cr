@@ -150,6 +150,7 @@ module Hcode
         tool_call_id = @tool_call_id
         emit(Event.subagent_started(tool_call_id, entry.agent_id))
         ticks = 0
+        text_buf = ""
 
         begin
           agent.run_turn(prompt, @system_prompt) do |event|
@@ -157,6 +158,10 @@ module Hcode
             when .tool_call_start?, .tool_call_delta?, .step_begin?
               ticks += 1
               emit(Event.subagent_progress(tool_call_id, entry.agent_id, ticks))
+            when .text_delta?
+              text_buf += event.text
+              text_buf = text_buf[-2000..] if text_buf.size > 2000
+              emit(Event.subagent_text(tool_call_id, entry.agent_id, text_buf))
             end
           end
 

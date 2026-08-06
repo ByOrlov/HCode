@@ -851,12 +851,48 @@ module Hcode
             item = CharWidth.truncate_to_width(item, max_item_w)
           end
 
+          # For running members with streaming text, replace the static
+          # "running" label with the latest line of their output — mirrors
+          # kimi-code's runningCellLabelText (latestModelText).
+          preview_lines = [] of String
+          if sm.running? && !sm.latest_text.empty?
+            preview_lines = latest_non_empty_lines(sm.latest_text, 3)
+            if first_line = preview_lines[0]?
+              phase_str = "#{mc}#{CharWidth.truncate_to_width(first_line, max_item_w)}#{r}"
+            end
+          end
+
           lines << "  #{mark} #{bar} #{tc}#{item}#{r} #{phase_str}"
+
+          # For a single-agent call, show 2 extra streaming preview lines below
+          # the member row so the user sees ~3 lines of live output (the first
+          # line is already in the row label). Skipped for multi-agent swarms
+          # to keep the grid compact.
+          if sm.running? && members.size == 1 && preview_lines.size > 1
+            max_preview_w = {cols - 6, 10}.max
+            preview_lines[1..].each do |pline|
+              lines << "    #{dc}#{CharWidth.truncate_to_width(pline, max_preview_w)}#{r}"
+            end
+          end
         end
 
         # Footer: aggregate status line.
         lines << "  #{dc}#{status_label}#{status_word}#{r}"
         lines << ""
+      end
+
+      # Extract the last `max` non-empty, stripped lines from a streaming text
+      # buffer, preserving order (oldest first). Used to show a live preview of
+      # each subagent's assistant output in the swarm grid.
+      private def latest_non_empty_lines(text : String, max : Int32) : Array(String)
+        result = [] of String
+        text.split('\n').reverse_each do |line|
+          stripped = line.strip
+          next if stripped.empty?
+          result.unshift(stripped)
+          break if result.size >= max
+        end
+        result
       end
 
       private def extract_key_argument(name : String, args : String?) : String?
