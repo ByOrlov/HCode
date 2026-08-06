@@ -249,7 +249,6 @@ describe Hcode::Tools::AgentSwarm do
   end
 
   it "uses default subagent_type when omitted" do
-    seen = [] of String
     runner = FakeRunner.new(->(spec : Hcode::Tools::AgentSwarmSpec) do
       Hcode::Tools::SwarmRunResult.new(spec: spec, status: Hcode::Tools::SwarmStatus::Completed,
         agent_id: "x", result: "ok")

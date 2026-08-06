@@ -201,7 +201,7 @@ describe Hcode::TUI::SelectList do
     list.show("Pick", items)
     list.max_visible = 5
     list.selected = 0
-    start, count = list.visible_window
+    start, _count = list.visible_window
     start.should eq(0)
     list.scrolled_up?.should be_false
     list.scrolled_down?.should be_true

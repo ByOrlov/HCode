@@ -330,13 +330,13 @@ module Hcode
         s = s.gsub("&lt;", "<")
         s = s.gsub("&gt;", ">")
         s = s.gsub("&quot;", "\"")
-        s = s.gsub(/&#(\d+);/) do |match, data|
+        s = s.gsub(/&#(\d+);/) do |str, data|
           code = data[1].to_i?
-          code && (1..0x10FFFF).includes?(code) ? code.chr : match
+          code && (1..0x10FFFF).includes?(code) ? code.chr : str
         end
-        s = s.gsub(/&#[xX]([0-9a-fA-F]+);/) do |match, data|
+        s = s.gsub(/&#[xX]([0-9a-fA-F]+);/) do |str, data|
           code = data[1].to_i?(16)
-          code && (1..0x10FFFF).includes?(code) ? code.chr : match
+          code && (1..0x10FFFF).includes?(code) ? code.chr : str
         end
 
         # Схлопнуть whitespace.

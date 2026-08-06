@@ -104,7 +104,6 @@ describe Hcode::Tools::Skill do
     catalog = Hcode::Tools::InMemorySkillCatalog.new([skill])
     Hcode::Tools::Skill.catalog = catalog
 
-    renderer = Hcode::Tools::Skill.new
     rendered = catalog.render_skill_prompt(skill, "world extra", nil)
     rendered.should contain("Hello world")
     rendered.should contain("Args: world extra")

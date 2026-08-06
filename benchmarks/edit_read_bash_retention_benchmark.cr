@@ -45,7 +45,7 @@ def measure(label, note = "") : Measurement
 end
 
 # Mirror TUI preview truncation.
-TOOL_PREVIEW_LINES = 10
+TOOL_PREVIEW_LINES =   10
 TOOL_PREVIEW_CHARS = 1000
 
 def tool_preview_text(text : String) : String
@@ -80,17 +80,17 @@ end
 #   - Bash: 1 MB command output (test runner, build log) — budget truncates
 #     to 50 KB before it lands in Memory.
 #   - Thinking: reasoning trace, 8 KB per step.
-EDIT_OLD_SIZE   =   80_000
-EDIT_NEW_SIZE   =   80_000
-READ_RESULT     =   50_000
-BASH_RESULT     = 1_000_000
-THINKING_SIZE   =    8_000
-ASSISTANT_SIZE  =    1_500
-USER_SIZE       =      200
+EDIT_OLD_SIZE  =    80_000
+EDIT_NEW_SIZE  =    80_000
+READ_RESULT    =    50_000
+BASH_RESULT    = 1_000_000
+THINKING_SIZE  =     8_000
+ASSISTANT_SIZE =     1_500
+USER_SIZE      =       200
 
-N_TURNS         = 100            # ~300 tool calls total
-MAX_TOKENS      = ENV["HCODE_MAX_TOKENS"]?.try(&.to_i?) || 262_144
-COMPACT_KEEP    = 6
+N_TURNS      = 100 # ~300 tool calls total
+MAX_TOKENS   = ENV["HCODE_MAX_TOKENS"]?.try(&.to_i?) || 262_144
+COMPACT_KEEP = 6
 
 puts "=== Edit + Read + Bash + thinking retention benchmark ==="
 puts "Per-turn: 1 Edit(#{EDIT_OLD_SIZE / 1024}KB old+new) + 1 Read(#{READ_RESULT / 1024}KB) + 1 Bash(#{BASH_RESULT / 1024}KB→budget 50KB)"
@@ -110,7 +110,6 @@ measurements << measure("After Memory.new")
 def breakdown(memory)
   args_bytes = 0_i64
   content_bytes = 0_i64
-  thinking_bytes = 0_i64
   memory.history.each do |cm|
     msg = cm.message
     if tcs = msg.tool_calls
@@ -204,27 +203,27 @@ tui_m = measure("2. TUI transcript (previews only)",
   "msgs=#{tui_messages.size}, stored=#{(tui_messages.sum { |_, c| c.bytesize } / 1_048_576.0).round(2)}MB")
 
 # Phase 3: simulate per-step JSON request serialization peak.
-request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
-json_body = request.to_json
-json_m = measure("3. JSON request body", "#{(json_body.bytesize / 1_048_576.0).round(2)} MB")
+_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_json_body = _request.to_json
+json_m = measure("3. JSON request body", "#{(_json_body.bytesize / 1_048_576.0).round(2)} MB")
 
 # Phase 4: simulate one full markdown render of the TUI transcript (peak).
 markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
 rendered_bytes = 0_i64
-tui_messages.each do |role, content|
+tui_messages.each do |_, content|
   next if content.empty?
   rendered_bytes += markdown.render("```\n#{content}\n```", 120).sum(&.bytesize)
 end
 render_m = measure("4. Markdown render all TUI msgs", "#{(rendered_bytes / 1_048_576.0).round(2)} MB rendered")
 
 # Phase 5: clear one thing at a time.
-json_body = nil
-request = nil
+_json_body = nil
+_request = nil
 markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
-after_json_clear = measure("5. After JSON+request cleared")
+measure("5. After JSON+request cleared")
 
 tui_messages.clear
-after_tui_clear = measure("6. After TUI transcript cleared")
+measure("6. After TUI transcript cleared")
 
 memory.clear
 after_memory_clear = measure("7. After Context::Memory cleared")

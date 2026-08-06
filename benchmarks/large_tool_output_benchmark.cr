@@ -69,42 +69,41 @@ def tool_preview_text(text : String) : String
 end
 
 TOOL_SIZE = 10_000_000
-COLS      = 120
+COLS      =        120
 
 measurements = [] of Measurement
 puts "=== Large single tool output benchmark ==="
 puts "Tool result size: #{(TOOL_SIZE / 1_048_576.0).round(2)} MB (matches Bash MAX_OUTPUT_BYTES)"
 measurements << measure("Baseline")
 
-tool_output = "t" * TOOL_SIZE
+_tool_output = "t" * TOOL_SIZE
 
 memory = Hcode::Context::Memory.new
 memory.max_context_tokens = 262144
 memory.add_user("Read a big file")
 memory.add_assistant("")
-memory.add_tool_result("tc_big", tool_output)
+memory.add_tool_result("tc_big", _tool_output)
 ctx_m = measure("1. Context::Memory with 10 MB tool result")
 
 messages = [] of TUIMessage
 messages << TUIMessage.new("user", "Read a big file")
 messages << TUIMessage.new("assistant", "")
-messages << TUIMessage.new("tool", tool_preview_text(tool_output))
+messages << TUIMessage.new("tool", tool_preview_text(_tool_output))
 tui_m = measure("2. TUI transcript (preview only)", "preview #{(messages[-1].content.bytesize / 1_048_576.0).round(3)} MB")
 
 markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
 rendered = markdown.render("```\n#{messages[-1].content}\n```", COLS)
 render_m = measure("3. Markdown render of preview", "#{rendered.size} lines")
 
-request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
-json_body = request.to_json
-json_m = measure("4. JSON request body", "#{(json_body.bytesize / 1_048_576.0).round(2)} MB")
+_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_json_body = _request.to_json
+json_m = measure("4. JSON request body", "#{(_json_body.bytesize / 1_048_576.0).round(2)} MB")
 
-tool_output = nil
+_tool_output = nil
 memory.clear
-json_body = nil
-request = nil
+_json_body = nil
+_request = nil
 messages.clear
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
 after_clear = measure("5. After clearing everything")
 final = measure("Final")
 

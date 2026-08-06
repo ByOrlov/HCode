@@ -69,13 +69,13 @@ def tool_preview_text(text : String) : String
   preview + "\n[... truncated; load session in /debug mode to expand ...]"
 end
 
-N_TURNS        = 2000
+N_TURNS        =   2000
 TOOL_SIZE      = 50_000
-ASSISTANT_SIZE = 5_000
-USER_SIZE      = 200
+ASSISTANT_SIZE =  5_000
+USER_SIZE      =    200
 MAX_TOKENS     = 262144
-COMPACT_KEEP   = 6
-COLS           = 120
+COMPACT_KEEP   =      6
+COLS           =    120
 
 measurements = [] of Measurement
 
@@ -126,7 +126,7 @@ puts "   Context raw text peak (compacted): #{context_peak_raw_mb.round(2)} MB"
 
 # Phase 2: TUI transcript keeps only tool previews.
 messages = [] of TUIMessage
-N_TURNS.times do |i|
+N_TURNS.times do |_|
   messages << TUIMessage.new("user", "u" * USER_SIZE)
   messages << TUIMessage.new("assistant", "a" * ASSISTANT_SIZE)
   messages << TUIMessage.new("tool", tool_preview_text("t" * TOOL_SIZE))
@@ -147,16 +147,16 @@ end
 render_m = measure("3. Markdown render", "#{rendered_bytes / 1_048_576.0} MB rendered")
 
 # Phase 4: serialize compacted context to JSON.
-request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
-json_body = request.to_json
-json_peak_mb = {json_peak_mb, json_body.bytesize / 1_048_576.0}.max
-json_m = measure("4. JSON request body", "JSON body #{(json_body.bytesize / 1_048_576.0).round(2)} MB, peak #{json_peak_mb.round(2)} MB")
+_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_json_body = _request.to_json
+json_peak_mb = {json_peak_mb, _json_body.bytesize / 1_048_576.0}.max
+json_m = measure("4. JSON request body", "JSON body #{(_json_body.bytesize / 1_048_576.0).round(2)} MB, peak #{json_peak_mb.round(2)} MB")
 
 # Phase 5: clear everything.
 memory.clear
-json_body = nil
-request = nil
-after_ctx_clear = measure("5. After Context::Memory cleared", "TUI still holds messages")
+_json_body = nil
+_request = nil
+measure("5. After Context::Memory cleared", "TUI still holds messages")
 
 messages.clear
 markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)

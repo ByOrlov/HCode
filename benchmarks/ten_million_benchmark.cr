@@ -47,15 +47,15 @@ end
 
 record TUIMessage, role : String, content : String
 
-TOTAL_SIZE     = 10_000_000
-CHUNK_SIZE     = 200_000
-LINE_LEN       = 1_000
-COLS           = 120
-LINE_WITH_NL   = LINE_LEN + 1
+TOTAL_SIZE      = 10_000_000
+CHUNK_SIZE      =    200_000
+LINE_LEN        =      1_000
+COLS            =        120
+LINE_WITH_NL    = LINE_LEN + 1
 LINES_PER_CHUNK = CHUNK_SIZE // LINE_WITH_NL
 CHUNK_REAL_SIZE = LINES_PER_CHUNK * LINE_WITH_NL
-CHUNK_COUNT    = TOTAL_SIZE // CHUNK_REAL_SIZE
-REAL_TOTAL     = CHUNK_COUNT * CHUNK_REAL_SIZE
+CHUNK_COUNT     = TOTAL_SIZE // CHUNK_REAL_SIZE
+REAL_TOTAL      = CHUNK_COUNT * CHUNK_REAL_SIZE
 
 puts "=== Benchmark: cumulative #{TOTAL_SIZE} char assistant response ==="
 puts "Chunk size: ~#{CHUNK_REAL_SIZE} chars (#{LINES_PER_CHUNK} lines of #{LINE_LEN} chars)"
@@ -111,19 +111,19 @@ end
 render_m = measure("After markdown render", "#{rendered_lines} lines, #{(rendered_bytes / 1_048_576.0).round(2)} MB")
 
 # Phase D: serialize request to JSON
-request = Hcode::LLM::ChatRequest.new(
+_request = Hcode::LLM::ChatRequest.new(
   model: "mock",
   messages: memory.messages,
   tools: nil,
   stream: true,
 )
-json_body = request.to_json
-json_m = measure("After request.to_json", "JSON body #{(json_body.bytesize / 1_048_576.0).round(2)} MB")
+_json_body = _request.to_json
+json_m = measure("After request.to_json", "JSON body #{(_json_body.bytesize / 1_048_576.0).round(2)} MB")
 
 # Phase E: clear
 memory.clear
-json_body = nil
-request = nil
+_json_body = nil
+_request = nil
 measurements << measure("After Context::Memory cleared", "TUI still holds messages")
 
 messages.clear

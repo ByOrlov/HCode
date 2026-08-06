@@ -41,7 +41,7 @@ def measure(label)
   Measurement.new(label, rss, heap, live)
 end
 
-N_EDITS = 3
+N_EDITS   =         3
 EDIT_SIZE = 3_000_000
 
 puts "=== Edit tool memory benchmark ==="
@@ -74,19 +74,18 @@ end
 measure("After TUI previews")
 
 # JSON serialization peak with streaming vs string.
-request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
-json_body = request.to_json
+_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request.to_json
 measure("After request.to_json (string)")
-json_body = nil
 GC.collect
 
 # Streaming: serialize to /dev/null to measure transient memory.
 io = File.open("/dev/null", "w")
-request.to_json(io)
+_request.to_json(io)
 io.close
 measure("After request.to_json (stream to /dev/null)")
 
 memory.clear
-request = nil
+_request = nil
 GC.collect
 measure("After clearing")

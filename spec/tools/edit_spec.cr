@@ -159,7 +159,6 @@ describe Hcode::Tools::Edit do
 
   context "path access policy" do
     it "blocks editing a sensitive file (.env)" do
-      path = "/tmp/hcode-test-edit-env"
       Dir.mkdir_p("/tmp/hcode-test-edit-env")
       File.write("/tmp/hcode-test-edit-env/.env", "SECRET=1\n")
 

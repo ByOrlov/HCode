@@ -32,11 +32,11 @@ end
 
 record TUIMessage, role : String, content : String, tool_result : String? = nil
 
-N_TURNS        = 1000
+N_TURNS        =   1000
 TOOL_SIZE      = 50_000
-ASSISTANT_SIZE = 5_000
-USER_SIZE      = 200
-COLS           = 120
+ASSISTANT_SIZE =  5_000
+USER_SIZE      =    200
+COLS           =    120
 
 puts "=== Memory benchmark ==="
 puts "Turns: #{N_TURNS}, tool_result: #{TOOL_SIZE} chars, assistant: #{ASSISTANT_SIZE} chars, user: #{USER_SIZE} chars"
@@ -60,7 +60,7 @@ puts "   Messages: #{memory.history.size}, token estimate: #{memory.token_count}
 
 # 2. TUI duplicate transcript
 messages = [] of TUIMessage
-N_TURNS.times do |i|
+N_TURNS.times do |_|
   messages << TUIMessage.new("user", "u" * USER_SIZE)
   messages << TUIMessage.new("assistant", "a" * ASSISTANT_SIZE)
   messages << TUIMessage.new("tool", "", "t" * TOOL_SIZE)
@@ -72,7 +72,7 @@ markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
 rendered_lines = 0
 rendered_chars = 0
 
-N_TURNS.times do |i|
+N_TURNS.times do |_|
   assistant_lines = markdown.render("a" * ASSISTANT_SIZE, COLS)
   rendered_lines += assistant_lines.size
   rendered_chars += assistant_lines.sum(&.bytesize)
@@ -85,15 +85,15 @@ gc_and_measure("3. After markdown render of all messages")
 puts "   Rendered lines: #{rendered_lines}, rendered bytes: #{(rendered_chars / 1_048_576.0).round(2)} MB"
 
 # 4. HTTP request JSON serialization
-request = Hcode::LLM::ChatRequest.new(
+_request = Hcode::LLM::ChatRequest.new(
   model: "mock",
   messages: memory.messages,
   tools: nil,
   stream: true,
 )
-json_body = request.to_json
+_json_body = _request.to_json
 gc_and_measure("4. After request.to_json")
-puts "   JSON body size: #{(json_body.bytesize / 1_048_576.0).round(2)} MB"
+puts "   JSON body size: #{(_json_body.bytesize / 1_048_576.0).round(2)} MB"
 
 # 5. Simulated Bash peak: 5 parallel captures of 10 MB each
 buffers = [] of String
@@ -108,8 +108,8 @@ gc_and_measure("   After clearing Bash buffers")
 
 # 6. Simulate compaction: Context::Memory is cleared, but TUI transcript stays
 memory.clear
-json_body = nil
-request = nil
+_json_body = nil
+_request = nil
 GC.collect
 gc_and_measure("6. After Context::Memory cleared (TUI still holds history)")
 

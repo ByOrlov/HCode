@@ -67,7 +67,7 @@ describe Hcode::Tools::CreateGoal do
 
   it "replaces the existing goal when replace=true" do
     tool = Hcode::Tools::CreateGoal.new
-    first = tool.execute(JSON.parse(%({ "objective": "first" })))
+    tool.execute(JSON.parse(%({ "objective": "first" })))
     second = tool.execute(JSON.parse(%({ "objective": "second", "replace": true })))
     second.is_error?.should be_false
     second.content.should contain(%("objective": "second"))

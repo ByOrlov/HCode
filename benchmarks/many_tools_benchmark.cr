@@ -69,9 +69,9 @@ def tool_preview_text(text : String) : String
 end
 
 N_TOOLS    = 10_000
-TOOL_SIZE  = 1_000
+TOOL_SIZE  =  1_000
 MAX_TOKENS = 262144
-COLS       = 120
+COLS       =    120
 
 measurements = [] of Measurement
 puts "=== Many tool calls benchmark ==="
@@ -101,7 +101,7 @@ ctx_m = measure("1. Context::Memory filled", "compactions=#{compaction_count}, m
 
 # Phase 2: TUI transcript with previews only.
 messages = [] of TUIMessage
-N_TOOLS.times do |i|
+N_TOOLS.times do |_|
   messages << TUIMessage.new("tool", tool_preview_text("r" * TOOL_SIZE))
 end
 tui_stored_mb = messages.sum(&.content.bytesize) / 1_048_576.0
@@ -117,14 +117,14 @@ end
 render_m = measure("3. Markdown render", "#{rendered_bytes / 1_048_576.0} MB rendered")
 
 # Phase 4: JSON request from compacted context.
-request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
-json_body = request.to_json
-json_size_mb = json_body.bytesize / 1_048_576.0
+_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_json_body = _request.to_json
+json_size_mb = _json_body.bytesize / 1_048_576.0
 json_m = measure("4. JSON request body", "#{json_size_mb.round(2)} MB")
 
 memory.clear
-json_body = nil
-request = nil
+_json_body = nil
+_request = nil
 messages.clear
 markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
 after_clear = measure("5. After clearing everything")

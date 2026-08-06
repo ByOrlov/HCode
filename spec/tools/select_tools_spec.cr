@@ -98,7 +98,6 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "marks tools as active after successful load" do
-    service = Hcode::Tools::ToolSelect.service.as(Hcode::Tools::InMemoryToolSelectService)
     tool = Hcode::Tools::SelectTools.new
     tool.execute(JSON.parse(%({ "names": ["a"] })))
     # Second call — a should now be already_available.

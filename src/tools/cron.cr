@@ -572,7 +572,7 @@ module Hcode
 
       private def parse_part(part : String, min_v : Int32, max_v : Int32, result : Set(Int32)) : Nil
         if part == "*"
-          (min_v..max_v).each { |v| result << v }
+          (min_v..max_v).each { |n| result << n }
           return
         end
 
@@ -608,7 +608,7 @@ module Hcode
           lo = m[1].to_i
           hi = m[2].to_i
           validate_range(lo, hi, min_v, max_v, part)
-          (lo..hi).each { |v| result << v }
+          (lo..hi).each { |n| result << n }
           return
         end
 
@@ -633,7 +633,7 @@ module Hcode
       private def parse_dow(spec : String) : Set(Int32)
         result = Set(Int32).new
         if spec == "*"
-          (0..6).each { |v| result << v }
+          (0..6).each { |n| result << n }
           return result
         end
         spec.split(",").each do |part|

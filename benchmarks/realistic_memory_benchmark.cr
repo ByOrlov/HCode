@@ -29,12 +29,12 @@ end
 
 record TUIMessage, role : String, content : String, tool_result : String? = nil
 
-N_TURNS        = 2000
+N_TURNS        =   2000
 TOOL_SIZE      = 50_000
-ASSISTANT_SIZE = 5_000
-USER_SIZE      = 200
+ASSISTANT_SIZE =  5_000
+USER_SIZE      =    200
 MAX_TOKENS     = 262144
-COMPACT_KEEP   = 6
+COMPACT_KEEP   =      6
 
 memory = Hcode::Context::Memory.new
 memory.max_context_tokens = MAX_TOKENS

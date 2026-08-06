@@ -568,17 +568,19 @@ module Hcode
         text = line.text
         case mode
         when "files_with_matches"
-          return relativize(text)
+          relativize(text)
         when "count_matches"
           if idx = text.rindex(':')
-            return idx > 0 ? relativize(text[0...idx]) + text[idx..] : text
+            idx > 0 ? relativize(text[0...idx]) + text[idx..] : text
+          else
+            text
           end
-          return text
         else
           if fp = extract_content_path(text)
-            return relativize(fp) + text[fp.size..]
+            relativize(fp) + text[fp.size..]
+          else
+            text
           end
-          return text
         end
       end
 

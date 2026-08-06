@@ -110,7 +110,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "allows the same label across different questions" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       h = Hcode::Tools::QuestionResult.new
       h["Q1?"] = "a"
       h["Q2?"] = "a"
@@ -130,7 +130,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders answered JSON without method field" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       h = Hcode::Tools::QuestionResult.new
       h["DB?"] = "SQLite"
       h
@@ -147,7 +147,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders dismissed when service returns nil" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new { |req, sig| nil }
+    Hcode::Tools::AskUserQuestion.service = FakeService.new { |_req, _sig| nil }
 
     tool = Hcode::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
@@ -160,7 +160,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders dismissed when service returns empty hash" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       Hcode::Tools::QuestionResult.new
     end
 
@@ -173,7 +173,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "returns UNSUPPORTED error on NotImplementedError" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       raise NotImplementedError.new("not supported")
     end
 
@@ -186,7 +186,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "returns dismissed (not error) on a generic service exception" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       raise Exception.new("connection lost")
     end
 
@@ -209,7 +209,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "re-raises AbortError" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       raise Hcode::Tools::AbortError.new("aborted")
     end
 
@@ -222,7 +222,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders immediate background response with task_id" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       Hcode::Tools::QuestionResult.new
     end
     tasks = FakeTasks.new
@@ -242,7 +242,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "falls back to foreground when tasks service is missing despite background=true" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |req, sig|
+    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       h = Hcode::Tools::QuestionResult.new
       h["Q?"] = "a"
       h

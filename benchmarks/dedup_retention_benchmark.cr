@@ -47,8 +47,8 @@ def measure(label)
   Measurement.new(label, rss, heap, live)
 end
 
-N_CALLS    = 50
-ARGS_BYTES = 200_000   # ~200 KB JSON args, simulating a chunky Edit payload
+N_CALLS    =      50
+ARGS_BYTES = 200_000 # ~200 KB JSON args, simulating a chunky Edit payload
 
 puts "=== Retention benchmark: DedupTracker + Permission cache ==="
 puts "#{N_CALLS} calls × #{ARGS_BYTES} bytes/args"
@@ -115,4 +115,3 @@ puts "Fix 2 RSS delta        : #{(after_perm.rss_mb - after_dedup_gc.rss_mb).rou
 puts "\n--- Final summary ---"
 puts "Fix 1 (DedupTracker)   : 9.5 MB → 1.5 KB retained"
 puts "Fix 2 (Approval cache) : 9.5 MB → 3.4 KB retained"
-

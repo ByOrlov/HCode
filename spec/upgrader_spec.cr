@@ -42,7 +42,7 @@ describe Hcode::Upgrader do
     end
 
     it "reports failure when GitHub API is unreachable" do
-      Hcode::Upgrader.http_get = ->(url : String) {
+      Hcode::Upgrader.http_get = ->(_url : String) {
         raise "network error"
       }
       ok, msg = Hcode::Upgrader.run
@@ -53,14 +53,14 @@ describe Hcode::Upgrader do
 
   describe ".latest_version" do
     it "parses tag_name from the GitHub releases JSON" do
-      Hcode::Upgrader.http_get = ->(url : String) {
+      Hcode::Upgrader.http_get = ->(_url : String) {
         %({"tag_name": "2026.07.31.3", "name": "2026.07.31.3"})
       }
       Hcode::Upgrader.latest_version.should eq("2026.07.31.3")
     end
 
     it "returns nil on malformed JSON" do
-      Hcode::Upgrader.http_get = ->(url : String) { "not json" }
+      Hcode::Upgrader.http_get = ->(_url : String) { "not json" }
       Hcode::Upgrader.latest_version.should be_nil
     end
   end
@@ -79,7 +79,7 @@ describe Hcode::Upgrader do
     end
 
     it "should_check? returns true when no cache file exists" do
-      Hcode::Upgrader.cache_path = ->{ File.join(tmp_dir, "missing.json") }
+      Hcode::Upgrader.cache_path = -> { File.join(tmp_dir, "missing.json") }
       Hcode::Upgrader.should_check?.should be_true
     end
 
@@ -88,7 +88,7 @@ describe Hcode::Upgrader do
       Dir.mkdir_p(tmp_dir)
       recent = (Time.utc - 1.hour).to_rfc3339
       File.write(path, %({"checked_at": "#{recent}", "latest": "1.0.0"}))
-      Hcode::Upgrader.cache_path = ->{ path }
+      Hcode::Upgrader.cache_path = -> { path }
       Hcode::Upgrader.should_check?.should be_false
     end
 
@@ -97,7 +97,7 @@ describe Hcode::Upgrader do
       Dir.mkdir_p(tmp_dir)
       stale = (Time.utc - 25.hours).to_rfc3339
       File.write(path, %({"checked_at": "#{stale}", "latest": "1.0.0"}))
-      Hcode::Upgrader.cache_path = ->{ path }
+      Hcode::Upgrader.cache_path = -> { path }
       Hcode::Upgrader.should_check?.should be_true
     end
 
@@ -105,8 +105,8 @@ describe Hcode::Upgrader do
       path = File.join(tmp_dir, "written.json")
       Dir.mkdir_p(tmp_dir)
       fixed_time = Time.utc(2026, 1, 15, 12, 0, 0)
-      Hcode::Upgrader.cache_path = ->{ path }
-      Hcode::Upgrader.now = ->{ fixed_time }
+      Hcode::Upgrader.cache_path = -> { path }
+      Hcode::Upgrader.now = -> { fixed_time }
       Hcode::Upgrader.record_check("9.9.9")
       File.exists?(path).should be_true
       json = JSON.parse(File.read(path))
@@ -119,9 +119,9 @@ describe Hcode::Upgrader do
       Dir.mkdir_p(tmp_dir)
       recent = (Time.utc - 1.hour).to_rfc3339
       File.write(path, %({"checked_at": "#{recent}", "latest": "1.0.0"}))
-      Hcode::Upgrader.cache_path = ->{ path }
+      Hcode::Upgrader.cache_path = -> { path }
       network_called = false
-      Hcode::Upgrader.http_get = ->(url : String) { network_called = true; "" }
+      Hcode::Upgrader.http_get = ->(_url : String) { network_called = true; "" }
       Hcode::Upgrader.background_check.should be_nil
       network_called.should be_false
     end
@@ -129,8 +129,8 @@ describe Hcode::Upgrader do
     it "background_check returns notification when newer version available" do
       path = File.join(tmp_dir, "notify.json")
       Dir.mkdir_p(tmp_dir)
-      Hcode::Upgrader.cache_path = ->{ path }
-      Hcode::Upgrader.http_get = ->(url : String) {
+      Hcode::Upgrader.cache_path = -> { path }
+      Hcode::Upgrader.http_get = ->(_url : String) {
         %({"tag_name": "9999.99.99.99"})
       }
       result = Hcode::Upgrader.background_check
@@ -143,8 +143,8 @@ describe Hcode::Upgrader do
     it "background_check returns nil when already up-to-date" do
       path = File.join(tmp_dir, "uptodate.json")
       Dir.mkdir_p(tmp_dir)
-      Hcode::Upgrader.cache_path = ->{ path }
-      Hcode::Upgrader.http_get = ->(url : String) {
+      Hcode::Upgrader.cache_path = -> { path }
+      Hcode::Upgrader.http_get = ->(_url : String) {
         %({"tag_name": "#{Hcode::VERSION}"})
       }
       Hcode::Upgrader.background_check.should be_nil
