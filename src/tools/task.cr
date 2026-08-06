@@ -109,7 +109,7 @@ module Hcode
             json.field "ended_at", @ended_at unless @ended_at.nil?
             json.field "detached", @detached unless @detached.nil?
             json.field "stop_reason", @stop_reason unless @stop_reason.nil?
-            if (v = @terminal_notification_suppressed)
+            if v = @terminal_notification_suppressed
               json.field "terminal_notification_suppressed", v
             end
             json.field "timeout_ms", @timeout_ms unless @timeout_ms.nil?
@@ -139,7 +139,7 @@ module Hcode
         info.detached = parsed["detached"]?.try(&.as_bool?)
         sr = parsed["stop_reason"]?
         info.stop_reason = sr ? sr.to_s : nil
-        if (v = parsed["terminal_notification_suppressed"]?.try(&.as_bool?))
+        if v = parsed["terminal_notification_suppressed"]?.try(&.as_bool?)
           info.terminal_notification_suppressed = v
         end
         info.timeout_ms = parsed["timeout_ms"]?.try(&.as_i64?)
@@ -755,7 +755,7 @@ module Hcode
       end
 
       def next_step(block : Bool, terminal : Bool) : String?
-        return nil unless block && !terminal
+        return nil if !block || terminal
         "The task is still running after waiting. Do not block on it again — continue with other work or hand back to the user; you will be notified automatically when it completes."
       end
     end

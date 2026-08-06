@@ -102,7 +102,7 @@ describe Hcode::LLM::OpenAIChatProvider do
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
-      abort_flag = ->{ true }
+      abort_flag = -> { true }
 
       expect_raises(Hcode::LLM::AbortedError) do
         provider.chat([Hcode::LLM::Message.user("hi")], nil, aborted?: abort_flag) { }
@@ -120,7 +120,7 @@ describe Hcode::LLM::OpenAIChatProvider do
       # post-chunk abort check, the timeout branch never fires during fast
       # streaming and the abort is silently ignored.
       chunk_count = 0
-      abort_flag = ->{ chunk_count >= 1 }
+      abort_flag = -> { chunk_count >= 1 }
 
       expect_raises(Hcode::LLM::AbortedError) do
         provider.chat([Hcode::LLM::Message.user("hi")], nil, aborted?: abort_flag) do

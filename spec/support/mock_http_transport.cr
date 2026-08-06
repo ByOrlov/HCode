@@ -43,7 +43,7 @@ module Hcode
 
     def request_stream(method : String, uri : URI, headers : HTTP::Headers,
                        body_io : IO, session : Session,
-                       &block : HTTP::Client::Response, IO ->)
+                       & : HTTP::Client::Response, IO ->)
       @last_uri = uri
       @last_headers = headers
 

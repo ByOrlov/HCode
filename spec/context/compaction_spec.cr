@@ -74,7 +74,7 @@ private class FailingProvider < Hcode::LLM::Provider
   def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
            system_prompt : String? = nil,
            aborted? : -> Bool = -> { false },
-           &block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+           &_block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
     raise "provider down"
   end
 end

@@ -726,7 +726,9 @@ module Hcode
       app.on_additional_dirs_change = ->(dirs : Array(String)) do
         catalog = Hcode::Tools::Skill.catalog
         listing = catalog.is_a?(Hcode::Tools::InMemorySkillCatalog) ? catalog.model_listing : ""
-        system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing)
+        # Reassigning the captured arg is intentional: other closures capturing
+        # `system_prompt` read the new value (closures share it by reference).
+        system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing) # ameba:disable Lint/ShadowedArgument
         nil
       end
 
@@ -812,7 +814,7 @@ module Hcode
       cron_service.start
 
       # Flush cron state + kill background processes on clean exit.
-      app.on_exit = ->{
+      app.on_exit = -> {
         cron_service.stop
         ts.stop_all_on_exit("process exited")
         mcp_manager.shutdown
@@ -820,7 +822,7 @@ module Hcode
       }
 
       # `/mcp` panel: surface live connection status from the manager.
-      app.on_mcp_status = ->{ mcp_manager.status_text }
+      app.on_mcp_status = -> { mcp_manager.status_text }
 
       # `/mcp update [server]`: force reconnect + refresh cache.
       app.on_mcp_update = ->(server : String?) do
@@ -830,9 +832,9 @@ module Hcode
 
       register_profilers(agent, app, permission, ts, system_prompt)
 
-      app.on_clear = ->{ agent.context.clear }
-      app.on_undo = ->{ agent.context.undo(1) }
-      app.on_cancel = ->{ agent.cancel }
+      app.on_clear = -> { agent.context.clear }
+      app.on_undo = -> { agent.context.undo(1) }
+      app.on_cancel = -> { agent.cancel }
       app.on_undo_count = ->(count : Int32) do
         agent.context.undo(count)
         nil
@@ -862,7 +864,7 @@ module Hcode
           end
         end
       end
-      app.on_new_session = ->{
+      app.on_new_session = -> {
         agent.context.clear
         new_store = lifecycle.create(work_dir)
         store.session_dir = new_store.session_dir
@@ -907,7 +909,7 @@ module Hcode
         ts.mark_lost_on_resume
         nil
       end
-      app.on_fork = ->{
+      app.on_fork = -> {
         forked = lifecycle.fork(store, work_dir)
         store.session_dir = forked.session_dir
         store.wire_path = forked.wire_path
@@ -915,7 +917,7 @@ module Hcode
         app.session_id = forked.read_state.try(&.id) || ""
         nil
       }
-      app.on_archive = ->{
+      app.on_archive = -> {
         id = store.read_state.try(&.id) || store.meta_id? || File.basename(store.session_dir)
         lifecycle.archive(id)
       }
@@ -1258,27 +1260,27 @@ module Hcode
       dedup = agent.dedup
       tools = agent.tools
       ProfiledMemory.register("context:history", "context history",
-        calc: ->{ ctx_mem.profiled_bytes }, count: ->{ ctx_mem.profiled_count })
+        calc: -> { ctx_mem.profiled_bytes }, count: -> { ctx_mem.profiled_count })
       ProfiledMemory.register("tui:messages", "TUI transcript",
-        calc: ->{ app.profiled_bytes }, count: ->{ app.profiled_count })
+        calc: -> { app.profiled_bytes }, count: -> { app.profiled_count })
       ProfiledMemory.register("tui:render_buf", "render buffer",
-        calc: ->{ app.render_buffer_bytes }, count: ->{ app.render_buffer_count })
+        calc: -> { app.render_buffer_bytes }, count: -> { app.render_buffer_count })
       ProfiledMemory.register("tui:queue", "queued messages",
-        calc: ->{ app.queue_bytes }, count: ->{ app.queue_count })
+        calc: -> { app.queue_bytes }, count: -> { app.queue_count })
       ProfiledMemory.register("perm:approvals", "session approvals",
-        calc: ->{ perm_mgr.profiled_bytes }, count: ->{ perm_mgr.profiled_count })
+        calc: -> { perm_mgr.profiled_bytes }, count: -> { perm_mgr.profiled_count })
       ProfiledMemory.register("tasks", "background tasks",
-        calc: ->{ task_service.profiled_bytes }, count: ->{ task_service.profiled_count })
+        calc: -> { task_service.profiled_bytes }, count: -> { task_service.profiled_count })
       ProfiledMemory.register("dedup:history", "dedup tracker",
-        calc: ->{ dedup.profiled_bytes }, count: ->{ dedup.profiled_count })
+        calc: -> { dedup.profiled_bytes }, count: -> { dedup.profiled_count })
       ProfiledMemory.register("tools:registry", "tool registry",
-        calc: ->{ tools.profiled_bytes }, count: ->{ tools.profiled_count })
+        calc: -> { tools.profiled_bytes }, count: -> { tools.profiled_count })
       ProfiledMemory.register("tui:width_cache", "width cache",
-        calc: ->{ TUI::CharWidth.cache_bytes }, count: ->{ TUI::CharWidth.cache_count })
+        calc: -> { TUI::CharWidth.cache_bytes }, count: -> { TUI::CharWidth.cache_count })
       unless system_prompt.empty?
         sp = system_prompt
         ProfiledMemory.register("system_prompt", "system prompt",
-          calc: ->{ sp.profiled_bytes })
+          calc: -> { sp.profiled_bytes })
       end
       todo_tool = tools.get("TodoList")
       register_todo_profiler(todo_tool) if todo_tool.is_a?(Tools::TodoList)
@@ -1288,24 +1290,24 @@ module Hcode
 
     private def self.register_todo_profiler(todo : Tools::TodoList) : Nil
       ProfiledMemory.register("todos", "todo list",
-        calc: ->{ todo.profiled_bytes },
-        count: ->{ todo.profiled_count })
+        calc: -> { todo.profiled_bytes },
+        count: -> { todo.profiled_count })
     end
 
     private def self.register_cron_profiler : Nil
       service = Tools::Cron.service
       return unless service.is_a?(Tools::InMemoryCronService)
       ProfiledMemory.register("cron:tasks", "cron tasks",
-        calc: ->{ service.profiled_bytes },
-        count: ->{ service.profiled_count })
+        calc: -> { service.profiled_bytes },
+        count: -> { service.profiled_count })
     end
 
     private def self.register_skill_profiler : Nil
       catalog = Tools::Skill.catalog
       return unless catalog.is_a?(Tools::InMemorySkillCatalog)
       ProfiledMemory.register("skills:catalog", "skill catalog",
-        calc: ->{ catalog.profiled_bytes },
-        count: ->{ catalog.profiled_count })
+        calc: -> { catalog.profiled_bytes },
+        count: -> { catalog.profiled_count })
     end
 
     private def self.export_session(memory, path : String) : Nil

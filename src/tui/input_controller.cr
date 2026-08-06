@@ -707,7 +707,7 @@ module Hcode
           return
         end
 
-        on_select = ->(task_id : String) { nil }
+        on_select = ->(_task_id : String) { nil }
         on_toggle = -> : Nil do
           @tasks_browser.filter = @tasks_browser.filter == TasksBrowser::Filter::Active ? TasksBrowser::Filter::All : TasksBrowser::Filter::Active
           @tasks_browser.refresh_tasks

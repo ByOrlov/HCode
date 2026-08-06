@@ -108,7 +108,7 @@ module Hcode
       end
 
       def list : Array(PluginRecord)
-        @records.values.sort_by(&.id)
+        @records.values.sort_by!(&.id)
       end
 
       def get(id : String) : PluginRecord?
@@ -223,7 +223,7 @@ module Hcode
         @records.each_value do |record|
           next unless record.ok?
           skill = record.manifest.try(&.session_start).try(&.skill)
-          next unless skill && !skill.empty?
+          next if skill.nil? || skill.empty?
           result << EnabledPluginSessionStart.new(record.id, skill)
         end
         result

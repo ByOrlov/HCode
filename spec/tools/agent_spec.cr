@@ -84,7 +84,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "rejects unknown subagent_type" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       Hcode::Tools::AgentRunOutcome.new(
         agent_id: "x", profile_name: "coder",
         status: Hcode::Tools::AgentRunStatus::Completed, summary: "ok"
@@ -123,7 +123,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground success format" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       Hcode::Tools::AgentRunOutcome.new(
         agent_id: "agent-42",
         profile_name: "coder",
@@ -146,7 +146,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground failure with resume_hint on timeout" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       Hcode::Tools::AgentRunOutcome.new(
         agent_id: "agent-9",
         profile_name: "coder",
@@ -171,7 +171,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground failure without resume_hint when not timed out" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       Hcode::Tools::AgentRunOutcome.new(
         agent_id: "agent-9",
         profile_name: "coder",
@@ -193,7 +193,7 @@ describe Hcode::Tools::Agent do
 
   it "renders detached (background) result format" do
     Hcode::Tools::Agent.background_enabled = true
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       Hcode::Tools::AgentRunOutcome.new(
         agent_id: "agent-100",
         profile_name: "coder",
@@ -232,7 +232,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "wraps runner exceptions into subagent error" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
       raise "boom"
     end)
     Hcode::Tools::Agent.runner = runner

@@ -116,7 +116,7 @@ describe Hcode::TUI::App do
 
     snapshot = app.@messages.find { |m| m.role == "todo_snapshot" }
     snapshot.should_not be_nil
-    if (s = snapshot)
+    if s = snapshot
       s.todo_items.should eq([{"Task A", "done"}, {"Task B", "done"}])
     end
     todos.should be_empty
@@ -451,7 +451,7 @@ describe Hcode::TUI::HelpPanel do
 
   # Regression tests for the TUI_BUGS.md fixes (see TUI_FIXES.md).
   describe "TUI_BUGS fixes" do
-    # BUG #2: wrap_text used .size (codepoints), so CJK text (1 codepoint =
+    # Issue #2: wrap_text used .size (codepoints), so CJK text (1 codepoint =
     # 2 columns) overflowed. Now wraps by visible_width and hard-breaks
     # overwide tokens.
     it "wrap_text wraps CJK content by visible width" do
@@ -477,7 +477,7 @@ describe Hcode::TUI::HelpPanel do
       lines.size.should be > 1
     end
 
-    # BUG #1 + #7: build_rendered_lines now truncates every line to `cols`
+    # Issue #1 + #7: build_rendered_lines now truncates every line to `cols`
     # and appends a trailing SGR reset. Reach it via render_message output
     # piped through the same post-processing.
     it "build_rendered_lines truncates overwide lines to cols" do
@@ -500,7 +500,7 @@ describe Hcode::TUI::HelpPanel do
       end
     end
 
-    # BUG #3: plan-box title with an ANSI Rejected badge miscomputed width
+    # Issue #3: plan-box title with an ANSI Rejected badge miscomputed width
     # via .size, shrinking the top border. Now uses visible_len.
     it "render_plan_box keeps top and bottom borders aligned with ANSI title" do
       app = Hcode::TUI::App.new
@@ -517,7 +517,7 @@ describe Hcode::TUI::HelpPanel do
       )
     end
 
-    # BUG: a long line inside the plan body (e.g. a code line) overflowed
+    # Regression: a long line inside the plan body (e.g. a code line) overflowed
     # content_width and pushed the right border onto the next terminal row,
     # reading as a stray blank line. Now clamped via slice_by_column.
     it "render_plan_box clamps body lines so the right border stays on-row" do
@@ -535,7 +535,7 @@ describe Hcode::TUI::HelpPanel do
       end
     end
 
-    # BUG #4: single CJK grapheme at max_w=1 should not be split into an
+    # Issue #4: single CJK grapheme at max_w=1 should not be split into an
     # empty chunk — it stays as one indivisible chunk.
     it "wrap_editor_line keeps an overwide single grapheme intact" do
       app = Hcode::TUI::App.new
@@ -544,7 +544,7 @@ describe Hcode::TUI::HelpPanel do
       Hcode::TUI::CharWidth.visible_width(chunks[0][0]).should eq(2)
     end
 
-    # BUG #10: welcome box logo is 14 cols wide; clamp box_w so the border
+    # Issue #10: welcome box logo is 14 cols wide; clamp box_w so the border
     # doesn't collapse on very narrow terminals.
     it "render_welcome_box clamps box width to logo width" do
       app = Hcode::TUI::App.new

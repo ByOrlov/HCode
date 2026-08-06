@@ -42,7 +42,7 @@ module Hcode
     # the concept of "element" does not apply, e.g. a single big string).
     def self.register(id : String, label : String, *,
                       calc : -> Int64,
-                      count : -> Int32 = ->{ 0 }) : Nil
+                      count : -> Int32 = -> { 0 }) : Nil
       @@entries.reject!(&.id.==(id))
       @@entries << Entry.new(id, label, calc, count)
       @@registered_ids << id

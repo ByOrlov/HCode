@@ -129,7 +129,7 @@ module Hcode
 
       # All registered backends, sorted A→Z by name.
       def self.providers : Array(ProviderInfo)
-        @@registry.map(&.info).sort_by(&.name)
+        @@registry.map(&.info).sort_by!(&.name)
       end
 
       # Backends visible in the first-run wizard (hidden ones excluded).

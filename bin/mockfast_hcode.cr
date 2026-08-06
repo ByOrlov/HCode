@@ -193,7 +193,7 @@ module Hcode
       app.provider_name = "mock"
       app.permission_mode = "yolo"
       app.work_dir = Dir.current
-      app.debug_zones = config.debug_zones
+      app.debug_zones = config.debug_zones?
 
       puts "mockfast-hcode: simulating a couple of tool calls. Press Ctrl+C to exit."
 

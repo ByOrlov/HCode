@@ -1,3 +1,5 @@
+require "colorize"
+
 # Resolve the build version: explicit HCODE_VERSION wins, then the most
 # recent git tag (`git describe --tags --abbrev=0`), then "0.0.0-dev".
 def hcode_build_version
@@ -28,6 +30,11 @@ def build_miniaudio_bridge(release: false)
   sh "ar rcs #{MINIAUDIO_LIB} #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
 end
 
+# Print a blue "building X" banner before each build step.
+def building(name)
+  puts "▶ Building #{name}".colorize(:blue)
+end
+
 def build_hcode(output = "hcode", release: false)
   build_miniaudio_bridge(release: release)
   link_flags = "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{miniaudio_link_flags}"
@@ -45,6 +52,41 @@ end
 desc "Build the hcode binary with --release"
 task :build_release do
   build_hcode(release: true)
+end
+
+namespace :build do
+  desc "Build every binary: hcode, lines_demo, mock_hcode, mockfast_hcode"
+  task :all => :mockfast_hcode
+
+  desc "Build the hcode binary (debug)"
+  task :hcode do
+    building "hcode"
+    build_hcode
+  end
+
+  desc "Build bin/ameba"
+  task :ameba => :hcode do
+    building "bin/ameba"
+    sh "crystal build bin/ameba.cr -o bin/ameba --warnings none --no-color"
+  end
+
+  desc "Build bin/lines_demo"
+  task :lines_demo => :hcode do
+    building "bin/lines_demo"
+    sh "crystal build bin/lines_demo.cr -o bin/lines_demo --warnings none --no-color"
+  end
+
+  desc "Build bin/mock_hcode (simulated 100-tool LLM output)"
+  task :mock_hcode => :lines_demo do
+    building "bin/mock_hcode"
+    sh "crystal build bin/mock_hcode.cr -o bin/mock_hcode --warnings none --no-color"
+  end
+
+  desc "Build bin/mockfast_hcode (quick render check)"
+  task :mockfast_hcode => :mock_hcode do
+    building "bin/mockfast_hcode"
+    sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
+  end
 end
 
 namespace :run do
@@ -111,6 +153,18 @@ namespace :mock do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=plan ./hcode --tui-prompt 'mock' --yolo"
   end
 
+  # --- standalone mock binaries (built by build:mock_hcode / build:mockfast_hcode) ---
+
+  desc "Build and run bin/mock_hcode (simulated 100-tool LLM output for render testing)"
+  task :run => "build:mock_hcode" do
+    sh "./bin/mock_hcode"
+  end
+
+  desc "Build and run bin/mockfast_hcode (big plan + couple of tools for quick render check)"
+  task :fast => "build:mockfast_hcode" do
+    sh "./bin/mockfast_hcode"
+  end
+
   # Simulate a first run with no config so the setup wizard launches. HCODE_HOME
   # is pointed at a throwaway dir inside the project and config.json is wiped
   # first, so the wizard sees an unconfigured state. Writes go to that throwaway
@@ -133,18 +187,6 @@ namespace :mock do
       sh "crystal run scripts/components/input_demo.cr --warnings none --no-color"
     end
   end
-end
-
-desc "Build and run mock-hcode (simulated 100-tool LLM output for render testing)"
-task :mockrun do
-  sh "crystal build bin/mock_hcode.cr -o bin/mock-hcode --warnings none --no-color"
-  sh "./bin/mock-hcode"
-end
-
-desc "Build and run mockfast-hcode (big plan + couple of tools for quick render check)"
-task :mockfast do
-  sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
-  sh "./bin/mockfast_hcode"
 end
 
 desc "Remove build artifacts"

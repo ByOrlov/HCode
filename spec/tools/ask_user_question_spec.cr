@@ -15,7 +15,7 @@ end
 private class FakeTasks < Hcode::Tools::AgentTaskService
   getter registered = [] of {String, Int32}
 
-  def register_question_task(description : String, question_count : Int32, &run : Hcode::Loop::AbortController? -> String) : String
+  def register_question_task(description : String, question_count : Int32, &_run : Hcode::Loop::AbortController? -> String) : String
     @registered << {description, question_count}
     "task-#{registered.size}"
   end

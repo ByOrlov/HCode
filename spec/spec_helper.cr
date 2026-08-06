@@ -135,7 +135,7 @@ Hcode::I18n.init("en")
 
 # Create a temp directory and yield it, cleaning up after the block. Used by
 # plugin and other specs that need an isolated filesystem.
-def with_tmpdir
+def with_tmpdir(&)
   dir = File.join(Dir.tempdir, "hcode-spec-#{Random::Secure.hex(6)}")
   Dir.mkdir_p(dir)
   begin

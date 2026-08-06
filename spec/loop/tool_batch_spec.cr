@@ -84,7 +84,7 @@ describe Hcode::Loop::ToolBatch do
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"fast-second"})),
     ]
 
-    results = batch.run(calls) { |e| }
+    results = batch.run(calls) { |_| }
 
     results.size.should eq(2)
     results[0].tool_call_id.should eq("call_1")
@@ -136,7 +136,7 @@ describe Hcode::Loop::ToolBatch do
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"only-once"})),
     ]
 
-    results = batch.run(calls) { |e| }
+    results = batch.run(calls) { |_| }
 
     results.size.should eq(2)
     results[0].text.should contain("only-once")
@@ -157,7 +157,7 @@ describe Hcode::Loop::ToolBatch do
       abort.abort("test cancel")
     end
 
-    results = batch.run(calls) { |e| }
+    results = batch.run(calls) { |_| }
 
     # The quick tool should finish; the long one should be cancelled or time out.
     results.size.should eq(2)
@@ -174,7 +174,7 @@ describe Hcode::Loop::ToolBatch do
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"fast"})),
     ]
 
-    batch.run(calls) { |e| }
+    batch.run(calls) { |_| }
 
     tool_messages = context.messages.select { |m| m.role == "tool" }
     tool_messages.size.should eq(2)

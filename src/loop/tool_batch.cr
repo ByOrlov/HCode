@@ -173,7 +173,7 @@ module Hcode
 
           input = parse_args(tc.arguments)
           tool.tool_call_id = tc.id
-          tool.abort_check = ->{ @abort_controller.aborted? }
+          tool.abort_check = -> { @abort_controller.aborted? }
           result = Loop.execute_tool(@abort_controller) do
             tool.execute(input)
           end
@@ -245,7 +245,7 @@ module Hcode
         case value.raw
         when Hash
           sorted = {} of String => JSON::Any
-          value.as_h.keys.sort.each do |k|
+          value.as_h.keys.sort!.each do |k|
             sorted[k] = canonical_hash(value[k])
           end
           JSON::Any.new(sorted)

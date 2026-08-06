@@ -82,7 +82,7 @@ describe Hcode::Tools::ExitPlanMode do
   end
 
   it "fails when plan mode is not active" do
-    with_plan_service do |service|
+    with_plan_service do |_|
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_true
@@ -91,7 +91,7 @@ describe Hcode::Tools::ExitPlanMode do
   end
 
   it "fails when plan file is empty (path known)" do
-    with_plan_service do |service, dir|
+    with_plan_service do |service, _|
       service.enter
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))

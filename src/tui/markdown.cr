@@ -17,7 +17,7 @@ module Hcode
         state = RenderState.new
         content_width = {1, width - 2}.max # account for default 2-space indent
 
-        raw_lines.each_with_index do |line, idx|
+        raw_lines.each do |line|
           # --- code fence ---
           if line.strip.starts_with?("```") || (line.strip.size >= 3 && line.strip.starts_with?("```"))
             if state.in_code_block?

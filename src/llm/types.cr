@@ -390,7 +390,7 @@ module Hcode
             io << part.think if part.is_a?(ThinkContent)
           end
         end
-        non_think_parts = @content.reject(&.is_a?(ThinkContent))
+        non_think_parts = @content.reject(ThinkContent)
         has_reasoning = !reasoning_content.empty?
 
         json.object do

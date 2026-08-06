@@ -134,10 +134,10 @@ module Hcode
         result = svc.load(names)
 
         lines = [] of String
-        if result.to_load.any?
+        if !result.to_load.empty?
           lines << "Loaded: #{result.to_load.join(", ")}"
         end
-        if result.already_available.any?
+        if !result.already_available.empty?
           lines << "Already available: #{result.already_available.join(", ")}"
         end
         result.unknown.each do |name|

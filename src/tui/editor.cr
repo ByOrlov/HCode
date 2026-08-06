@@ -232,7 +232,7 @@ module Hcode
           if @multiline && @cursor_row > 0
             @cursor_row -= 1
             clamp_cursor_col
-          elsif @history.any?
+          elsif !@history.empty?
             navigate_history(-1)
           end
           true

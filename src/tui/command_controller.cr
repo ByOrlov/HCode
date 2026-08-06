@@ -159,9 +159,7 @@ module Hcode
           @messages << Message.new("system", Hcode.t("ui.usage_add_dir"))
         else
           path = File.expand_path(args.strip, @work_dir)
-          unless Dir.exists?(path)
-            @messages << Message.new("error", "Directory does not exist: #{path}")
-          else
+          if Dir.exists?(path)
             if @additional_dirs.includes?(path)
               @messages << Message.new("system", "Already added: #{path}")
             else
@@ -170,6 +168,8 @@ module Hcode
               @messages << Message.new("system",
                 Hcode.t("ui.added_directory", path: path, count: @additional_dirs.size))
             end
+          else
+            @messages << Message.new("error", "Directory does not exist: #{path}")
           end
         end
       end
@@ -380,7 +380,7 @@ module Hcode
         master = ENV["HCODE_EXPERIMENTAL_FLAG"]?
         env_flags = ENV.keys.select { |k|
           k.starts_with?("HCODE_EXPERIMENTAL_") && k != "HCODE_EXPERIMENTAL_FLAG"
-        }.sort
+        }.sort!
         body = String.build do |s|
           s << "Master switch (HCODE_EXPERIMENTAL_FLAG): #{master || "off"}\n"
           if env_flags.empty?

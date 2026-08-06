@@ -136,7 +136,7 @@ module Hcode
             socket.close
             raise "Proxy CONNECT failed: #{status_line.strip}"
           end
-          while (line = socket.gets)
+          while line = socket.gets
             break if line.strip.empty?
           end
           context = OpenSSL::SSL::Context::Client.new

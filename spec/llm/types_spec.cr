@@ -470,8 +470,8 @@ describe Hcode::LLM::MockProvider do
     seen = [] of Hcode::LLM::MessagePart
     provider.chat([] of Hcode::LLM::Message, nil) { |part| seen << part }
 
-    seen.any?(&.is_a?(Hcode::LLM::ToolCallPart)).should be_true
-    seen.any?(&.is_a?(Hcode::LLM::TextPart)).should be_true
+    seen.any?(Hcode::LLM::ToolCallPart).should be_true
+    seen.any?(Hcode::LLM::TextPart).should be_true
     seen.last.is_a?(Hcode::LLM::FinishPart).should be_true
   end
 end

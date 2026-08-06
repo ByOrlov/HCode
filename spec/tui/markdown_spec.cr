@@ -302,10 +302,10 @@ describe Hcode::TUI::Markdown do
       text = md_render_text(md, "| Feature | Status |\n|---|---|\n| A | \u274C |\n| B | ok |", 40)
       lines = text.split('\n')
       # The right border must sit at the same display column on every row.
-      right_col = lines.map do |l|
+      right_col = lines.compact_map do |l|
         idx = l.rindex('│')
         idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
-      end.compact
+      end
       right_col.uniq.size.should eq(1)
     end
 
@@ -330,10 +330,10 @@ describe Hcode::TUI::Markdown do
     it "keeps columns aligned when a cell contains CJK characters" do
       text = md_render_text(md, "| Name | Notes |\n|---|---|\n| Alice | \u4f60\u597d |", 40)
       lines = text.split('\n')
-      right_col = lines.map do |l|
+      right_col = lines.compact_map do |l|
         idx = l.rindex('│')
         idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
-      end.compact
+      end
       right_col.uniq.size.should eq(1)
     end
 
@@ -342,20 +342,20 @@ describe Hcode::TUI::Markdown do
       # shifting the right border of the Hindi row left of the others.
       text = md_render_text(md, "| Lang | Word |\n|---|---|\n| EN | hi |\n| HI | \u0939\u093F\u0928\u0926\u0940 |", 40)
       lines = text.split('\n')
-      right_col = lines.map do |l|
+      right_col = lines.compact_map do |l|
         idx = l.rindex('│')
         idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
-      end.compact
+      end
       right_col.uniq.size.should eq(1)
     end
 
     it "keeps columns aligned when a cell contains Korean Hangul" do
       text = md_render_text(md, "| Lang | Word |\n|---|---|\n| EN | hi |\n| KO | \uD55C\uAD6D\uC5B4 |", 40)
       lines = text.split('\n')
-      right_col = lines.map do |l|
+      right_col = lines.compact_map do |l|
         idx = l.rindex('│')
         idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
-      end.compact
+      end
       right_col.uniq.size.should eq(1)
     end
 
@@ -375,7 +375,7 @@ describe Hcode::TUI::Markdown do
       end
       widths.uniq.size.should eq(1)
       # The right border │ must appear on every content line.
-      lines.split('\n').select(&.includes?('│')).size.should be > 2
+      lines.split('\n').count(&.includes?('│')).should be > 2
     end
 
     it "falls back to plain text when terminal is too narrow for a table" do

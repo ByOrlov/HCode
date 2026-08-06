@@ -10,7 +10,7 @@ module Hcode
         end
 
         if result =~ /\{\{[^}]+\}\}/
-          missing = result.scan(/\{\{([^}]+)\}\}/).map(&.[1].strip).uniq
+          missing = result.scan(/\{\{([^}]+)\}\}/).map(&.[1].strip).uniq!
           raise "Undefined template variables: #{missing.join(", ")}"
         end
 

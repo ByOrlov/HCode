@@ -193,7 +193,7 @@ module Hcode
         max_lines_reached : Bool,
         max_bytes_reached : Bool,
         truncated_lines : Array(Int32),
-        style : LineEndingStyle
+        style : LineEndingStyle,
       ) : String
         parts = [] of String
         if rendered_count > 0

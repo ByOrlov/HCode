@@ -119,7 +119,7 @@ describe Hcode::Loop::Agent do
 
       goal = service.get_goal
       goal.should_not be_nil
-      if (g = goal)
+      if g = goal
         g.status.blocked?.should be_true
         (g.terminal_reason || "").should contain("budget")
       end

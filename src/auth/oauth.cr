@@ -52,9 +52,9 @@ module Hcode
         device_code = data["device_code"]?.try(&.as_s?)
         verification_complete = data["verification_uri_complete"]?.try(&.as_s?)
 
-        raise OAuthError.new("Device authorization response missing user_code") unless user_code && !user_code.empty?
-        raise OAuthError.new("Device authorization response missing device_code") unless device_code && !device_code.empty?
-        raise OAuthError.new("Device authorization response missing verification_uri_complete") unless verification_complete && !verification_complete.empty?
+        raise OAuthError.new("Device authorization response missing user_code") if user_code.nil? || user_code.empty?
+        raise OAuthError.new("Device authorization response missing device_code") if device_code.nil? || device_code.empty?
+        raise OAuthError.new("Device authorization response missing verification_uri_complete") if verification_complete.nil? || verification_complete.empty?
 
         verification_uri = data["verification_uri"]?.try(&.as_s?) || ""
         interval = data["interval"]?.try(&.as_i?) || 5

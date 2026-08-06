@@ -35,7 +35,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "returns NO_RESULTS_MESSAGE on empty list" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) { [] of Hcode::Tools::WebSearchResult }))
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) { [] of Hcode::Tools::WebSearchResult }))
 
     tool = Hcode::Tools::WebSearch.new
     result = tool.execute(JSON.parse(%({ "query": "x" })))
@@ -44,7 +44,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "renders list with site/date when present" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       [
         Hcode::Tools::WebSearchResult.new(title: "T1", url: "https://a.com", snippet: "S1",
           site_name: "SiteA", date: "2026-01-01"),
@@ -72,7 +72,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "classifies 401 error as authentication failure" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       raise Exception.new("HTTP 401 unauthorized")
     end))
 
@@ -83,7 +83,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "classifies network error" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       raise Exception.new("Connection refused: network")
     end))
 
@@ -94,7 +94,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "classifies timeout error" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       raise Exception.new("request timed out")
     end))
 
@@ -105,7 +105,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "falls back to generic failure message" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       raise Exception.new("internal server error")
     end))
 
@@ -126,7 +126,7 @@ describe Hcode::Tools::WebSearch do
   end
 
   it "truncates very large result sets" do
-    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(q : String) do
+    Hcode::Tools::WebSearch.service = FakeService.new(FakeProvider.new(->(_q : String) do
       (1..200).map do |i|
         Hcode::Tools::WebSearchResult.new(title: "T#{i}", url: "https://#{i}.com", snippet: "S" * 300)
       end.to_a

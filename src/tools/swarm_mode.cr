@@ -39,7 +39,7 @@ module Hcode
       # Auto-exit at turn end for non-manual triggers; a manual toggle stays on.
       def auto_exit! : Bool
         if @active && (t = @trigger) && !t.manual?
-          exit
+          self.exit
           true
         else
           false

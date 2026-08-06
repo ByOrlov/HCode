@@ -24,7 +24,7 @@ module Hcode
     end
 
     # Injectable so specs can control the clock.
-    @@now : Proc(Time) = ->{ Time.utc }
+    @@now : Proc(Time) = -> { Time.utc }
 
     def self.now : Proc(Time)
       @@now
@@ -65,7 +65,7 @@ module Hcode
     end
 
     # Injectable so specs can point at a temp file.
-    @@cache_path : Proc(String) = ->{ cache_file_path }
+    @@cache_path : Proc(String) = -> { cache_file_path }
 
     def self.cache_path : Proc(String)
       @@cache_path
@@ -235,23 +235,21 @@ module Hcode
     # rename (allowed even for a running executable), then copy, then delete
     # the moved-aside file. Its inode stays alive for the current process.
     private def self.move_across_fs(src : String, dst : String) : Nil
-      begin
-        File.rename(src, dst)
-      rescue ex : File::Error
-        raise ex unless ex.os_error == Errno::EXDEV
+      File.rename(src, dst)
+    rescue ex : File::Error
+      raise ex unless ex.os_error == Errno::EXDEV
 
-        aside = nil.as(String?)
-        begin
-          if File.exists?(dst)
-            aside = File.join(File.dirname(dst), ".#{File.basename(dst)}.old-#{Random::Secure.hex(2)}")
-            File.rename(dst, aside)
-          end
-          File.copy(src, dst)
-          File.chmod(dst, 0o755)
-          File.delete(src)
-        ensure
-          File.delete(aside) if aside && File.exists?(aside)
+      aside = nil.as(String?)
+      begin
+        if File.exists?(dst)
+          aside = File.join(File.dirname(dst), ".#{File.basename(dst)}.old-#{Random::Secure.hex(2)}")
+          File.rename(dst, aside)
         end
+        File.copy(src, dst)
+        File.chmod(dst, 0o755)
+        File.delete(src)
+      ensure
+        File.delete(aside) if aside && File.exists?(aside)
       end
     end
 

@@ -196,7 +196,7 @@ module Hcode
 
     abstract class GoalService
       abstract def get_goal : GoalSnapshot?
-      abstract def is_goal_tool_target?(turn_id : Int32?, goal_id : String?) : Bool
+      abstract def goal_tool_target?(turn_id : Int32?, goal_id : String?) : Bool
       abstract def create_goal(input : CreateGoalInput, actor : String = "model") : GoalSnapshot
       abstract def pause_goal(input : GoalReasonInput? = nil, actor : String = "model") : GoalSnapshot
       abstract def resume_goal(input : ResumeGoalInput? = nil, actor : String = "model") : GoalSnapshot
@@ -226,7 +226,7 @@ module Hcode
         @goal
       end
 
-      def is_goal_tool_target?(turn_id : Int32?, goal_id : String?) : Bool
+      def goal_tool_target?(turn_id : Int32?, goal_id : String?) : Bool
         true
       end
 
@@ -492,7 +492,7 @@ module Hcode
         # Stale-check: goal_id сменился после resolution и не является tool-target.
         if goal_at_resolution &&
            goal_at_resolution.goal_id != snapshot.goal_id &&
-           !service.is_goal_tool_target?(nil, goal_at_resolution.goal_id)
+           !service.goal_tool_target?(nil, goal_at_resolution.goal_id)
           return ToolResult.success("Goal not created: the current goal changed.")
         end
 
@@ -647,7 +647,7 @@ module Hcode
           if current.nil?
             return ToolResult.success("Goal not resumed: no current goal.")
           end
-          if current.status.goal_id_changed?(current) && !service.is_goal_tool_target?(nil, current.goal_id)
+          if current.status.goal_id_changed?(current) && !service.goal_tool_target?(nil, current.goal_id)
             return ToolResult.success("Goal not resumed: the current goal changed.")
           end
           begin

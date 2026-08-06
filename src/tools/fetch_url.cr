@@ -259,7 +259,7 @@ module Hcode
       end
 
       private def ipv4_private?(o0 : Int32, o1 : Int32, o2 : Int32, o3 : Int32) : Bool
-        IPV4_PRIVATE_RANGES.each do |base0, base1, base2, base3, prefix|
+        IPV4_PRIVATE_RANGES.each do |base0, base1, _, _, prefix|
           in_range = case prefix
                      when  8 then o0 == base0
                      when 10 then o0 == base0 && (o1 & 0xC0) == (base1 & 0xC0)

@@ -315,7 +315,7 @@ module Hcode
 
           begin
             return @provider.chat(messages, tool_defs, system_prompt,
-              aborted?: ->{ @abort_controller.aborted? }) do |part|
+              aborted?: -> { @abort_controller.aborted? }) do |part|
               case part
               when LLM::TextPart
                 on_event.call(Event.text_delta(part.text))
@@ -599,7 +599,7 @@ module Hcode
         on_event.call(Event.compaction_started)
 
         compactor = Context::Compaction.new(@provider, @context)
-        result = compactor.compact do |part|
+        result = compactor.compact do |_|
           # Streaming parts of the summary are not surfaced to the TUI; only
           # the final result events carry the outcome.
         end

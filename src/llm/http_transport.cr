@@ -12,14 +12,14 @@ module Hcode
     # closure that tears the socket down; the consumer calls `close!` to
     # abort an in-flight read from another fiber.
     class Session
-      property close : -> Nil = ->{ }
+      property close : -> Nil = -> { }
       # Error captured by the worker fiber; the consumer re-raises it after
       # the channel drains.
       property error : Exception?
 
       def initialize
         @error = nil
-        @close = ->{ }
+        @close = -> { }
       end
 
       def close! : Nil
@@ -57,9 +57,9 @@ module Hcode
 
       def request_stream(method : String, uri : URI, headers : HTTP::Headers,
                          body_io : IO, session : Session,
-                         &block : HTTP::Client::Response, IO ->)
+                         & : HTTP::Client::Response, IO ->)
         client = @make_client.call(uri)
-        session.close = ->{ client.close rescue nil }
+        session.close = -> { client.close rescue nil }
         begin
           client.exec(method, uri.request_target, headers, body_io) do |resp|
             yield resp, resp.body_io

@@ -127,7 +127,7 @@ module Hcode
             raise "Proxy CONNECT failed: #{status_line.strip}"
           end
           # Skip remaining headers until blank line.
-          while (line = socket.gets)
+          while line = socket.gets
             break if line.strip.empty?
           end
 

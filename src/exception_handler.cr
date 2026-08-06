@@ -74,7 +74,7 @@ module Hcode
         s << "Version: #{VERSION}\n"
         s << "OS:      #{os_name}\n"
         s << "\n"
-        s << "Exception: #{ex.class}: #{ex.message.to_s}\n"
+        s << "Exception: #{ex.class}: #{ex.message}\n"
         s << "\nBacktrace:\n"
         if (bt = ex.backtrace) && !bt.empty?
           bt.each { |line| s << "  #{line}\n" }
@@ -83,7 +83,7 @@ module Hcode
         end
         if cause = ex.cause
           s << "\nCaused by:\n"
-          s << "  #{cause.class}: #{cause.message.to_s}\n"
+          s << "  #{cause.class}: #{cause.message}\n"
           if (cbt = cause.backtrace) && !cbt.empty?
             cbt.first(30).each { |line| s << "    #{line}\n" }
           end

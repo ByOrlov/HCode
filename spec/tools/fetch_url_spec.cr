@@ -44,7 +44,7 @@ describe Hcode::Tools::FetchURL do
   end
 
   it "renders passthrough note for text/plain content" do
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       Hcode::Tools::UrlFetchResult.new("plain text content", Hcode::Tools::UrlFetchKind::Passthrough)
     end))
 
@@ -57,7 +57,7 @@ describe Hcode::Tools::FetchURL do
   end
 
   it "renders extracted note for HTML content" do
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       Hcode::Tools::UrlFetchResult.new("# Title\n\nbody", Hcode::Tools::UrlFetchKind::Extracted)
     end))
 
@@ -69,7 +69,7 @@ describe Hcode::Tools::FetchURL do
   end
 
   it "returns empty-body message when content is empty" do
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       Hcode::Tools::UrlFetchResult.new("", Hcode::Tools::UrlFetchKind::Passthrough)
     end))
 
@@ -80,7 +80,7 @@ describe Hcode::Tools::FetchURL do
   end
 
   it "formats HttpFetchError with status code" do
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       raise Hcode::Tools::HttpFetchError.new(404, "Not Found")
     end))
 
@@ -92,7 +92,7 @@ describe Hcode::Tools::FetchURL do
   end
 
   it "formats generic network error" do
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       raise Exception.new("Connection refused")
     end))
 
@@ -105,7 +105,7 @@ describe Hcode::Tools::FetchURL do
 
   it "truncates content above MAX_CHARS and sets truncated flag" do
     big = "a" * (Hcode::Tools::FetchURL::MAX_CHARS + 5000)
-    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(url : String) do
+    Hcode::Tools::FetchURL.service = FakeService.new(FakeFetcher.new(->(_url : String) do
       Hcode::Tools::UrlFetchResult.new(big, Hcode::Tools::UrlFetchKind::Passthrough)
     end))
 

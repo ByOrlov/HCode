@@ -62,7 +62,7 @@ describe Hcode::TUI::QuestionDialog do
     dialog.handle_input(key_event(Hcode::TUI::Key::Tab))
     dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
     answers = expect_answers(ch)
-    answers["Pick many"].split(", ").sort.should eq(["A", "B"])
+    answers["Pick many"].split(", ").sort!.should eq(["A", "B"])
   end
 
   it "renders question tabs with answered markers" do

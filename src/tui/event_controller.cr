@@ -512,7 +512,7 @@ module Hcode
       # summary can be toggled with Ctrl-O via the generic `expanded` flag.
       private def snapshot_todo_if_complete! : Nil
         todos = current_todos
-        return unless todos && !todos.empty?
+        return if todos.nil? || todos.empty?
         return unless todos.all? { |(_, status)| status == "done" }
 
         msg = Message.new("todo_snapshot", "")

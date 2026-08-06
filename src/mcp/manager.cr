@@ -141,7 +141,7 @@ module Hcode
           end
         end
 
-        done.receive if blocking && uncached.any?
+        done.receive if blocking && !uncached.empty?
       end
 
       # Connect a server on demand (called by McpLazyProxyTool on first
@@ -156,7 +156,7 @@ module Hcode
         end
 
         # Dedup: if another fibre is already connecting, wait for it.
-        while true
+        loop do
           connecting = @mutex.synchronize { @connecting[server_name]? }
           unless connecting
             # We are the first caller — claim the slot and connect.
@@ -205,7 +205,7 @@ module Hcode
         # Disconnect entries that no longer match the active provider.
         to_disconnect = [] of InternalEntry
         @mutex.synchronize do
-          @entries.each do |name, entry|
+          @entries.each do |_, entry|
             unless entry.config.matches_provider?(active_provider)
               to_disconnect << entry
             end
