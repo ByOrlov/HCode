@@ -80,9 +80,10 @@ already-written log line is ever modified.
 The TodoList migration is special: the live todo panel is active-zone chrome
 polled every frame, not a transcript entry, so it has no natural migration
 path. When every item becomes `done`, the TUI freezes the rendered panel into a
-`todo_snapshot` message (drawn identically to the live panel) and clears the
-tool's state — the completed plan scrolls into history and a fresh list can be
-started. See `App#snapshot_todo_if_complete!`.
+`todo_snapshot` message (drawn like the live panel but without the active-zone
+left bar — the log is immutable history) and clears the tool's state — the
+completed plan scrolls into history and a fresh list can be started. See
+`App#snapshot_todo_if_complete!`.
 
 ## Rendering algorithm
 

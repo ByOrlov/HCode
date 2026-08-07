@@ -383,27 +383,38 @@ module Hcode
       end
 
       # When the live todo list is fully done, freeze it into the transcript as
-      # a `todo_snapshot` message (rendered identically to the active-zone panel
-      # — see `render_message`) and clear the tool's state, so the completed
-      # plan migrates into the append-only log and a fresh list can be started.
-      # Called after every `tool_result`; a no-op unless all items are done.
-      private def render_todo_panel(todos : Array({String, String}), cols : Int32) : Array(String)
+      # a `todo_snapshot` message (rendered like the live panel but without the
+      # active-zone left bar — see `render_message`) and clear the tool's state,
+      # so the completed plan migrates into the append-only log and a fresh list
+      # can be started. Called after every `tool_result`; a no-op unless all
+      # items are done.
+      # Renders the todo list. In the active zone (`active = true`) a khaki
+      # vertical bar marks the mutable region like other live blocks; the frozen
+      # `todo_snapshot` in the log is clean — no bar (immutable history).
+      private def render_todo_panel(todos : Array({String, String}), cols : Int32, active : Bool = false) : Array(String)
         lines = [] of String
         accent = @theme.colors.primary
         dim = @theme.colors.dim
         success = @theme.colors.success
         warning = @theme.colors.warning
 
+        lead = if active
+                 kc = ANSI.color(@theme.colors.logo, nil)
+                 "#{kc}#{MessageRenderer::STREAMING_BAR}#{ANSI.reset} "
+               else
+                 "  "
+               end
+
         pending = todos.count { |(_, s)| s != "done" }
         done = todos.size - pending
-        lines << "#{ANSI.color(accent, nil)}#{ANSI.bold}  Todos (#{done}/#{todos.size})#{ANSI.reset}"
+        lines << "#{lead}#{ANSI.color(accent, nil)}#{ANSI.bold}Todos (#{done}/#{todos.size})#{ANSI.reset}"
         todos.each do |(title, status)|
           marker, color = case status
                           when "done"        then {"✓", success}
                           when "in_progress" then {"▶", warning}
                           else                    {"○", dim}
                           end
-          lines << "#{ANSI.color(color, nil)}  #{marker} #{title}#{ANSI.reset}"
+          lines << "#{lead}#{ANSI.color(color, nil)}#{marker} #{title}#{ANSI.reset}"
         end
         lines << "" if pending > 0
         lines

@@ -133,10 +133,10 @@ module Hcode
         when "compaction"
           lines.concat(render_compaction_block(msg, cols))
         when "todo_snapshot"
-          # Frozen copy of the live todo panel — rendered identically to the
-          # active-zone panel, then appended to the log so completed plans
-          # scroll into history instead of pinning the active zone. See
-          # TUI_ZONES.md.
+          # Frozen copy of the live todo panel — appended to the log so
+          # completed plans scroll into history instead of pinning the active
+          # zone. Rendered clean (no active-zone left bar) since the log is
+          # immutable history. See TUI_ZONES.md.
           if items = msg.todo_items
             lines.concat(render_todo_panel(items, cols))
             lines << ""
