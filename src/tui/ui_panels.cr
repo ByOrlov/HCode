@@ -423,17 +423,24 @@ module Hcode
       # Queue pane: lists messages typed while the agent was busy, plus a
       # context-sensitive hint. Mirrors TS `components/panes/queue-pane.ts`.
       # Shown only when `@queue` is non-empty.
-      private def render_queue_pane(cols : Int32) : Array(String)
+      private def render_queue_pane(cols : Int32, active : Bool = false) : Array(String)
         lines = [] of String
         accent = @theme.colors.primary
         dim = @theme.colors.dim
 
-        lines << "#{ANSI.color(accent, nil)}#{ANSI.bold}  Queued (#{@queue.size})#{ANSI.reset} " \
+        lead = if active
+                 kc = ANSI.color(@theme.colors.logo, nil)
+                 "#{kc}#{MessageRenderer::STREAMING_BAR}#{ANSI.reset} "
+               else
+                 "  "
+               end
+
+        lines << "#{lead}#{ANSI.color(accent, nil)}#{ANSI.bold}Queued (#{@queue.size})#{ANSI.reset} " \
                  "#{ANSI.color(dim, nil)}#{queue_hint}#{ANSI.reset}"
         @queue.each_with_index do |qm, i|
           preview = truncate_preview(qm.text)
-          prefix = i == 0 ? "  ▶ " : "    "
-          lines << "#{ANSI.color(dim, nil)}#{prefix}#{preview}#{ANSI.reset}"
+          prefix = i == 0 ? "▶ " : "  "
+          lines << "#{lead}#{ANSI.color(dim, nil)}#{prefix}#{preview}#{ANSI.reset}"
         end
         lines
       end

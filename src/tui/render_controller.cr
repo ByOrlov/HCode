@@ -261,7 +261,7 @@ module Hcode
           active_lines.concat(render_todo_panel(todos, cols, active: true))
         end
         unless @queue.empty?
-          active_lines.concat(render_queue_pane(cols))
+          active_lines.concat(render_queue_pane(cols, active: true))
         end
         editor_start = active_lines.size
         if @help_panel.visible?
