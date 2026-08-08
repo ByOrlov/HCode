@@ -446,6 +446,17 @@ module Hcode
       end
 
       private def render_footer(cols : Int32) : String
+        # ── WannaExit lock ──
+        # When the user pressed Ctrl+C / Ctrl+D once, the footer line is frozen
+        # to the exit prompt. No subsequent event — streaming results, status
+        # changes, context-token updates — can overwrite it. This guarantees
+        # that once the exit confirmation is shown it stays visible until the
+        # user confirms (second press) or cancels (Esc), preventing collisions
+        # where a background render swapped the last line back to context info.
+        if @exit_confirm
+          return "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
+        end
+
         parts = [
           @provider_name,
           @permission_mode,

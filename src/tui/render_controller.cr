@@ -287,10 +287,6 @@ module Hcode
 
         active_lines << render_footer(cols)
 
-        if @exit_confirm
-          active_lines << "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
-        end
-
         if @debug_zones
           rows = @terminal.rows
           active_zone_size = active_lines.size + 1
