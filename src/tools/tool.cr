@@ -28,6 +28,31 @@ module Hcode
         )
       end
 
+      # Sanitize tool output so it is always valid UTF-8 and free of the
+      # control bytes that chat providers reject with HTTP 400. Tools can
+      # capture arbitrary bytes (e.g. `cat` on an ELF binary, `/dev/urandom`,
+      # a crashed process writing to stderr), and `String.new(Bytes)` does NOT
+      # validate UTF-8 — a single invalid byte in the request body turns into
+      # "Chat API error 400". This is the single boundary where untrusted
+      # external bytes (subprocess output, file contents, HTTP bodies) enter
+      # the agent's message stream, so it is the right place to scrub.
+      SANITIZE_NOTICE = "\n[...output contained invalid UTF-8 / binary data and was sanitized]"
+
+      def self.sanitize_output(content : String) : String
+        scrubbed = content.scrub
+        replaced = false
+        # Replace C0 control bytes except the common whitespace (\t \n \r)
+        # and the embedded NUL, which are valid UTF-8 but trip up providers
+        # and render as garbage in the TUI.
+        cleaned = scrubbed.gsub(/[\x00-\x08\x0B\x0C\x0E-\x1F]/) do
+          replaced = true
+          "\uFFFD"
+        end
+        # If anything actually changed, tell the model the output was binary so
+        # it does not mistake a wall of replacement chars for real content.
+        (scrubbed != content || replaced) ? cleaned + SANITIZE_NOTICE : cleaned
+      end
+
       # Wait for `process` to exit, reacting to an abort request or a
       # `timeout_s` deadline. On either, the process is killed two-phase
       # (SIGTERM, then SIGKILL after `kill_grace_s`) and reaped. Returns the

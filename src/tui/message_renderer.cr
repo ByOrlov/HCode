@@ -9,8 +9,11 @@ module Hcode
       # Vertical bar drawn on the left of the streaming assistant block in the
       # Active zone. Colored khaki (logo color from the theme), it visually
       # marks the mutable region that is repainted every frame. Finalized text
-      # in the Log zone is clean — no bar.
-      STREAMING_BAR = "▌"
+      # in the Log zone is clean — no bar. Uses the U+2503 box-drawing heavy
+      # vertical, which fonts vertically seam across rows (unlike U+258C half
+      # block, which splits into separate rectangles under macOS Terminal's
+      # large line height).
+      STREAMING_BAR = "┃"
       # Lines reserved for the rest of the active zone (spinner, editor box,
       # footer, etc.) when capping the streaming text window. The streaming
       # block is mutable and must never scroll into immutable scrollback, so
@@ -133,10 +136,10 @@ module Hcode
         when "compaction"
           lines.concat(render_compaction_block(msg, cols))
         when "todo_snapshot"
-          # Frozen copy of the live todo panel — rendered identically to the
-          # active-zone panel, then appended to the log so completed plans
-          # scroll into history instead of pinning the active zone. See
-          # TUI_ZONES.md.
+          # Frozen copy of the live todo panel — appended to the log so
+          # completed plans scroll into history instead of pinning the active
+          # zone. Rendered clean (no active-zone left bar) since the log is
+          # immutable history. See TUI_ZONES.md.
           if items = msg.todo_items
             lines.concat(render_todo_panel(items, cols))
             lines << ""

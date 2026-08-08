@@ -29,6 +29,32 @@ module Hcode
     end
   end
 
+  # A tool that emits a fixed (possibly binary) result string. Used to verify
+  # that the ToolBatch boundary sanitizes invalid-UTF-8 / control-byte output
+  # before it reaches the context and the wire.
+  class BinaryTool < Tools::Tool
+    @payload : String
+
+    def initialize(@payload : String)
+    end
+
+    def name : String
+      "Binary"
+    end
+
+    def description : String
+      "Returns a fixed payload."
+    end
+
+    def parameters : JSON::Any
+      JSON.parse(%({"type":"object","properties":{}}))
+    end
+
+    def execute(input : JSON::Any) : Tools::ToolResult
+      Tools::ToolResult.success(@payload)
+    end
+  end
+
   module ToolBatchSpecHelper
     def self.make_registry(tools : Array(Tools::Tool)) : Tools::Registry
       registry = Tools::Registry.new
@@ -182,5 +208,28 @@ describe Hcode::Loop::ToolBatch do
     tool_messages[1].tool_call_id.should eq("call_2")
     tool_messages[0].text.should contain("slow")
     tool_messages[1].text.should contain("fast")
+  end
+
+  it "sanitizes binary / invalid-UTF-8 tool output before it reaches the wire" do
+    # ELF magic + invalid continuation bytes + a NUL, exactly the failure mode
+    # behind "Chat API error 400" when an agent `cat`s a compiled binary.
+    binary = String.new(Bytes[0x7F, 0x45, 0x4C, 0x46, 0xFF, 0xFE, 0x00, 0x1B])
+    context = Hcode::Context::Memory.new
+    batch = helper.make_batch([Hcode::BinaryTool.new(binary)], context: context)
+
+    results = batch.run([helper.tool_call("call_1", "Binary")]) { |_| }
+
+    content = results[0].text
+    content.valid_encoding?.should be_true
+    content.should contain(Hcode::Tools::Tool::SANITIZE_NOTICE)
+
+    # The persisted tool message must also be clean and JSON-serializable.
+    msg = context.messages.find! { |m| m.role == "tool" }
+    msg.text.valid_encoding?.should be_true
+    json = String.build do |io|
+      JSON.build(io) { |b| msg.to_wire_json(b) }
+    end
+    json.valid_encoding?.should be_true
+    json.should contain("\"role\":\"tool\"")
   end
 end

@@ -180,6 +180,11 @@ module Hcode
 
           @abort_controller.throw_if_aborted!
 
+          # Scrub binary / invalid-UTF-8 bytes at the tool boundary so the
+          # content that reaches the context, transcript, hooks and the wire
+          # is always valid UTF-8. See Tools::Tool.sanitize_output.
+          result.content = Tools::Tool.sanitize_output(result.content)
+
           budgeted_content, _truncated = Context::Budget.budget(tc.name, tc.id, result.content)
 
           # PostToolUse hook: fire-and-forget (not blocking). Lets external
