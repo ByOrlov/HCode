@@ -75,6 +75,13 @@ module Hcode
       # count indicates the event fiber is outpacing the renderer.
       @render_pending : Int32 = 0
       @render_ms : Int64 = 0
+      # Sync-bug detector for the debug zone. Stores the last two
+      # {LogZone flushed, ActiveZone size} samples; when the combined
+      # coverage shrinks between samples a line was lost (the active zone
+      # shrank faster than the log grew) — that is a desync. See
+      # SyncBugsCount in the debug status line.
+      @sync_bugs_count : Int32 = 0
+      @sync_prev_states : Array({Int32, Int32}) = [] of {Int32, Int32}
       # Cached rendered lines for the log zone. Log-zone messages are immutable
       # once finalized, so their rendered output is cached here and only
       # rebuilt when @messages changes or terminal width changes. During

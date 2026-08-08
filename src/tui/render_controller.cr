@@ -308,6 +308,19 @@ module Hcode
           active_zone_size = active_lines.size + 1
           total = log_lines.size + active_zone_size
           pending = log_lines.size - @log_zone.flushed
+
+          # Detect a missing-line desync: the combined coverage
+          # (LogZone flushed + pending + ActiveZone size) must never shrink —
+          # when the active zone drops faster than the log grows (counting
+          # pending lines not yet flushed), a line was lost.
+          log_zone_full = @log_zone.flushed + pending
+          curr_state = {log_zone_full, active_zone_size}
+          if prev = @sync_prev_states.last?
+            @sync_bugs_count &+= 1 if prev[0] + prev[1] > curr_state[0] + curr_state[1]
+          end
+          @sync_prev_states << curr_state
+          @sync_prev_states.shift if @sync_prev_states.size > 2
+
           active_lines << String.build do |s|
             s << ANSI.color(@theme.colors.dim, nil)
             s << "Msgs: #{@messages.size}, "
@@ -319,6 +332,7 @@ module Hcode
             s << "Cache: #{@log_cache_dirty ? "dirty" : "hit"}"
             s << ", "
             s << "Rows: #{rows} (total: #{total})"
+            s << ", SyncBugsCount: #{@sync_bugs_count}"
             s << ANSI.reset
           end
         end
