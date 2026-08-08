@@ -282,8 +282,20 @@ end
 
 ```crystal
 def execute(input : JSON::Any) : ToolResult
-  status = plan_service.status
-  return ToolResult.error("ExitPlanMode can only be called while plan mode is active. Use EnterPlanMode (or /plan) first.") if status.nil?
+  service = plan_service
+  return ToolResult.error("Plan service is not initialized.") if service.nil?
+
+  status = service.status
+  if status.nil?
+    # Принудительно входим в plan mode, если агент не вызвал EnterPlanMode.
+    begin
+      service.enter
+    rescue ex
+      return ToolResult.error("Failed to enter plan mode: #{ex.message || "Failed to enter plan mode."}")
+    end
+    status = service.status
+    return ToolResult.error("Failed to activate plan mode. Use EnterPlanMode (or /plan) first.") if status.nil?
+  end
 
   resolved = resolve_plan(status)
   return resolved if resolved.is_error  # пустой/отсутствующий план

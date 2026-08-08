@@ -81,12 +81,16 @@ describe Hcode::Tools::ExitPlanMode do
     tool.parameters["additionalProperties"].as_bool.should be_false
   end
 
-  it "fails when plan mode is not active" do
-    with_plan_service do |_|
+  it "auto-enters plan mode when not active, then reports the missing plan file" do
+    with_plan_service do |service|
       tool = Hcode::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
+      # Принудительно вошли в plan mode.
+      service.status.should_not be_nil
+      # Плана ещё нет — ожидаем recover-ошибку с путём к файлу плана.
       result.is_error?.should be_true
-      result.content.should contain("can only be called while plan mode is active")
+      result.content.should contain("No plan file found")
+      result.content.should contain("plan.md")
     end
   end
 

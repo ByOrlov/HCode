@@ -183,7 +183,15 @@ module Hcode
 
         status = service.status
         if status.nil?
-          return ToolResult.error("ExitPlanMode can only be called while plan mode is active. Use EnterPlanMode (or /plan) first.")
+          # Принудительно входим в plan mode, если агент не вызвал EnterPlanMode,
+          # чтобы ExitPlanMode был самодостаточным и не падал с без recover-ошибкой.
+          begin
+            service.enter
+          rescue ex
+            return ToolResult.error("Failed to enter plan mode: #{ex.message || "Failed to enter plan mode."}")
+          end
+          status = service.status
+          return ToolResult.error("Failed to activate plan mode. Use EnterPlanMode (or /plan) first.") if status.nil?
         end
 
         # Parse options if provided.
