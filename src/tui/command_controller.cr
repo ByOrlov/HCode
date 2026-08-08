@@ -7,6 +7,7 @@ module Hcode
     module CommandController
       private def cmd_exit : Nil
         @exit_confirm = true
+        @exit_key = "CTRL+D"
         @dirty = true
       end
 

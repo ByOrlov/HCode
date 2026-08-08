@@ -77,7 +77,10 @@ module Hcode
           @streaming_text = ""
         end
         stop_spinner
-        @agent_status = AgentStatus::Error
+        # The log zone already shows this message (emit_to_log below); setting
+        # Error here would duplicate it in the status bar (┃ ✗ <message>).
+        # Hello renders as a blank status line, leaving only the log entry.
+        @agent_status = AgentStatus::Hello
         @status = message
         emit_to_log(Message.new("status", message))
         invalidate_log_cache!

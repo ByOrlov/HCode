@@ -479,14 +479,22 @@ module Hcode
         active_lines : Array(String),
         editor_content_line : Int32,
       ) : Nil
-        if @exit_confirm
-          port.carriage_return
-          return
-        end
-
         rows = port.rows
         total = log_lines.size + active_lines.size
         viewport_top = @previous_viewport_top
+
+        # WannaExit lock: hide the cursor and park it on the footer line (which
+        # now carries the exit prompt). Without this the cursor stays visible in
+        # the editor area — a leftover from the previous frame — causing visual
+        # noise / flicker while the prompt is shown.
+        if @exit_confirm
+          port.hide_cursor
+          target_row = {total - 1, 0}.max
+          target_screen = {0, {target_row - viewport_top, rows - 1}.min}.max
+          port.cursor_to_row(target_screen + 1)
+          port.carriage_return
+          return
+        end
 
         # No editor is rendered while a full-screen takeover owns the screen
         # (tasks browser, plan-review full-plan viewer) — park the hardware
