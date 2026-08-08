@@ -22,7 +22,7 @@ module Hcode
       private def enqueue_message(text : String, mode : String = "prompt", *, persist : Bool = true) : Nil
         @queue << QueuedMessage.new(text, mode)
         @on_persist_queued.try(&.call("turn.prompt", text)) if persist
-        @messages << Message.new("system", "[Queued: #{truncate_preview(text)}]")
+        emit_to_log(Message.new("system", "[Queued: #{truncate_preview(text)}]"))
         invalidate_log_cache!
         @dirty = true
       end
@@ -37,16 +37,18 @@ module Hcode
       # log (e.g. it sat in the queue and `enqueue_message` persisted it); the
       # drain path sets it to avoid a duplicate `turn.prompt` record.
       private def start_turn(text : String, persisted : Bool = false) : Nil
-        @messages << Message.new("user", text)
+        emit_to_log(Message.new("user", text))
         # The welcome box is part of the Log zone history; do NOT hide it when
         # the first user message arrives. Removing it shrinks the log and
         # forces an unnecessary full repaint, besides violating the idea that
         # the log is append-only.
         @current_step = 0
         @step_tool_count = 0
+        @turn_tool_count = 0
         @agent_busy = true
+        @agent_status = AgentStatus::Busy
         @status = "Thinking..."
-        @spinner.start
+        start_spinner
         invalidate_log_cache!
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
@@ -185,8 +187,8 @@ module Hcode
         # Busy: inject into the live turn.
         @on_steer.try(&.call(text))
         @on_persist_queued.try(&.call("turn.steer", text))
-        @messages << Message.new("user", text)
-        @messages << Message.new("system", "[Steered into running turn]")
+        emit_to_log(Message.new("user", text))
+        emit_to_log(Message.new("system", "[Steered into running turn]"))
         @dirty = true
       end
 
@@ -202,10 +204,10 @@ module Hcode
 
         @queue.dup.each do |qm|
           @on_steer.try(&.call(qm.text))
-          @messages << Message.new("user", qm.text)
+          emit_to_log(Message.new("user", qm.text))
         end
         @queue.clear
-        @messages << Message.new("system", "[Queued messages steered into running turn]")
+        emit_to_log(Message.new("system", "[Queued messages steered into running turn]"))
         @dirty = true
       end
 
@@ -231,21 +233,22 @@ module Hcode
 
       private def finalize_streaming_thinking : Nil
         return if @streaming_thinking.empty?
-        @messages << Message.new("thinking", @streaming_thinking)
+        emit_to_log(Message.new("thinking", @streaming_thinking))
         @streaming_thinking = ""
-        invalidate_log_cache!
+        release_active(:thinking)
       end
 
-      # Stop the spinner and, if it was active (meaning the transient
-      # spinner-status line occupied one active-zone row), push a blank
-      # "spacer" line into the log so the line counts stay balanced and
-      # SyncBugsCount does not fire on the status line's disappearance.
+      # Start the spinner. The status line is a permanent active-zone element
+      # (always one row), so it does NOT participate in the zone-balance
+      # declare/release contract — it never appears or disappears.
+      private def start_spinner : Nil
+        @spinner.start
+      end
+
+      # Stop the spinner animation. No release_active needed — the status line
+      # stays visible regardless of spinner state.
       private def stop_spinner : Nil
-        was_active = @spinner.active?
         @spinner.stop
-        return unless was_active
-        @messages << Message.new("spacer", "")
-        invalidate_log_cache!
       end
 
       private def visible_len(s : String) : Int32

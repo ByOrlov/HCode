@@ -24,13 +24,13 @@ module Hcode
           when .injection?
             next
           when .compaction_summary?
-            @messages << Message.new("system", "[compacted] #{msg.text}")
+            emit_to_log(Message.new("system", "[compacted] #{msg.text}"))
             next
           end
 
           case msg.role
           when "user"
-            @messages << Message.new("user", msg.text)
+            emit_to_log(Message.new("user", msg.text))
           when "assistant"
             if tcs = msg.tool_calls
               tcs.each do |tc|
@@ -39,16 +39,16 @@ module Hcode
                 m.tool_name = tc.name
                 m.tool_args = tc.arguments
                 m.step = @current_step
-                @messages << m
+                emit_to_log(m)
               end
             end
             unless (text = msg.text).empty?
-              @messages << Message.new("assistant", text)
+              emit_to_log(Message.new("assistant", text))
             end
           when "tool"
             attach_tool_result(msg.tool_call_id.to_s, msg.text)
           when "system"
-            @messages << Message.new("system", msg.text) unless msg.text.empty?
+            emit_to_log(Message.new("system", msg.text)) unless msg.text.empty?
           end
         end
 
@@ -73,11 +73,13 @@ module Hcode
         # Flush any in-flight streaming text into a permanent assistant message
         # so it doesn't disappear when we reset the streaming buffer.
         unless @streaming_text.empty?
-          @messages << Message.new("assistant", @streaming_text)
+          emit_to_log(Message.new("assistant", @streaming_text))
           @streaming_text = ""
         end
         stop_spinner
-        @messages << Message.new("status", message)
+        @agent_status = AgentStatus::Error
+        @status = message
+        emit_to_log(Message.new("status", message))
         invalidate_log_cache!
         @dirty = true
       end
@@ -87,13 +89,16 @@ module Hcode
         case event.type
         when .step_begin?
           @current_step = event.step
-          @spinner.start
+          start_spinner
+          @agent_status = AgentStatus::Busy
           @status = thinking_status
         when .text_delta?
           finalize_streaming_thinking
           @streaming_text += event.text
+          @agent_status = AgentStatus::Busy
           @status = thinking_status
         when .thinking_delta?
+          declare_active(:thinking) if @streaming_thinking.empty?
           @streaming_thinking += event.text
           @status = "thinking..."
         when .assistant_text?
@@ -103,11 +108,11 @@ module Hcode
             # block emitted straight into the Log zone). Add it as a complete
             # assistant message so it never inflates the Active zone.
             unless event.text.empty?
-              @messages << Message.new("assistant", event.text)
+              emit_to_log(Message.new("assistant", event.text))
               invalidate_log_cache!
             end
           else
-            @messages << Message.new("assistant", @streaming_text)
+            emit_to_log(Message.new("assistant", @streaming_text))
             @streaming_text = ""
             invalidate_log_cache!
           end
@@ -116,11 +121,12 @@ module Hcode
         when .tool_call_start?
           finalize_streaming_thinking
           unless @streaming_text.empty?
-            @messages << Message.new("assistant", @streaming_text)
+            emit_to_log(Message.new("assistant", @streaming_text))
             @streaming_text = ""
             invalidate_log_cache!
           end
           @step_tool_count += 1
+          @turn_tool_count += 1
 
           if event.tool_name == "Read" && (group = @pending_read_group) && group.step == @current_step
             reads = (group.read_group ||= [] of ReadGroupEntry)
@@ -131,11 +137,12 @@ module Hcode
             msg.tool_name = event.tool_name
             msg.tool_args = tool_args_preview(event.tool_name, event.tool_args)
             msg.step = @current_step
-            @messages << msg
+            emit_to_log(msg)
             @pending_read_group = event.tool_name == "Read" ? msg : nil
           end
 
           @streaming_tool = event.tool_name
+          @agent_status = AgentStatus::Busy
           @status = thinking_status
         when .tool_result?
           # Results for parallel tool calls can arrive out of order, so scan
@@ -172,6 +179,7 @@ module Hcode
             i -= 1
           end
           @streaming_tool = nil
+          @agent_status = AgentStatus::Busy
           @status = thinking_status
           inject_plan_if_any(event.text)
           # A completed TodoList (all items done) is snapshotted into the log
@@ -180,6 +188,7 @@ module Hcode
           # after the snapshot, so subsequent tool results see an empty list.
           snapshot_todo_if_complete!
         when .info?
+          @agent_status = AgentStatus::Busy
           @status = event.text
           # Compaction start message ("Context near limit, triggering compaction...")
           # sets the compacting flag; the completion message
@@ -193,18 +202,20 @@ module Hcode
         when .compaction_started?
           @is_compacting = true
           @defer_user_messages = true
+          @agent_status = AgentStatus::Busy
           @status = "Compacting context..."
           msg = Message.new("compaction", "")
           msg.compaction_state = "running"
           msg.tip = event.tip || ""
           msg.tokens_before = event.tokens_before
           @compaction_msg = msg
-          @messages << msg
+          emit_to_log(msg)
         when .compaction_completed?
           @is_compacting = false
           @defer_user_messages = false
+          @agent_status = AgentStatus::Busy if @agent_busy
           stop_spinner
-          @status = ""
+          @status = thinking_status
           # Update the most recent running compaction block in place.
           if cmsg = @compaction_msg
             cmsg.compaction_state = "done"
@@ -230,8 +241,9 @@ module Hcode
         when .compaction_cancelled?
           @is_compacting = false
           @defer_user_messages = false
+          @agent_status = AgentStatus::Busy if @agent_busy
           stop_spinner
-          @status = ""
+          @status = thinking_status
           if cmsg = @compaction_msg
             cmsg.compaction_state = "cancelled"
           else
@@ -258,14 +270,16 @@ module Hcode
         when .subagent_failed?
           handle_subagent_terminal(event, event.phase.empty? ? "Failed" : event.phase)
         when .error?
-          @messages << Message.new("error", event.text)
+          emit_to_log(Message.new("error", event.text))
           stop_spinner
-          @status = ""
+          @agent_status = AgentStatus::Error
+          @status = event.text
         when .exception?
           msg = Message.new("exception", event.text)
-          @messages << msg
+          emit_to_log(msg)
           stop_spinner
-          @status = ""
+          @agent_status = AgentStatus::Error
+          @status = event.text
         when .turn_end?
           # Turn finished (normal, errored, or cancelled). Reset busy state
           # and drain the next queued message if any. The TUI is the single
@@ -276,7 +290,15 @@ module Hcode
           @is_compacting = false
           @defer_user_messages = false
           stop_spinner
-          @status = ""
+          if event.is_error?
+            @agent_status = AgentStatus::Error
+            @status = Hcode.t("status.interrupted")
+          else
+            @agent_status = AgentStatus::Done
+            step_word = @current_step == 1 ? "step" : "steps"
+            tool_word = @turn_tool_count == 1 ? "tool" : "tools"
+            @status = "Done · #{@current_step} #{step_word}, #{@turn_tool_count} #{tool_word}"
+          end
           @status_tracker.try(&.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete")))
           @status_tracker.try(&.transition!(Notify::AgentStatus::Idle))
 
@@ -285,7 +307,7 @@ module Hcode
           if event.is_error?
             unless @queue.empty?
               @queue.clear
-              @messages << Message.new("system", "[Queue cleared on interrupt]")
+              emit_to_log(Message.new("system", "[Queue cleared on interrupt]"))
             end
           end
 
@@ -404,12 +426,16 @@ module Hcode
 
       def request_approval(tool_name : String, args : String, danger : String?) : Permission::ApprovalChoice
         @approval_pending = ApprovalRequest.new(tool_name, args, danger)
+        @agent_status = AgentStatus::Waiting
+        @status = "Waiting for approval: #{tool_name}"
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
           Hcode.t("ui.approval_required"), tool_name))
         select
         when choice = @approval_channel.receive
           @approval_pending = nil
+          @agent_status = AgentStatus::Busy
+          @status = thinking_status
           @dirty = true
           @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
           choice
@@ -422,12 +448,16 @@ module Hcode
         @sudo_approval_pending = command
         @sudo_approval_list.show("Sudo command requires approval", SUDO_APPROVAL_OPTIONS)
         @sudo_approval_list.selected = 0
+        @agent_status = AgentStatus::Waiting
+        @status = "Waiting for sudo approval"
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
           Hcode.t("ui.approval_required"), "Bash (sudo)"))
         choice = @sudo_approval_channel.receive
         @sudo_approval_list.hide
         @sudo_approval_pending = nil
+        @agent_status = AgentStatus::Busy
+        @status = thinking_status
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
         choice
@@ -447,8 +477,13 @@ module Hcode
           received.send(answers)
           nil
         end, on_toggle_tool_output)
+        @agent_status = AgentStatus::Waiting
+        @status = "Waiting for your response"
         @dirty = true
-        received.receive
+        result = received.receive
+        @agent_status = AgentStatus::Busy
+        @status = thinking_status
+        result
       end
 
       # Surface a finalized plan for interactive approval. Mirrors
@@ -462,8 +497,13 @@ module Hcode
           received.send(result)
           nil
         end)
+        @agent_status = AgentStatus::Waiting
+        @status = "Waiting for plan review"
         @dirty = true
-        received.receive
+        result = received.receive
+        @agent_status = AgentStatus::Busy
+        @status = thinking_status
+        result
       end
 
       private def inject_plan_if_any(tool_output : String) : Nil
@@ -473,7 +513,7 @@ module Hcode
         msg = Message.new("plan_box", plan_body)
         msg.plan_kind = kind
         msg.plan_path = extract_plan_path(tool_output)
-        @messages << msg
+        emit_to_log(msg)
       end
 
       # Returns the plan body (stripped) and its kind. Body is empty when the
@@ -519,7 +559,7 @@ module Hcode
         # Dup: `on_clear_todos` below mutates the tool's array in place, and the
         # snapshot must be an immutable frozen copy.
         msg.todo_items = todos.dup
-        @messages << msg
+        emit_to_log(msg)
         invalidate_log_cache!
         @on_clear_todos.try(&.call)
       end

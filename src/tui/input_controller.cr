@@ -391,7 +391,7 @@ module Hcode
       private def toggle_plan_mode : Nil
         cb = @on_plan_mode
         if cb.nil?
-          @messages << Message.new("error", Hcode.t("ui.plan_not_wired"))
+          emit_to_log(Message.new("error", Hcode.t("ui.plan_not_wired")))
           return
         end
         desired = !@plan_mode
@@ -401,7 +401,7 @@ module Hcode
           # Callback exists but failed (e.g. service raised). Sync from the
           # service when possible so the flag tracks reality instead of
           # flipping blindly, and surface a distinct error.
-          @messages << Message.new("error", Hcode.t("ui.plan_toggle_failed"))
+          emit_to_log(Message.new("error", Hcode.t("ui.plan_toggle_failed")))
         end
       end
 
@@ -412,7 +412,7 @@ module Hcode
         @debug_zones = !@debug_zones
         @on_debug_zones_change.try(&.call(@debug_zones))
         state = @debug_zones ? Hcode.t("ui.debugzones_on") : Hcode.t("ui.debugzones_off")
-        @messages << Message.new("system", "#{Hcode.t("commands.debugzones")}: #{state}")
+        emit_to_log(Message.new("system", "#{Hcode.t("commands.debugzones")}: #{state}"))
       end
 
       private def handle_slash_command(input : String) : Nil
@@ -538,7 +538,7 @@ module Hcode
         when "/language"
           handle_language_command(args)
         else
-          @messages << Message.new("error", Hcode.t("ui.unknown_command", cmd: cmd))
+          emit_to_log(Message.new("error", Hcode.t("ui.unknown_command", cmd: cmd)))
         end
 
         @show_command_hints = false
@@ -549,7 +549,7 @@ module Hcode
       private def handle_swarm_command(args : String) : Nil
         service = Hcode::Tools::SwarmMode.service
         unless service
-          @messages << Message.new("error", Hcode.t("ui.swarm_not_wired"))
+          emit_to_log(Message.new("error", Hcode.t("ui.swarm_not_wired")))
           return
         end
 
@@ -566,11 +566,11 @@ module Hcode
           # trigger so `Loop::Agent` auto-exits (and leaves an exit-reminder)
           # at the end of this turn.
           if @agent_busy
-            @messages << Message.new("error", Hcode.t("ui.swarm_busy"))
+            emit_to_log(Message.new("error", Hcode.t("ui.swarm_busy")))
             return
           end
           service.enter(Hcode::Tools::SwarmTrigger::Task)
-          @messages << Message.new("system", Hcode.t("ui.swarm_task_started"))
+          emit_to_log(Message.new("system", Hcode.t("ui.swarm_task_started")))
           start_turn(args.strip)
         end
       end
@@ -578,30 +578,30 @@ module Hcode
       private def enable_swarm_mode(service : Hcode::Tools::SwarmModeService,
                                     trigger : Hcode::Tools::SwarmTrigger) : Nil
         if service.active?
-          @messages << Message.new("system", Hcode.t("ui.swarm_already_on"))
+          emit_to_log(Message.new("system", Hcode.t("ui.swarm_already_on")))
           return
         end
         service.enter(trigger)
-        @messages << Message.new("system", Hcode.t("ui.swarm_mode_state",
-          state: Hcode.t("ui.swarm_mode_on")))
+        emit_to_log(Message.new("system", Hcode.t("ui.swarm_mode_state",
+          state: Hcode.t("ui.swarm_mode_on"))))
       end
 
       private def disable_swarm_mode(service : Hcode::Tools::SwarmModeService) : Nil
         unless service.active?
-          @messages << Message.new("system", Hcode.t("ui.swarm_already_off"))
+          emit_to_log(Message.new("system", Hcode.t("ui.swarm_already_off")))
           return
         end
         service.exit
-        @messages << Message.new("system", Hcode.t("ui.swarm_mode_state",
-          state: Hcode.t("ui.swarm_mode_off")))
+        emit_to_log(Message.new("system", Hcode.t("ui.swarm_mode_state",
+          state: Hcode.t("ui.swarm_mode_off"))))
       end
 
       private def handle_plugins_command(args : String) : Nil
         if cb = @on_plugins_command
           result = cb.call(args)
-          @messages << Message.new("system", result)
+          emit_to_log(Message.new("system", result))
         else
-          @messages << Message.new("system", "Plugin management is not available.")
+          emit_to_log(Message.new("system", "Plugin management is not available."))
         end
       end
 
@@ -626,7 +626,7 @@ module Hcode
       private def handle_goal_command(args : String) : Nil
         service = Hcode::Tools::Goal.service
         unless service
-          @messages << Message.new("error", "Goal service is not wired up.")
+          emit_to_log(Message.new("error", "Goal service is not wired up."))
           return
         end
 
@@ -635,33 +635,33 @@ module Hcode
         when "", "status"
           snapshot = service.get_goal
           if snapshot
-            @messages << Message.new("system", format_goal_snapshot(snapshot))
+            emit_to_log(Message.new("system", format_goal_snapshot(snapshot)))
           else
-            @messages << Message.new("system", Hcode.t("ui.no_active_goal"))
+            emit_to_log(Message.new("system", Hcode.t("ui.no_active_goal")))
           end
         when "pause"
           begin
             snapshot = service.pause_goal
-            @messages << Message.new("system", "#{Hcode.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}")
+            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            @messages << Message.new("error", Hcode.t("ui.cannot_pause", message: ex.message.to_s))
+            emit_to_log(Message.new("error", Hcode.t("ui.cannot_pause", message: ex.message.to_s)))
           end
         when "resume"
           begin
             snapshot = service.resume_goal
-            @messages << Message.new("system", "#{Hcode.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}")
+            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            @messages << Message.new("error", Hcode.t("ui.cannot_resume", message: ex.message.to_s))
+            emit_to_log(Message.new("error", Hcode.t("ui.cannot_resume", message: ex.message.to_s)))
           end
         when "cancel"
           begin
             snapshot = service.cancel_goal
-            @messages << Message.new("system", "#{Hcode.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}")
+            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            @messages << Message.new("error", Hcode.t("ui.cannot_cancel", message: ex.message.to_s))
+            emit_to_log(Message.new("error", Hcode.t("ui.cannot_cancel", message: ex.message.to_s)))
           end
         else
-          @messages << Message.new("error", Hcode.t("ui.usage_goal"))
+          emit_to_log(Message.new("error", Hcode.t("ui.usage_goal")))
         end
       end
 
@@ -684,26 +684,26 @@ module Hcode
         lang = args.strip.downcase
         if lang.empty?
           current = @on_get_language.try(&.call) || Hcode::I18n.resolve_locale
-          @messages << Message.new("system",
+          emit_to_log(Message.new("system",
             "#{Hcode.t("ui.current_language", name: current)}\n" \
             "#{Hcode.t("ui.available_languages", list: supported.join(", "))}\n" \
-            "#{Hcode.t("ui.usage_language", list: supported.join("|"))}")
+            "#{Hcode.t("ui.usage_language", list: supported.join("|"))}"))
           return
         end
         unless supported.includes?(lang)
-          @messages << Message.new("error",
+          emit_to_log(Message.new("error",
             Hcode.t("language.unknown", name: lang) + "\n" +
-            Hcode.t("language.available", list: supported.join(", ")))
+            Hcode.t("language.available", list: supported.join(", "))))
           return
         end
         @on_language_change.try(&.call(lang))
         Hcode::I18n.activate(lang)
-        @messages << Message.new("system", Hcode.t("language.changed", name: lang))
+        emit_to_log(Message.new("system", Hcode.t("language.changed", name: lang)))
       end
 
       private def open_tasks_browser : Nil
         unless cb = @on_fetch_tasks
-          @messages << Message.new("error", "Tasks browser is not wired up (no task service).")
+          emit_to_log(Message.new("error", "Tasks browser is not wired up (no task service)."))
           return
         end
 
@@ -757,13 +757,13 @@ module Hcode
       private def open_undo_selector : Nil
         unless cb = @on_fetch_undo_choices
           @on_undo.try(&.call)
-          @messages << Message.new("system", "Undid last turn.")
+          emit_to_log(Message.new("system", "Undid last turn."))
           return
         end
 
         raw = cb.call
         if raw.nil? || raw.empty?
-          @messages << Message.new("system", "No turns to undo.")
+          emit_to_log(Message.new("system", "No turns to undo."))
           return
         end
 
@@ -777,7 +777,7 @@ module Hcode
           else
             @on_undo.try(&.call)
           end
-          @messages << Message.new("system", "Undid #{c.count} turn(s).")
+          emit_to_log(Message.new("system", "Undid #{c.count} turn(s)."))
           nil
         end
 
@@ -819,7 +819,7 @@ module Hcode
           @provider_list.hide
           @dirty = true
           if name == @provider_name
-            @messages << Message.new("system", "Provider already set to #{name}.")
+            emit_to_log(Message.new("system", "Provider already set to #{name}."))
           elsif needs_setup?(name)
             # Credentials missing for the selected provider: launch the setup
             # wizard for it instead of failing the switch.
@@ -827,10 +827,10 @@ module Hcode
           elsif cb = @on_provider_change
             if cb.call(name)
               @provider_name = name
-              @messages << Message.new("system", "Switched provider to #{name}.")
+              emit_to_log(Message.new("system", "Switched provider to #{name}."))
             end
           else
-            @messages << Message.new("error", "Provider switching is not wired up.")
+            emit_to_log(Message.new("error", "Provider switching is not wired up."))
           end
         when .escape?
           @provider_list.hide
@@ -859,11 +859,11 @@ module Hcode
         @provider_name = name
         @status = "Setup: #{wizard.step.to_s.downcase}"
         @editor.clear
-        @messages << Message.new("user", provider_label(name))
+        emit_to_log(Message.new("user", provider_label(name)))
         if wizard.step == Setup::Wizard::Step::Endpoint
           # Keyless provider: jump straight to endpoint, but still show a
           # transcript entry so the user knows why no key was asked.
-          @messages << Message.new("system", "No API key needed for #{name}.")
+          emit_to_log(Message.new("system", "No API key needed for #{name}."))
         end
         advance_setup_step
       end
@@ -906,7 +906,7 @@ module Hcode
 
       private def apply_permission_mode(mode : String) : Nil
         @permission_mode = mode
-        @messages << Message.new("system", "Permission mode: #{mode}")
+        emit_to_log(Message.new("system", "Permission mode: #{mode}"))
         @dirty = true
       end
 
@@ -929,9 +929,9 @@ module Hcode
           @dirty = true
           if cb = @on_set_effort
             cb.call(effort)
-            @messages << Message.new("system", Hcode.t("ui.effort_set", name: effort))
+            emit_to_log(Message.new("system", Hcode.t("ui.effort_set", name: effort)))
           else
-            @messages << Message.new("system", Hcode.t("ui.effort_not_wired"))
+            emit_to_log(Message.new("system", Hcode.t("ui.effort_not_wired")))
           end
         when .escape?
           @effort_list.hide
@@ -956,7 +956,7 @@ module Hcode
           @theme_list.hide
           @dirty = true
           @theme = name == "light" ? Theme.light : Theme.dark
-          @messages << Message.new("system", Hcode.t("ui.theme_set", name: name))
+          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: name)))
           invalidate_log_cache!
         when .escape?
           @theme_list.hide
@@ -987,7 +987,7 @@ module Hcode
                  else               Tools::Bash::SudoMode::Request
                  end
           Tools::Bash.sudo_mode = mode
-          @messages << Message.new("system", "Sudo mode: #{mode_str}")
+          emit_to_log(Message.new("system", "Sudo mode: #{mode_str}"))
         when .escape?
           @sudo_list.hide
           @dirty = true
@@ -1025,7 +1025,7 @@ module Hcode
         entries = index.list(ws_id, include_archived: include_archived)
         if entries.empty?
           msg = include_archived ? "No archived sessions to restore." : "No sessions found."
-          @messages << Message.new("system", msg)
+          emit_to_log(Message.new("system", msg))
           return
         end
 
@@ -1069,19 +1069,19 @@ module Hcode
           @session_list.hide
           @dirty = true
           unless entry
-            @messages << Message.new("error", "No session selected.")
+            emit_to_log(Message.new("error", "No session selected."))
             return
           end
           case @session_picker_mode
           when :restore
             Session::Lifecycle.new(@home).restore(entry)
-            @messages << Message.new("system", "Restored session: #{entry.label}")
+            emit_to_log(Message.new("system", "Restored session: #{entry.label}"))
           else
             if cb = @on_resume_session
-              @messages << Message.new("system", "Resuming session: #{entry.label}")
+              emit_to_log(Message.new("system", "Resuming session: #{entry.label}"))
               cb.call(entry.path)
             else
-              @messages << Message.new("error", "Session resume is not wired up.")
+              emit_to_log(Message.new("error", "Session resume is not wired up."))
             end
           end
         when .escape?
@@ -1093,7 +1093,7 @@ module Hcode
       private def open_model_selector : Nil
         cb = @on_fetch_models
         if cb.nil?
-          @messages << Message.new("error", "Model fetching is not wired up.")
+          emit_to_log(Message.new("error", "Model fetching is not wired up."))
           return
         end
 
@@ -1104,13 +1104,13 @@ module Hcode
           begin
             models = cb.call
             if models.empty?
-              @messages << Message.new("system", "No models available for current provider.")
+              emit_to_log(Message.new("system", "No models available for current provider."))
             else
               @model_list.show(Hcode.t("ui.select_model", name: @provider_name), models)
               @model_list.selected = models.index(@model) || 0
             end
           rescue ex
-            @messages << Message.new("error", "Failed to fetch models: #{ex.message}")
+            emit_to_log(Message.new("error", "Failed to fetch models: #{ex.message}"))
           ensure
             @status = ""
             @dirty = true
@@ -1125,14 +1125,14 @@ module Hcode
           @model_list.hide
           @dirty = true
           if model == @model
-            @messages << Message.new("system", "Model already set to #{model}.")
+            emit_to_log(Message.new("system", "Model already set to #{model}."))
           elsif cb = @on_model_change
             if cb.call(model)
               @model = model
-              @messages << Message.new("system", "Switched model to #{model}.")
+              emit_to_log(Message.new("system", "Switched model to #{model}."))
             end
           else
-            @messages << Message.new("error", "Model switching is not wired up.")
+            emit_to_log(Message.new("error", "Model switching is not wired up."))
           end
         when .escape?
           # A single Esc clears an active search first; a second Esc closes.

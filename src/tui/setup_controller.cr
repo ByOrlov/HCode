@@ -13,8 +13,8 @@ module Hcode
         # Keep the welcome banner visible so the first-run flow opens with the
         # same branded box as a normal launch, instead of a bare transcript.
         @show_welcome = true
-        @messages << Message.new("system",
-          Hcode.t("ui.setup_welcome"))
+        emit_to_log(Message.new("system",
+          Hcode.t("ui.setup_welcome")))
         @status = Hcode.t("ui.setup_status")
         open_setup_provider_selector
         invalidate_log_cache!
@@ -46,13 +46,13 @@ module Hcode
 
           wizard.select_provider(choice.name)
           @provider_name = choice.name
-          @messages << Message.new("user", choice.label)
+          emit_to_log(Message.new("user", choice.label))
 
           if wizard.step == Setup::Wizard::Step::Endpoint
             # Keyless provider: jump straight to endpoint, but still show a
             # transcript entry so the user knows why no key was asked.
-            @messages << Message.new("system",
-              "No API key needed for #{choice.name}.")
+            emit_to_log(Message.new("system",
+              "No API key needed for #{choice.name}."))
           end
           advance_setup_step
         when .escape?, .ctrl_d?
@@ -105,7 +105,7 @@ module Hcode
           begin
             models = cb.call(name)
             if models.empty?
-              @messages << Message.new("system", "Models unavailable.")
+              emit_to_log(Message.new("system", "Models unavailable."))
               restart_setup
             else
               @model_list.show(Hcode.t("ui.select_model", name: name), models)
@@ -113,7 +113,7 @@ module Hcode
               @model_list.selected = models.index(default) || 0
             end
           rescue ex
-            @messages << Message.new("system", "Models unavailable.")
+            emit_to_log(Message.new("system", "Models unavailable."))
             restart_setup
           ensure
             @status = "Setup: #{wizard.step.to_s.downcase}"
@@ -132,7 +132,7 @@ module Hcode
           model = @model_list.current || wizard.current_choice.try(&.default_model) || ""
           @model_list.hide
           @dirty = true
-          @messages << Message.new("user", model)
+          emit_to_log(Message.new("user", model))
           wizard.model = model
           wizard.step = Setup::Wizard::Step::Done
           advance_setup_step
@@ -208,8 +208,8 @@ module Hcode
 
         config_msg = "Provider: #{wizard.provider_name}"
         config_msg += " | Model: #{wizard.model}" if wizard.model
-        @messages << Message.new("system", "Configuration saved. #{config_msg}")
-        @messages << Message.new("system", "Starting HCode...")
+        emit_to_log(Message.new("system", "Configuration saved. #{config_msg}"))
+        emit_to_log(Message.new("system", "Starting HCode..."))
         @status = ""
         @setup_mode = false
         @dirty = true
@@ -226,10 +226,10 @@ module Hcode
         # Echo what the user entered (mask API keys).
         if wizard.step == Setup::Wizard::Step::Credentials
           masked = text.empty? ? "(skipped)" : "#{"•" * {text.size, 8}.min}"
-          @messages << Message.new("user", masked)
+          emit_to_log(Message.new("user", masked))
         else
           display = text.empty? ? "(default)" : text
-          @messages << Message.new("user", display)
+          emit_to_log(Message.new("user", display))
         end
 
         wizard.submit_text(text)

@@ -193,20 +193,8 @@ module Hcode
           end
         end
 
-        if @spinner.active? && @streaming_thinking.empty?
-          kc = ANSI.color(@theme.colors.logo, nil)
-          lead = "#{kc}#{MessageRenderer::STREAMING_BAR}#{ANSI.reset} "
-          active_lines << String.build do |s|
-            s << lead
-            s << ANSI.color(@theme.colors.primary, nil)
-            s << Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
-            s << ANSI.reset
-            s << " "
-            s << ANSI.color(@theme.colors.muted, nil)
-            s << @status
-            s << ANSI.reset
-          end
-        end
+        # AgentStatus line — always present (one row), never disappears.
+        active_lines << render_agent_status_line
 
         if req = @approval_pending
           active_lines.concat(render_approval_panel(req, cols))
@@ -560,6 +548,55 @@ module Hcode
 
         editor_text_col = 5 + @editor.cursor_visual_col
         port.cursor_to_column(editor_text_col)
+      end
+
+      # Permanent one-line agent status indicator (always visible in the active
+      # zone, right above the editor). Colour-coded by lifecycle phase:
+      #
+      #   Hello   — bar khaki (logo), text gray (dim)
+      #   Busy    — blue (info), animated spinner frame, "Busy: …" prefix
+      #   Waiting — yellow (warning), static bullet
+      #   Done    — bar khaki (logo), text gray (dim), ✓ check mark
+      #   Error   — red (error), ✗ mark
+      private def render_agent_status_line : String
+        bar = MessageRenderer::STREAMING_BAR
+        String.build do |s|
+          case @agent_status
+          when .busy?
+            s << ANSI.color(@theme.colors.info, nil)
+            s << bar
+            s << ANSI.reset
+            s << ' '
+            s << ANSI.color(@theme.colors.info, nil)
+            s << Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
+            s << ANSI.reset
+            s << ' '
+            s << ANSI.color(@theme.colors.info, nil)
+            s << "Busy:"
+            s << ANSI.reset
+            s << ' '
+            s << ANSI.color(@theme.colors.muted, nil)
+            s << @status
+            s << ANSI.reset
+          when .hello?
+            s << ""
+          when .done?
+            s << ANSI.color(@theme.colors.dim, nil)
+            s << " ✓ "
+            s << @status
+            s << ANSI.reset
+          when .waiting?
+            s << ANSI.color(@theme.colors.warning, nil)
+            s << bar << " "
+            s << @status
+            s << ANSI.reset
+          when .error?
+            s << ANSI.color(@theme.colors.error, nil)
+            s << bar << " ✗ "
+            s << @status
+            s << ANSI.reset
+          end
+        end
       end
     end
   end

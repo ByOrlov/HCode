@@ -55,8 +55,8 @@ task :build_release do
 end
 
 namespace :build do
-  desc "Build every binary: hcode, lines_demo, mock_hcode, mockfast_hcode, mockshort_hcode"
-  task :all => :mockshort_hcode
+  desc "Build every binary: hcode, ameba, lines_demo, mock_hcode, mockfast_hcode, mockshort_hcode"
+  task :all => [:hcode, :ameba, :lines_demo, :mock_hcode, :mockfast_hcode, :mockshort_hcode]
 
   desc "Build the hcode binary (debug)"
   task :hcode do
@@ -65,31 +65,31 @@ namespace :build do
   end
 
   desc "Build bin/ameba"
-  task :ameba => :hcode do
+  task :ameba do
     building "bin/ameba"
     sh "crystal build bin/ameba.cr -o bin/ameba --warnings none --no-color"
   end
 
   desc "Build bin/lines_demo"
-  task :lines_demo => :hcode do
+  task :lines_demo do
     building "bin/lines_demo"
     sh "crystal build bin/lines_demo.cr -o bin/lines_demo --warnings none --no-color"
   end
 
   desc "Build bin/mock_hcode (simulated 100-tool LLM output)"
-  task :mock_hcode => :lines_demo do
+  task :mock_hcode do
     building "bin/mock_hcode"
     sh "crystal build bin/mock_hcode.cr -o bin/mock_hcode --warnings none --no-color"
   end
 
   desc "Build bin/mockfast_hcode (quick render check)"
-  task :mockfast_hcode => :mock_hcode do
+  task :mockfast_hcode do
     building "bin/mockfast_hcode"
     sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
   end
 
   desc "Build bin/mockshort_hcode (short 10-line streamed answer + couple of tools)"
-  task :mockshort_hcode => :mockfast_hcode do
+  task :mockshort_hcode do
     building "bin/mockshort_hcode"
     sh "crystal build bin/mockshort_hcode.cr -o bin/mockshort_hcode --warnings none --no-color"
   end

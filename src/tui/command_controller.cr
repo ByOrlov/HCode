@@ -12,18 +12,18 @@ module Hcode
 
       private def cmd_new : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot start a new session while a turn is running. Wait or interrupt first.")
+          emit_to_log(Message.new("error", "Cannot start a new session while a turn is running. Wait or interrupt first."))
         else
           @on_new_session.try(&.call)
           @messages.clear
           @show_welcome = true
-          @messages << Message.new("system", Hcode.t("ui.new_session_started"))
+          emit_to_log(Message.new("system", Hcode.t("ui.new_session_started")))
         end
       end
 
       private def cmd_sessions : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot switch sessions while a turn is running.")
+          emit_to_log(Message.new("error", "Cannot switch sessions while a turn is running."))
         else
           open_session_selector(:resume)
         end
@@ -31,7 +31,7 @@ module Hcode
 
       private def cmd_restore : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot restore a session while a turn is running.")
+          emit_to_log(Message.new("error", "Cannot restore a session while a turn is running."))
         else
           open_session_selector(:restore)
         end
@@ -39,56 +39,56 @@ module Hcode
 
       private def cmd_fork : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot fork while a turn is running. Wait or interrupt first.")
+          emit_to_log(Message.new("error", "Cannot fork while a turn is running. Wait or interrupt first."))
         elsif cb = @on_fork
           cb.call
-          @messages << Message.new("system", "Session forked.")
+          emit_to_log(Message.new("system", "Session forked."))
         else
-          @messages << Message.new("error", "Session fork is not wired up.")
+          emit_to_log(Message.new("error", "Session fork is not wired up."))
         end
       end
 
       private def cmd_archive : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot archive while a turn is running.")
+          emit_to_log(Message.new("error", "Cannot archive while a turn is running."))
         elsif cb = @on_archive
           cb.call
-          @messages << Message.new("system", Hcode.t("ui.session_archived"))
+          emit_to_log(Message.new("system", Hcode.t("ui.session_archived")))
         else
-          @messages << Message.new("error", "Session archive is not wired up.")
+          emit_to_log(Message.new("error", "Session archive is not wired up."))
         end
       end
 
       private def cmd_rename(args : String) : Nil
         if args.empty?
-          @messages << Message.new("system", Hcode.t("ui.usage_rename"))
+          emit_to_log(Message.new("system", Hcode.t("ui.usage_rename")))
         elsif cb = @on_rename
           cb.call(args)
-          @messages << Message.new("system", "Session title set to: #{args}")
+          emit_to_log(Message.new("system", "Session title set to: #{args}"))
         else
-          @messages << Message.new("error", "Session rename is not wired up.")
+          emit_to_log(Message.new("error", "Session rename is not wired up."))
         end
       end
 
       private def cmd_clear : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot clear while a turn is running. Wait or interrupt first.")
+          emit_to_log(Message.new("error", "Cannot clear while a turn is running. Wait or interrupt first."))
         else
           @on_clear.try(&.call)
           @messages.clear
           @show_welcome = true
-          @messages << Message.new("system", Hcode.t("ui.conversation_cleared"))
+          emit_to_log(Message.new("system", Hcode.t("ui.conversation_cleared")))
         end
       end
 
       private def cmd_compact : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot compact while a turn is running. Wait or interrupt first.")
+          emit_to_log(Message.new("error", "Cannot compact while a turn is running. Wait or interrupt first."))
         else
-          @messages << Message.new("system", "Compacting context...")
+          emit_to_log(Message.new("system", "Compacting context..."))
           @is_compacting = true
           @status = "Compacting..."
-          @spinner.start
+          start_spinner
           @dirty = true
           @on_compact.try(&.call)
         end
@@ -106,70 +106,70 @@ module Hcode
           s << "#{Hcode.t("ui.messages_label")}: #{@messages.size}\n"
           s << "#{Hcode.t("ui.queue_label")}: #{@queue.size}\n"
         end
-        @messages << Message.new("system", stats.strip)
+        emit_to_log(Message.new("system", stats.strip))
       end
 
       private def cmd_undo(args : String) : Nil
         if @agent_busy
-          @messages << Message.new("error", Hcode.t("ui.cannot_undo_busy"))
+          emit_to_log(Message.new("error", Hcode.t("ui.cannot_undo_busy")))
         elsif args.strip.empty?
           open_undo_selector
         else
           count = args.strip.to_i? || 1
           @on_undo.try(&.call)
-          @messages << Message.new("system", "Undid last #{count} turn(s).")
+          emit_to_log(Message.new("system", "Undid last #{count} turn(s)."))
         end
       end
 
       private def cmd_queue(args : String) : Nil
         if args.strip == "clear"
           @queue.clear
-          @messages << Message.new("system", Hcode.t("ui.queue_cleared"))
+          emit_to_log(Message.new("system", Hcode.t("ui.queue_cleared")))
         elsif @queue.empty?
-          @messages << Message.new("system", Hcode.t("ui.queue_empty"))
+          emit_to_log(Message.new("system", Hcode.t("ui.queue_empty")))
         else
           preview = @queue.map_with_index { |qm, i| "  #{i + 1}. #{truncate_preview(qm.text)}" }.join("\n")
-          @messages << Message.new("system", "Queue (#{@queue.size}):\n#{preview}\n— #{queue_hint}")
+          emit_to_log(Message.new("system", "Queue (#{@queue.size}):\n#{preview}\n— #{queue_hint}"))
         end
       end
 
       private def cmd_yolo : Nil
         @permission_mode = "yolo"
-        @messages << Message.new("system", "Permission mode: yolo (auto-approve all)")
+        emit_to_log(Message.new("system", "Permission mode: yolo (auto-approve all)"))
       end
 
       private def cmd_auto : Nil
         @permission_mode = "auto"
-        @messages << Message.new("system", "Permission mode: auto (safe operations)")
+        emit_to_log(Message.new("system", "Permission mode: auto (safe operations)"))
       end
 
       private def cmd_manual : Nil
         @permission_mode = "manual"
-        @messages << Message.new("system", "Permission mode: manual (approve each)")
+        emit_to_log(Message.new("system", "Permission mode: manual (approve each)"))
       end
 
       private def cmd_export_md(args : String) : Nil
         path = args.empty? ? "session-#{Time.utc.to_unix}.md" : args
         @on_export.try(&.call(path))
-        @messages << Message.new("system", Hcode.t("ui.exported_to", path: path))
+        emit_to_log(Message.new("system", Hcode.t("ui.exported_to", path: path)))
       end
 
       private def cmd_add_dir(args : String) : Nil
         if args.empty?
-          @messages << Message.new("system", Hcode.t("ui.usage_add_dir"))
+          emit_to_log(Message.new("system", Hcode.t("ui.usage_add_dir")))
         else
           path = File.expand_path(args.strip, @work_dir)
           if Dir.exists?(path)
             if @additional_dirs.includes?(path)
-              @messages << Message.new("system", "Already added: #{path}")
+              emit_to_log(Message.new("system", "Already added: #{path}"))
             else
               @additional_dirs << path
               on_additional_dirs_change.try(&.call(@additional_dirs.dup))
-              @messages << Message.new("system",
-                Hcode.t("ui.added_directory", path: path, count: @additional_dirs.size))
+              emit_to_log(Message.new("system",
+                Hcode.t("ui.added_directory", path: path, count: @additional_dirs.size)))
             end
           else
-            @messages << Message.new("error", "Directory does not exist: #{path}")
+            emit_to_log(Message.new("error", "Directory does not exist: #{path}"))
           end
         end
       end
@@ -179,28 +179,28 @@ module Hcode
           open_theme_selector
         elsif args == "dark"
           @theme = Theme.dark
-          @messages << Message.new("system", Hcode.t("ui.theme_set", name: "dark"))
+          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: "dark")))
         elsif args == "light"
           @theme = Theme.light
-          @messages << Message.new("system", Hcode.t("ui.theme_set", name: "light"))
+          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: "light")))
         else
-          @messages << Message.new("error", Hcode.t("ui.theme_unknown", name: args))
+          emit_to_log(Message.new("error", Hcode.t("ui.theme_unknown", name: args)))
         end
       end
 
       private def cmd_version : Nil
         version = Hcode::VERSION
         build = Hcode.build_date || "dev"
-        @messages << Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}")
+        emit_to_log(Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}"))
       end
 
       private def cmd_upgrade : Nil
-        @messages << Message.new("system", Hcode.t("ui.upgrade_checking"))
+        emit_to_log(Message.new("system", Hcode.t("ui.upgrade_checking")))
         @dirty = true
         render
         ok, msg = Hcode::Upgrader.run
         Hcode::Upgrader.record_check(nil)
-        @messages << Message.new(ok ? "system" : "error", msg)
+        emit_to_log(Message.new(ok ? "system" : "error", msg))
       end
 
       private def cmd_usage : Nil
@@ -214,9 +214,9 @@ module Hcode
         last_assistant = @messages.reverse.find { |m| m.role == "assistant" }
         if last_assistant
           copy_to_clipboard(last_assistant.content)
-          @messages << Message.new("system", Hcode.t("ui.copied"))
+          emit_to_log(Message.new("system", Hcode.t("ui.copied")))
         else
-          @messages << Message.new("error", Hcode.t("ui.no_assistant_to_copy"))
+          emit_to_log(Message.new("error", Hcode.t("ui.no_assistant_to_copy")))
         end
       end
 
@@ -227,7 +227,7 @@ module Hcode
         when ""
           open_permission_selector
         else
-          @messages << Message.new("error", Hcode.t("ui.mode_unknown", name: args))
+          emit_to_log(Message.new("error", Hcode.t("ui.mode_unknown", name: args)))
         end
       end
 
@@ -240,15 +240,15 @@ module Hcode
         case arg
         when "off"
           Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Off
-          @messages << Message.new("system", "Sudo mode: off (sudo commands disallowed)")
+          emit_to_log(Message.new("system", "Sudo mode: off (sudo commands disallowed)"))
         when "request"
           Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Request
-          @messages << Message.new("system", "Sudo mode: request (ask before each sudo command)")
+          emit_to_log(Message.new("system", "Sudo mode: request (ask before each sudo command)"))
         when "always"
           Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Always
-          @messages << Message.new("system", "Sudo mode: always (sudo commands allowed)")
+          emit_to_log(Message.new("system", "Sudo mode: always (sudo commands allowed)"))
         else
-          @messages << Message.new("error", "Unknown sudo mode: #{args}. Use: off, request, or always.")
+          emit_to_log(Message.new("error", "Unknown sudo mode: #{args}. Use: off, request, or always."))
         end
       end
 
@@ -258,19 +258,19 @@ module Hcode
         elsif cb = @on_set_effort
           normalized = args.strip.downcase
           cb.call(normalized)
-          @messages << Message.new("system", Hcode.t("ui.effort_set", name: normalized))
+          emit_to_log(Message.new("system", Hcode.t("ui.effort_set", name: normalized)))
         else
-          @messages << Message.new("system", Hcode.t("ui.effort_not_wired"))
+          emit_to_log(Message.new("system", Hcode.t("ui.effort_not_wired")))
         end
       end
 
       private def cmd_todos(args : String) : Nil
         todos = current_todos
         if todos.nil? || todos.empty?
-          @messages << Message.new("system", Hcode.t("ui.no_todos"))
+          emit_to_log(Message.new("system", Hcode.t("ui.no_todos")))
         elsif args.strip.downcase == "clear"
           @on_clear_todos.try(&.call)
-          @messages << Message.new("system", Hcode.t("ui.todos_cleared"))
+          emit_to_log(Message.new("system", Hcode.t("ui.todos_cleared")))
         else
           body = todos.map_with_index do |(title, status), i|
             marker = case status
@@ -280,7 +280,7 @@ module Hcode
                      end
             "  #{i + 1}. #{marker} #{title}"
           end.join("\n")
-          @messages << Message.new("system", "Todos (#{todos.size}):\n#{body}")
+          emit_to_log(Message.new("system", "Todos (#{todos.size}):\n#{body}"))
         end
       end
 
@@ -288,37 +288,37 @@ module Hcode
         if cb = @on_debug
           cb.call
         else
-          @messages << Message.new("error", "/debug is not wired up.")
+          emit_to_log(Message.new("error", "/debug is not wired up."))
         end
       end
 
       private def cmd_feedback(args : String) : Nil
         if args.strip.empty?
-          @messages << Message.new("system", Hcode.t("ui.usage_feedback"))
+          emit_to_log(Message.new("system", Hcode.t("ui.usage_feedback")))
         elsif cb = @on_feedback
           cb.call(args.strip)
-          @messages << Message.new("system", "Feedback sent. Thank you!")
+          emit_to_log(Message.new("system", "Feedback sent. Thank you!"))
         else
           # Local fallback: stash the feedback so it can be retrieved later.
           feedback_path = File.join(@home, ".hcode", "feedback.log")
           Dir.mkdir_p(File.dirname(feedback_path)) rescue nil
           File.write(feedback_path, "[#{Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")}] #{args.strip}\n", mode: "a")
-          @messages << Message.new("system", "Feedback saved to #{feedback_path}.")
+          emit_to_log(Message.new("system", "Feedback saved to #{feedback_path}."))
         end
       end
 
       private def cmd_reload : Nil
         if cb = @on_reload
           cb.call
-          @messages << Message.new("system", "Config and session state reloaded.")
+          emit_to_log(Message.new("system", "Config and session state reloaded."))
         else
-          @messages << Message.new("error", "Reload is not wired up.")
+          emit_to_log(Message.new("error", "Reload is not wired up."))
         end
       end
 
       private def cmd_web : Nil
         url = "https://www.kimi.com/code?session=#{URI.encode_path(@session_id)}"
-        @messages << Message.new("system", "Open in Web UI: #{url}")
+        emit_to_log(Message.new("system", "Open in Web UI: #{url}"))
       end
 
       private def cmd_settings : Nil
@@ -333,7 +333,7 @@ module Hcode
           s << "Work dir: #{@work_dir}\n"
           s << "Git branch: #{@git_branch.empty? ? "(none)" : @git_branch}\n"
         end
-        @messages << Message.new("system", settings.strip)
+        emit_to_log(Message.new("system", settings.strip))
       end
 
       # Mirrors TS `handleInitCommand` → `session.init()`: defer any user
@@ -342,10 +342,10 @@ module Hcode
       # and writes AGENTS.md to the project root.
       private def cmd_init : Nil
         if @agent_busy
-          @messages << Message.new("error", "Cannot /init while a turn is running. Wait or interrupt first.")
+          emit_to_log(Message.new("error", "Cannot /init while a turn is running. Wait or interrupt first."))
         else
           @defer_user_messages = true
-          @messages << Message.new("system", "Analyzing codebase and generating AGENTS.md...")
+          emit_to_log(Message.new("system", "Analyzing codebase and generating AGENTS.md..."))
           @dirty = true
           spawn do
             begin
@@ -365,9 +365,9 @@ module Hcode
       private def cmd_export_debug_zip : Nil
         path = export_debug_bundle
         if path
-          @messages << Message.new("system", "Debug bundle exported to: #{path}")
+          emit_to_log(Message.new("system", "Debug bundle exported to: #{path}"))
         else
-          @messages << Message.new("error", "Failed to export debug bundle (tar not available?).")
+          emit_to_log(Message.new("error", "Failed to export debug bundle (tar not available?)."))
         end
       end
 
@@ -393,7 +393,7 @@ module Hcode
           end
           s << "\nFlags are read at startup; restart hcode after changing them."
         end
-        @messages << Message.new("system", body.strip)
+        emit_to_log(Message.new("system", body.strip))
       end
 
       # Subcommands: /mcp status, /mcp update [server], /mcp configure.
@@ -404,27 +404,27 @@ module Hcode
         when "update"
           server = sub[1]?
           msg = server ? "Refreshing MCP server '#{server}'..." : "Refreshing all MCP servers..."
-          @messages << Message.new("system", msg)
+          emit_to_log(Message.new("system", msg))
           if cb = @on_mcp_update
             cb.call(server)
           else
-            @messages << Message.new("error", "MCP update not available in this run.")
+            emit_to_log(Message.new("error", "MCP update not available in this run."))
           end
         when "configure"
-          @messages << Message.new("system", "MCP configuration: edit ~/.hcode/mcp.json directly, then run /mcp update to refresh the cache.")
+          emit_to_log(Message.new("system", "MCP configuration: edit ~/.hcode/mcp.json directly, then run /mcp update to refresh the cache."))
         when "help"
-          @messages << Message.new("system", MCP_HELP_TEXT)
+          emit_to_log(Message.new("system", MCP_HELP_TEXT))
         else
           # Default: show status.
           status = @on_mcp_status.try(&.call) ||
                    "MCP servers: not available in this run (no client wired)."
-          @messages << Message.new("system", status)
+          emit_to_log(Message.new("system", status))
         end
       end
 
       private def cmd_login : Nil
         if cb = @on_login
-          @messages << Message.new("system", "Starting OAuth device-code login...")
+          emit_to_log(Message.new("system", "Starting OAuth device-code login..."))
           cb.call
         else
           cfg_path = File.join(@home, ".hcode", "config.json")
@@ -439,16 +439,16 @@ module Hcode
             s << "  2. OAuth credentials (JSON from kimi-code TS login):\n"
             s << "       #{cred_path}\n"
           end
-          @messages << Message.new("system", body.strip)
+          emit_to_log(Message.new("system", body.strip))
         end
       end
 
       private def cmd_logout : Nil
         if cb = @on_logout
           cb.call
-          @messages << Message.new("system", "Logged out. API key cleared from config.")
+          emit_to_log(Message.new("system", "Logged out. API key cleared from config."))
         else
-          @messages << Message.new("error", "Logout is not wired up.")
+          emit_to_log(Message.new("error", "Logout is not wired up."))
         end
       end
 
@@ -479,7 +479,7 @@ module Hcode
       TEXT
 
       private def cmd_memory : Nil
-        @messages << Message.new("system", ProfiledMemory.format_report)
+        emit_to_log(Message.new("system", ProfiledMemory.format_report))
       end
 
       private def cmd_sounds(args : String) : Nil
@@ -499,7 +499,7 @@ module Hcode
             end
             cfg.save
           end
-          @messages << Message.new("system", Hcode.t("ui.sounds_on"))
+          emit_to_log(Message.new("system", Hcode.t("ui.sounds_on")))
         when "off"
           if cfg = @app_config
             cfg.notifications.sound_enabled = false
@@ -508,14 +508,14 @@ module Hcode
             end
             cfg.save
           end
-          @messages << Message.new("system", Hcode.t("ui.sounds_off"))
+          emit_to_log(Message.new("system", Hcode.t("ui.sounds_off")))
         when ""
           enabled = @app_config.try(&.notifications.sound_enabled?) || false
           volume = @app_config.try(&.notifications.sound_volume) || 70
           state = Hcode.t(enabled ? "ui.sounds_on_label" : "ui.sounds_off_label")
-          @messages << Message.new("system", Hcode.t("ui.sounds_status", state: state, volume: volume))
+          emit_to_log(Message.new("system", Hcode.t("ui.sounds_status", state: state, volume: volume)))
         else
-          @messages << Message.new("error", Hcode.t("ui.sounds_usage"))
+          emit_to_log(Message.new("error", Hcode.t("ui.sounds_usage")))
         end
       end
 
@@ -523,7 +523,7 @@ module Hcode
         val = args.strip.to_i?
         if val.nil? || val < 0 || val > 100
           current = @app_config.try(&.notifications.sound_volume) || 70
-          @messages << Message.new("error", Hcode.t("ui.volume_invalid", current: current))
+          emit_to_log(Message.new("error", Hcode.t("ui.volume_invalid", current: current)))
           return
         end
         if cfg = @app_config
@@ -534,7 +534,7 @@ module Hcode
           end
           cfg.save
         end
-        @messages << Message.new("system", Hcode.t("ui.volume_set", value: val))
+        emit_to_log(Message.new("system", Hcode.t("ui.volume_set", value: val)))
       end
     end
   end

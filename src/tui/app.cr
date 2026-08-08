@@ -1,6 +1,7 @@
 module Hcode
   module TUI
     class App
+      include Zones
       include SetupController
       include CommandController
       include EventController
@@ -38,6 +39,10 @@ module Hcode
       @streaming_thinking : String = ""
       @streaming_tool : String?
       @status : String = ""
+      @agent_status : AgentStatus = AgentStatus::Hello
+      # Accumulated tool calls across all steps in the current turn, shown in
+      # the Done summary. Reset on each new turn.
+      @turn_tool_count : Int32 = 0
       @model : String = "kimi-for-coding"
       @provider_name : String = "moonshot"
       @permission_mode : String = "manual"
@@ -437,8 +442,7 @@ module Hcode
       end
 
       def add_message(role : String, content : String) : Nil
-        @messages << Message.new(role, content)
-        invalidate_log_cache!
+        emit_to_log(Message.new(role, content))
       end
 
       def dirty! : Nil
