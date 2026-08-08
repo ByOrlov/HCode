@@ -236,6 +236,18 @@ module Hcode
         invalidate_log_cache!
       end
 
+      # Stop the spinner and, if it was active (meaning the transient
+      # spinner-status line occupied one active-zone row), push a blank
+      # "spacer" line into the log so the line counts stay balanced and
+      # SyncBugsCount does not fire on the status line's disappearance.
+      private def stop_spinner : Nil
+        was_active = @spinner.active?
+        @spinner.stop
+        return unless was_active
+        @messages << Message.new("spacer", "")
+        invalidate_log_cache!
+      end
+
       private def visible_len(s : String) : Int32
         CharWidth.visible_width(s)
       end

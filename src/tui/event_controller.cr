@@ -76,7 +76,7 @@ module Hcode
           @messages << Message.new("assistant", @streaming_text)
           @streaming_text = ""
         end
-        @spinner.stop
+        stop_spinner
         @messages << Message.new("status", message)
         invalidate_log_cache!
         @dirty = true
@@ -111,7 +111,7 @@ module Hcode
             @streaming_text = ""
             invalidate_log_cache!
           end
-          @spinner.stop
+          stop_spinner
           @status = ""
         when .tool_call_start?
           finalize_streaming_thinking
@@ -188,7 +188,7 @@ module Hcode
             @is_compacting = true
           elsif event.text.includes?("compacted")
             @is_compacting = false
-            @spinner.stop
+            stop_spinner
           end
         when .compaction_started?
           @is_compacting = true
@@ -203,7 +203,7 @@ module Hcode
         when .compaction_completed?
           @is_compacting = false
           @defer_user_messages = false
-          @spinner.stop
+          stop_spinner
           @status = ""
           # Update the most recent running compaction block in place.
           if cmsg = @compaction_msg
@@ -230,7 +230,7 @@ module Hcode
         when .compaction_cancelled?
           @is_compacting = false
           @defer_user_messages = false
-          @spinner.stop
+          stop_spinner
           @status = ""
           if cmsg = @compaction_msg
             cmsg.compaction_state = "cancelled"
@@ -259,12 +259,12 @@ module Hcode
           handle_subagent_terminal(event, event.phase.empty? ? "Failed" : event.phase)
         when .error?
           @messages << Message.new("error", event.text)
-          @spinner.stop
+          stop_spinner
           @status = ""
         when .exception?
           msg = Message.new("exception", event.text)
           @messages << msg
-          @spinner.stop
+          stop_spinner
           @status = ""
         when .turn_end?
           # Turn finished (normal, errored, or cancelled). Reset busy state
@@ -275,7 +275,7 @@ module Hcode
           @agent_busy = false
           @is_compacting = false
           @defer_user_messages = false
-          @spinner.stop
+          stop_spinner
           @status = ""
           @status_tracker.try(&.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete")))
           @status_tracker.try(&.transition!(Notify::AgentStatus::Idle))

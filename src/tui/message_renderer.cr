@@ -129,6 +129,13 @@ module Hcode
             lines << "#{ANSI.color(@theme.colors.dim, nil)}#{ANSI.italic}#{l}#{ANSI.reset}"
           end
           lines << ""
+        when "spacer"
+          # A blank line flushed into the log to balance the active zone: when
+          # the transient spinner-status line ("thinking N time, call M tools")
+          # is hidden, nothing migrates to the log by default — the combined
+          # coverage shrinks and SyncBugsCount fires. This spacer keeps the
+          # log line count in sync with what was shown.
+          lines << ""
         when "thinking"
           lines.concat(render_thinking_block(msg.content, msg.expanded?, cols))
         when "plan_box"
