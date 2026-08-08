@@ -55,8 +55,8 @@ task :build_release do
 end
 
 namespace :build do
-  desc "Build every binary: hcode, lines_demo, mock_hcode, mockfast_hcode"
-  task :all => :mockfast_hcode
+  desc "Build every binary: hcode, lines_demo, mock_hcode, mockfast_hcode, mockshort_hcode"
+  task :all => :mockshort_hcode
 
   desc "Build the hcode binary (debug)"
   task :hcode do
@@ -86,6 +86,12 @@ namespace :build do
   task :mockfast_hcode => :mock_hcode do
     building "bin/mockfast_hcode"
     sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
+  end
+
+  desc "Build bin/mockshort_hcode (short 10-line streamed answer + couple of tools)"
+  task :mockshort_hcode => :mockfast_hcode do
+    building "bin/mockshort_hcode"
+    sh "crystal build bin/mockshort_hcode.cr -o bin/mockshort_hcode --warnings none --no-color"
   end
 end
 
@@ -163,6 +169,11 @@ namespace :mock do
   desc "Build and run bin/mockfast_hcode (big plan + couple of tools for quick render check)"
   task :fast => "build:mockfast_hcode" do
     sh "./bin/mockfast_hcode"
+  end
+
+  desc "Build and run bin/mockshort_hcode (short 10-line streamed answer + couple of tools)"
+  task :short => "build:mockshort_hcode" do
+    sh "./bin/mockshort_hcode"
   end
 
   # Simulate a first run with no config so the setup wizard launches. HCODE_HOME

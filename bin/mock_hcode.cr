@@ -188,7 +188,8 @@ module Hcode
         s << "## Plan — large render test (#{target} lines, viewport #{rows})\n"
         s << "A plan block larger than 2× the viewport, written into the Log.\n\n"
         target.times do |i|
-          s << "#{i + 1}. Step number #{i + 1}: validate rendering at log line #{i + 1} of #{target}.\n"
+          marker = (i + 1).even? ? "+" : "----"
+          s << "#{i + 1}. Step number #{i + 1}: validate rendering at log line #{i + 1} of #{target}. #{marker}\n"
         end
       end
     end
@@ -207,7 +208,8 @@ module Hcode
         s << "(#{target} lines, viewport #{rows}) so we can watch the Active zone overflow "
         s << "while it streams.\n\n"
         target.times do |i|
-          s << "Line #{i + 1} of #{target}: streamed assistant token, rendered inside the active chat block.\n"
+          marker = (i + 1).even? ? "+" : "----"
+          s << "Line #{i + 1} of #{target}: streamed assistant token, rendered inside the active chat block. #{marker}\n"
         end
       end
     end
