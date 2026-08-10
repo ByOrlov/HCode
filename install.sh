@@ -142,19 +142,26 @@ info "Installed ${INSTALL_DIR}/${BIN_NAME}"
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) : already on PATH ;;
   *)
-    # Pick the most relevant profile file.
-    if [ -n "${ZSH_VERSION:-}" ] || [ "$SHELL" = */zsh ]; then
-      PROFILE="$HOME/.zshrc"
-    elif [ -n "${BASH_VERSION:-}" ] || [ "$SHELL" = */bash ]; then
-      PROFILE="$HOME/.bashrc"
-    else
-      PROFILE="$HOME/.profile"
-    fi
+    # Pick the most relevant profile file based on the user's default login
+    # shell ($SHELL), NOT on the interpreter running this script — when invoked
+    # as `curl ... | bash` the interpreter is always bash, so checking
+    # $BASH_VERSION would always select .bashrc even for zsh users (the macOS
+    # default), and the line would never be sourced.
+    case "${SHELL:-}" in
+      */zsh)  PROFILE="$HOME/.zshrc" ;;
+      */bash) PROFILE="$HOME/.bashrc" ;;
+      */fish) PROFILE="$HOME/.config/fish/config.fish" ;;
+      *)      PROFILE="$HOME/.profile" ;;
+    esac
 
-    LINE="export PATH=\"\$PATH:${INSTALL_DIR}\""
+    case "${SHELL:-}" in
+      */fish) LINE="set -gx PATH \$PATH ${INSTALL_DIR}" ;;
+      *)      LINE="export PATH=\"\$PATH:${INSTALL_DIR}\"" ;;
+    esac
     if [ -f "$PROFILE" ] && grep -qF "$INSTALL_DIR" "$PROFILE" 2>/dev/null; then
       : already added
     else
+      mkdir -p "$(dirname "$PROFILE")"
       printf '\n# Added by HCode installer\n%s\n' "$LINE" >> "$PROFILE"
       info "Added ${INSTALL_DIR} to PATH in ${PROFILE}"
       info "Restart your shell or run:  source ${PROFILE}"
