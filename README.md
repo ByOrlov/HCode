@@ -8,7 +8,7 @@
 Linux & MacOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/master/install.sh | bash
 ```
 
 Windows
