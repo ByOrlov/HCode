@@ -139,6 +139,11 @@ namespace :mock do
     sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown ./hcode --tui-prompt 'mock' --yolo"
   end
 
+  desc "Run TUI with mock provider — broken-token markdown list streaming bug repro"
+  task :markdown_tokens => :build do
+    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown_tokens ./hcode --tui-prompt 'mock' --yolo"
+  end
+
   desc "Run TUI with mock provider — sound notification on turn completion"
   task :sound => :build do
     sh "HCODE_PROVIDER=mock HCODE_SOUND=1 ./hcode --tui-prompt 'mock' --yolo"

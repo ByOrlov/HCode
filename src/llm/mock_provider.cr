@@ -168,6 +168,51 @@ module Hcode
         ),
       ] of MockStep
 
+      # Broken-token markdown streaming bug repro: a 10-item list is delivered
+      # so that each new "-" marker is split across chunks ("\n-" followed by
+      # " Item N"). The transient "-" is parsed as a paragraph line, adding an
+      # extra blank line; when the next token arrives it is re-absorbed into the
+      # list item and the blank line disappears. This makes the Active zone
+      # shrink/grow on every list item and drives SyncBugsCount up.
+      # Use with: HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown_tokens
+      MARKDOWN_TOKENS_DEMO_SCRIPT = [
+        MockStep.new(
+          parts: [
+            TextPart.new("Here "),
+            TextPart.new("is "),
+            TextPart.new("a "),
+            TextPart.new("broken-token "),
+            TextPart.new("markdown "),
+            TextPart.new("list:\n"),
+            TextPart.new("\n"),
+            TextPart.new("- Item 1"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 2"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 3"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 4"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 5"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 6"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 7"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 8"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 9"),
+            TextPart.new("\n-"),
+            TextPart.new(" Item 10"),
+            TextPart.new("\n\n"),
+            TextPart.new("Streaming complete."),
+          ] of MessagePart,
+          stop_reason: "end_turn",
+          text: "Broken-token markdown list demo complete.",
+          part_delay_ms: 250,
+        ),
+      ] of MockStep
+
       # Sudo terminal-exec demo: a Bash call with `sudo` that triggers the
       # alt-screen terminal path (real /dev/tty for password entry), then a
       # final text answer. Requires `bin/mocksudo` on PATH or a real sudo.
@@ -352,13 +397,14 @@ module Hcode
       # Returns nil if the env var is unset or doesn't match a known script.
       def self.script_from_env : Array(MockStep)?
         case ENV["HCODE_MOCK_SCRIPT"]?
-        when "thinking"       then THINKING_DEMO_SCRIPT.dup
-        when "thinking-tools" then THINKING_TOOLS_DEMO_SCRIPT.dup
-        when "markdown"       then MARKDOWN_DEMO_SCRIPT.dup
-        when "sudo"           then SUDO_DEMO_SCRIPT.dup
-        when "todos"          then TODOS_DEMO_SCRIPT.dup
-        when "plan"           then PLAN_DEMO_SCRIPT.dup
-        else                       nil
+        when "thinking"        then THINKING_DEMO_SCRIPT.dup
+        when "thinking-tools"  then THINKING_TOOLS_DEMO_SCRIPT.dup
+        when "markdown"        then MARKDOWN_DEMO_SCRIPT.dup
+        when "markdown_tokens" then MARKDOWN_TOKENS_DEMO_SCRIPT.dup
+        when "sudo"            then SUDO_DEMO_SCRIPT.dup
+        when "todos"           then TODOS_DEMO_SCRIPT.dup
+        when "plan"            then PLAN_DEMO_SCRIPT.dup
+        else                        nil
         end
       end
 

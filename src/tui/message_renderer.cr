@@ -177,8 +177,17 @@ module Hcode
         lead = "#{kc}#{STREAMING_BAR}#{r} "
         rest_indent = "   "
 
+        # During streaming the input may end with an incomplete markdown block
+        # marker (e.g. a bare "-" at the start of a new line). Rendering that
+        # marker as a paragraph adds a transient blank line that disappears when
+        # the next token arrives, causing the Active zone to shrink/grow and
+        # SyncBugsCount to fire. Strip such trailing fragments so they are only
+        # rendered once complete.
+        render_text = strip_streaming_incomplete(@streaming_text)
+        return lines if render_text.empty?
+
         # Render markdown narrower to make room for the lead + bullet/indent.
-        md_lines = @markdown.render(@streaming_text, {cols - 5, 10}.max)
+        md_lines = @markdown.render(render_text, {cols - 5, 10}.max)
 
         # Windowing: cap the streaming block so the active zone stays within the
         # viewport. Streaming content is mutable — it must not scroll into
@@ -206,6 +215,24 @@ module Hcode
         lines << ""
 
         lines
+      end
+
+      # During streaming the input may end with an incomplete markdown block
+      # marker (e.g. a bare "-" at the start of a new line). Rendering that
+      # marker as a paragraph adds a transient blank line that disappears when
+      # the next token arrives, causing the Active zone to shrink/grow and
+      # SyncBugsCount to fire. Strip such trailing fragments so they are only
+      # rendered once complete.
+      private def strip_streaming_incomplete(text : String) : String
+        text = text.rstrip('\n')
+
+        # Remove a trailing incomplete list/ordered-list marker that starts its
+        # own line and has no content after it.
+        if md = text.match(/(\n(?:[-*+]|\d+\.)\s*)\z/)
+          text = text[0...md.begin(0)]
+        end
+
+        text
       end
 
       private def render_live_thinking(cols : Int32) : Array(String)

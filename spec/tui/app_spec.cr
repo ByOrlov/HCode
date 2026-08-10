@@ -155,6 +155,40 @@ describe Hcode::TUI::App do
     active_stripped = active_lines.map { |l| app_strip_ansi(l) }
     active_stripped.join('\n').should_not contain("plan line")
   end
+
+  # Regression: broken-token markdown streaming must not shrink the Active zone.
+  # When a list marker is split across chunks ("\n-" followed by " Item N")
+  # the transient "-" was rendered as a paragraph with a blank separator;
+  # the next token re-absorbed it into a list item and the blank line vanished,
+  # causing SyncBugsCount to increment.
+  it "keeps SyncBugsCount at zero for broken-token markdown list streaming" do
+    app = Hcode::TUI::App.new
+    app.debug_zones = true
+    app.on_event(Hcode::Loop::Event.step_begin(0))
+
+    chunks = [
+      "Here ", "is ", "a ", "broken-token ", "markdown ", "list:\n", "\n",
+      "- Item 1",
+      "\n-", " Item 2",
+      "\n-", " Item 3",
+      "\n-", " Item 4",
+      "\n-", " Item 5",
+      "\n-", " Item 6",
+      "\n-", " Item 7",
+      "\n-", " Item 8",
+      "\n-", " Item 9",
+      "\n-", " Item 10",
+      "\n\n",
+      "Streaming complete.",
+    ]
+
+    chunks.each do |chunk|
+      app.on_event(Hcode::Loop::Event.text_delta(chunk))
+      app.build_rendered_lines(80)
+    end
+
+    app.@sync_bugs_count.should eq(0)
+  end
 end
 
 describe Hcode::TUI::SelectList do
