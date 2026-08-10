@@ -36,8 +36,12 @@ case "$target" in
     # CoreAudio backend — dlopens nothing, frameworks only.
     echo "-L$MA_DIR -lminiaudio_bridge -framework CoreAudio -framework AudioToolbox -framework CoreFoundation" ;;
   *-windows*|*-win32*|*-mingw*)
-    # WASAPI/WinMM backend.
-    echo "-L$MA_DIR -lminiaudio_bridge -lwinmm -lole32 -lksuser" ;;
+    # WASAPI/WinMM backend. Crystal drives MSVC's link.exe on Windows, which
+    # does not understand GCC-style -L/-l flags (they get mangled into
+    # invalid /L / /l options and the archive is silently dropped). Pass the
+    # archive by full path and the Win32 import libraries as *.lib names so
+    # link.exe resolves them through the Windows SDK LIBPATH.
+    echo "$MA_DIR/libminiaudio_bridge.a winmm.lib ole32.lib ksuser.lib" ;;
   *)
     # Linux: PulseAudio/ALSA are dlopened at runtime, only the base libs are needed.
     echo "-L$MA_DIR -lminiaudio_bridge -ldl -lpthread -lm" ;;

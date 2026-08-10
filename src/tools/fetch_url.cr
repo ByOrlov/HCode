@@ -177,17 +177,15 @@ module Hcode
         headers = HTTP::Headers{
           "User-Agent"      => FetchURL::DEFAULT_USER_AGENT,
           "Accept"          => "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
-          "Accept-Encoding" => "gzip",
+          "Accept-Encoding" => "gzip, deflate",
         }
 
         response = @transport.request("GET", uri, headers)
-        content_type = response.headers["Content-Type"]? || ""
-        content_encoding = response.headers["Content-Encoding"]? || ""
         if response.status_code >= 400
           raise HttpFetchError.new(response.status_code, "HTTP #{response.status_code} #{response.status_message}")
         end
 
-        body = decompress_body(response.body, content_encoding)
+        body, content_type = decode_response(uri, response)
         # Scrub invalid UTF-8 before any regex — PCRE2 throws on isolated
         # high bytes ("UTF-8 error: isolated byte with 0x80 bit set"),
         # which real-world pages frequently contain after decompression
@@ -203,6 +201,26 @@ module Hcode
       end
 
       # ------------------------------------------------------------------
+
+      private def decode_response(uri : URI, response : HTTP::Client::Response) : {String, String}
+        content_type = response.headers["Content-Type"]? || ""
+        content_encoding = response.headers["Content-Encoding"]? || ""
+        body = decompress_body(response.body, content_encoding)
+        {body, content_type}
+      rescue ex : Compress::Gzip::Error | Compress::Deflate::Error
+        # Some servers return a corrupted compressed body when Accept-Encoding
+        # is set (observed with Crystal's HTTP::Client on Wikipedia, Google,
+        # rp5.ru). Retry without compression and use the uncompressed response.
+        plain_headers = HTTP::Headers{
+          "User-Agent" => FetchURL::DEFAULT_USER_AGENT,
+          "Accept"     => "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+        }
+        plain_response = @transport.request("GET", uri, plain_headers)
+        if plain_response.status_code >= 400
+          raise HttpFetchError.new(plain_response.status_code, "HTTP #{plain_response.status_code} #{plain_response.status_message}")
+        end
+        {plain_response.body, plain_response.headers["Content-Type"]? || ""}
+      end
 
       private def decompress_body(raw : String, content_encoding : String) : String
         if content_encoding.includes?("gzip")

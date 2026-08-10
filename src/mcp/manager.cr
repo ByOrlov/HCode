@@ -125,7 +125,7 @@ module Hcode
             entry.status = ServerStatus::Pending
             allowed = cfg.allowed_tool_names(cached_defs.map(&.name))
             cached_defs.select { |d| allowed.includes?(d.name) }.each do |d|
-              proxy = ToolNaming.proxy_name(cfg.name, d.name)
+              proxy = ToolNaming.proxy_name(cfg.name, cfg.aliased_tool_name(d.name))
               entry.tools << McpLazyProxyTool.new(proxy, cfg.name, d.name,
                 d.description, d.input_schema, self,
                 tool_timeout: cfg.effective_tool_timeout)
@@ -370,7 +370,7 @@ module Hcode
 
         tools = [] of Tools::Tool
         defs.select { |d| allowed.includes?(d.name) }.each do |d|
-          proxy = ToolNaming.proxy_name(config.name, d.name)
+          proxy = ToolNaming.proxy_name(config.name, config.aliased_tool_name(d.name))
           tools << McpProxyTool.new(proxy, config.name, d.name, d.description, d.input_schema, client,
             tool_timeout: config.effective_tool_timeout)
         end

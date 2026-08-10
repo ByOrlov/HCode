@@ -108,9 +108,34 @@ describe Hcode::Config::Config do
   end
 
   describe "#auto_mcp_servers" do
-    it "returns empty for all providers (web search is built-in)" do
+    it "returns Z.AI Web Search MCP server for zai-coding-plan" do
       config = Hcode::Config::Config.new
       config.provider_name = "zai-coding-plan"
+      config.zai_api_key = "test-key"
+
+      servers = config.auto_mcp_servers
+      servers.size.should eq(1)
+
+      server = servers.first
+      server.name.should eq("zai-web-search")
+      server.type.should eq("http")
+      server.url.should eq("https://api.z.ai/api/mcp/web_search_prime/mcp")
+      server.headers["Authorization"].should eq("Bearer test-key")
+      server.providers.should eq(["zai-coding-plan"])
+      server.tool_aliases.should eq({"web_search_prime" => "WebSearch"})
+      server.aliased_tool_name("web_search_prime").should eq("WebSearch")
+      server.aliased_tool_name("other_tool").should eq("other_tool")
+    end
+
+    it "returns empty for zai-coding-plan without an API key" do
+      config = Hcode::Config::Config.new
+      config.provider_name = "zai-coding-plan"
+      config.auto_mcp_servers.should be_empty
+    end
+
+    it "returns empty for other providers" do
+      config = Hcode::Config::Config.new
+      config.provider_name = "zai"
       config.zai_api_key = "test-key"
       config.auto_mcp_servers.should be_empty
     end

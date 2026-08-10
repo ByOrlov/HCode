@@ -210,74 +210,30 @@ describe Hcode::Tools::MoonshotWebSearchProvider do
   end
 end
 
-describe Hcode::Tools::ZaiWebSearchProvider do
-  it "parses Z.AI response (search_result with link/content)" do
-    json = %({
-      "search_result": [
-        {"title": "T1", "link": "https://a.com", "content": "Snippet A"},
-        {"title": "T2", "link": "https://b.com", "content": "Snippet B"}
-      ]
-    })
-    provider = Hcode::Tools::ZaiWebSearchProvider.new(
-      "https://api.z.ai/api/coding/paas/v4/web_search", "key")
-    results = provider.parse_results(json)
-    results.size.should eq(2)
-    results[0].title.should eq("T1")
-    results[0].url.should eq("https://a.com")
-    results[0].snippet.should eq("Snippet A")
-    results[1].title.should eq("T2")
+describe Hcode::Tools::ProviderWebSearchService do
+  it "returns nil for zai provider" do
+    llm = Hcode::LLM::ZaiProvider.new(
+      model: "glm-4.6",
+      endpoint: "https://api.z.ai/api/paas/v4",
+      api_key: "sk-test",
+      provider_label: "zai")
+    service = Hcode::Tools::ProviderWebSearchService.new(llm)
+    service.get_web_search_provider.should be_nil
   end
 
-  it "handles missing search_result" do
-    provider = Hcode::Tools::ZaiWebSearchProvider.new(
-      "https://api.z.ai/api/coding/paas/v4/web_search", "key")
-    results = provider.parse_results(%({"foo":"bar"}))
-    results.should be_empty
+  it "returns nil for zai-coding-plan provider" do
+    llm = Hcode::LLM::ZaiProvider.new(
+      model: "glm-5.2",
+      endpoint: "https://api.z.ai/api/coding/paas/v4",
+      api_key: "sk-test",
+      provider_label: "zai-coding-plan")
+    service = Hcode::Tools::ProviderWebSearchService.new(llm)
+    service.get_web_search_provider.should be_nil
   end
 
-  it "uses injected transport and parses results" do
-    transport = Hcode::MockHttpTransport.new
-    transport.response_status = 200
-    transport.response_body = %({
-      "search_result": [
-        {"title": "T", "link": "https://x.com", "content": "S"}
-      ]
-    })
-
-    provider = Hcode::Tools::ZaiWebSearchProvider.new(
-      "https://api.z.ai/api/coding/paas/v4/web_search", "key", transport: transport)
-    results = provider.search("query")
-    results.size.should eq(1)
-    results[0].title.should eq("T")
-    results[0].url.should eq("https://x.com")
-    (transport.last_body || "").should contain("search_engine")
-    (transport.last_body || "").should contain("query")
-  end
-
-  it "raises when transport returns 401" do
-    transport = Hcode::MockHttpTransport.new
-    transport.response_status = 401
-    transport.response_body = "unauthorized"
-
-    provider = Hcode::Tools::ZaiWebSearchProvider.new(
-      "https://api.z.ai/api/coding/paas/v4/web_search", "key", transport: transport)
-    error = expect_raises(Exception) do
-      provider.search("query")
-    end
-    (error.message || "").should contain("401")
-  end
-
-  it "raises on non-200 with error detail" do
-    transport = Hcode::MockHttpTransport.new
-    transport.response_status = 429
-    transport.response_body = "Insufficient balance"
-
-    provider = Hcode::Tools::ZaiWebSearchProvider.new(
-      "https://api.z.ai/api/coding/paas/v4/web_search", "key", transport: transport)
-    error = expect_raises(Exception) do
-      provider.search("query")
-    end
-    (error.message || "").should contain("429")
-    (error.message || "").should contain("Insufficient balance")
+  it "returns nil for providers without native search" do
+    llm = Hcode::LLM::MockProvider.new
+    service = Hcode::Tools::ProviderWebSearchService.new(llm)
+    service.get_web_search_provider.should be_nil
   end
 end

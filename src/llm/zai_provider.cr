@@ -75,12 +75,14 @@ module Hcode
         raise ProviderConfigError.new(
           "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
       end
+      # Coding Plan uses the official Web Search MCP server (auto-configured in
+      # Config#auto_mcp_servers), not the chat-completions built-in web_search.
       ZaiProvider.new(
         model: config.zai_coding_plan_model,
         endpoint: config.zai_coding_plan_endpoint,
         api_key: config.zai_api_key,
         provider_label: "zai-coding-plan",
-        builtin_web_search: true,
+        builtin_web_search: false,
       )
     end
   end

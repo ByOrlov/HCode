@@ -107,11 +107,43 @@ module Hcode
       # markdown renderer — headings, emphasis, inline code, lists, a fenced
       # code block, a table, a blockquote and a horizontal rule. Use with:
       #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown
+      # Long (~200-line) streamed preamble so the TUI exercises scrolling and
+      # incremental render over a large reply, before the markdown showcase.
+      # Each line carries a `Line N of T:` prefix and an alternating `----`/`+`
+      # postfix marker, making it easy to verify line-by-line streaming render.
+      def self.build_markdown_long_preamble : String
+        b = String::Builder.new
+        b << "# Markdown Rendering Demo\n\n"
+        b << "This reply exercises the terminal **markdown** renderer "
+        b << "after a long streamed preamble so scroll behaviour can be checked.\n\n"
+        b << "## Long preamble\n\n"
+        total = 200
+        postfixes = {" ----", " +"}
+        total.times do |i|
+          b << "Line #{i + 1} of #{total}: streamed assistant token, rendered inside the active chat block. "
+          b << postfixes[i % 2]
+          b << "\n"
+        end
+        b << "\n"
+        b.to_s
+      end
+
       MARKDOWN_DEMO_SCRIPT = [
+        # Stage 1 — long streamed preamble (~200 lines) that exercises
+        # scrolling and incremental render, then a Read tool call so the
+        # tool-call path runs between the two text stages.
         MockStep.new(
           parts: [
-            TextPart.new("# Markdown Rendering Demo\n\n"),
-            TextPart.new("This reply exercises the terminal **markdown** renderer. "),
+            TextPart.new(build_markdown_long_preamble),
+            ToolCallPart.new("m_md_read_1", "Read", %({"path":"README.md"})),
+          ] of MessagePart,
+          stop_reason: "tool_use",
+          part_delay_ms: 80,
+        ),
+        # Stage 2 — markdown showcase, its own streamed stage.
+        MockStep.new(
+          parts: [
+            TextPart.new("## Markdown showcase\n\n"),
             TextPart.new("It has *italics*, `inline code`, and a [link](https://example.com).\n\n"),
             TextPart.new("## Unordered list\n\n"),
             TextPart.new("- First item\n- Second item\n- Third item\n\n"),

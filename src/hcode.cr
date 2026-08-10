@@ -298,6 +298,8 @@ module Hcode
       end
 
       provider = build_provider(config, oauth)
+      web_search_service = Tools::ProviderWebSearchService.new(provider)
+      Tools::WebSearch.service = web_search_service
 
       if hi_mode
         run_hi(provider)
@@ -319,7 +321,7 @@ module Hcode
       tools.register(Tools::Agent.new)
       tools.register(Tools::AskUserQuestion.new)
       tools.register(Tools::FetchURL.new)
-      tools.register(Tools::WebSearch.new)
+      tools.register(Tools::WebSearch.new) if web_search_service.get_web_search_provider
       tools.register(Tools::Skill.new)
       tools.register(Tools::EnterPlanMode.new)
       tools.register(Tools::ExitPlanMode.new)
@@ -943,6 +945,7 @@ module Hcode
           provider = build_named_provider(name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
           agent.swap_provider!(provider)
+          Tools::WebSearch.service = Tools::ProviderWebSearchService.new(provider)
           config.provider_name = name
           config.save
           mcp_manager.reconcile(name)
@@ -974,6 +977,7 @@ module Hcode
           provider = build_named_provider(config.provider_name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
           agent.swap_provider!(provider)
+          Tools::WebSearch.service = Tools::ProviderWebSearchService.new(provider)
           config.save
           true
         rescue ex : ProviderConfigError

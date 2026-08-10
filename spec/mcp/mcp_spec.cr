@@ -214,6 +214,32 @@ module Hcode
           end
         end
 
+        it "parses toolAliases from mcp.json" do
+          home = File.join(Dir.tempdir, "hcode-mcp-aliases-#{Random::Secure.hex(8)}")
+          Dir.mkdir_p(home)
+          begin
+            File.write(File.join(home, "mcp.json"), <<-JSON)
+              {
+                "mcpServers": {
+                  "zai-web-search": {
+                    "type": "http",
+                    "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+                    "toolAliases": { "web_search_prime": "WebSearch" }
+                  }
+                }
+              }
+            JSON
+            servers = ConfigLoader.parse_mcp_json(home)
+            servers.size.should eq(1)
+            server = servers.first
+            server.tool_aliases.should eq({"web_search_prime" => "WebSearch"})
+            server.aliased_tool_name("web_search_prime").should eq("WebSearch")
+            server.aliased_tool_name("other").should eq("other")
+          ensure
+            FileUtils.rm_r(home) rescue nil
+          end
+        end
+
         it "parses providers from mcp.json" do
           home = File.join(Dir.tempdir, "hcode-mcp-prov-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
@@ -539,6 +565,34 @@ module Hcode
           # It attempts connection (fails on missing binary) but is not filtered.
           m.status_text.should contain("global")
           m.status_text.should_not contain("No MCP servers configured.")
+        end
+
+        it "uses toolAliases when registering cached proxy tools" do
+          home = File.join(Dir.tempdir, "hcode-mcp-alias-#{Random::Secure.hex(8)}")
+          ENV["HCODE_HOME"] = home
+          Dir.mkdir_p(home)
+          begin
+            defs = [
+              ToolDefinition.new("web_search_prime", "Search the web",
+                JSON.parse(%({"type":"object"}))),
+            ]
+            ToolCache.save("zai-coding-plan", "zai-web-search", defs)
+
+            m = Manager.new(home)
+            cfg = McpServerConfig.new("zai-web-search", type: "http",
+              url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
+              providers: ["zai-coding-plan"],
+              tool_aliases: {"web_search_prime" => "WebSearch"})
+            reg = Tools::Registry.new
+            m.register_from_cache([cfg], reg,
+              active_provider: "zai-coding-plan", blocking: true)
+
+            reg.get("mcp__zai_web_search__WebSearch").should_not be_nil
+            reg.get("mcp__zai_web_search__web_search_prime").should be_nil
+          ensure
+            ENV.delete("HCODE_HOME")
+            rm_r(home) rescue nil
+          end
         end
       end
 

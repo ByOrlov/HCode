@@ -294,5 +294,50 @@ describe Hcode::Tools::FetchURL do
       result = fetcher.fetch("https://example.com")
       result.content.should contain("plain text")
     end
+
+    it "falls back to uncompressed request when gzip body is corrupted" do
+      transport = CountingMockTransport.new(
+        first_body: "not valid gzip",
+        first_encoding: "gzip",
+        second_body: "<html><body><p>fallback html</p></body></html>",
+        second_encoding: "",
+      )
+
+      fetcher = Hcode::Tools::LocalFetcher.new(transport)
+      result = fetcher.fetch("https://example.com")
+      result.content.should contain("fallback html")
+      transport.request_count.should eq(2)
+    end
+  end
+end
+
+# Mock transport that returns different responses on consecutive requests.
+private class CountingMockTransport < Hcode::HttpTransport
+  getter request_count : Int32 = 0
+
+  def initialize(@first_body : String, @first_encoding : String,
+                 @second_body : String, @second_encoding : String)
+  end
+
+  def request(method : String, uri : URI, headers : HTTP::Headers,
+              body : String? = nil) : HTTP::Client::Response
+    @request_count += 1
+    if @request_count == 1
+      resp_headers = HTTP::Headers.new
+      resp_headers["Content-Encoding"] = @first_encoding unless @first_encoding.empty?
+      resp_headers["Content-Type"] = "text/html"
+      HTTP::Client::Response.new(200, body: @first_body, headers: resp_headers)
+    else
+      resp_headers = HTTP::Headers.new
+      resp_headers["Content-Encoding"] = @second_encoding unless @second_encoding.empty?
+      resp_headers["Content-Type"] = "text/html"
+      HTTP::Client::Response.new(200, body: @second_body, headers: resp_headers)
+    end
+  end
+
+  def request_stream(method : String, uri : URI, headers : HTTP::Headers,
+                     body_io : IO, session : Hcode::HttpTransport::Session,
+                     &_block : HTTP::Client::Response, IO ->)
+    raise NotImplementedError.new("CountingMockTransport does not support streaming")
   end
 end

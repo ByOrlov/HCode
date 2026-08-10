@@ -34,6 +34,10 @@ module Hcode
       # Provider affinity: when empty the server is global (loads on every
       # provider); otherwise it loads only when the active provider matches.
       property providers : Array(String) = [] of String
+      # Map of remote tool names to nicer agent-facing names. The remote name
+      # is still used when calling the MCP server; the alias only affects the
+      # proxy tool name exposed to the model and the UI.
+      property tool_aliases : Hash(String, String) = {} of String => String
 
       def initialize(@name : String, @command : String = "",
                      @args : Array(String) = [] of String,
@@ -50,7 +54,13 @@ module Hcode
                      @disabled_tools : Array(String)? = nil,
                      @startup_timeout_ms : Int32? = nil,
                      @tool_timeout_ms : Int32? = nil,
-                     @providers : Array(String) = [] of String)
+                     @providers : Array(String) = [] of String,
+                     @tool_aliases : Hash(String, String) = {} of String => String)
+      end
+
+      # Effective agent-facing name for a remote tool, honouring aliases.
+      def aliased_tool_name(remote : String) : String
+        @tool_aliases[remote]? || remote
       end
 
       # True when this server should load for the given active provider.
@@ -190,7 +200,18 @@ module Hcode
         cfg.startup_timeout_ms = h["startupTimeoutMs"]?.try(&.as_i?)
         cfg.tool_timeout_ms = h["toolTimeoutMs"]?.try(&.as_i?)
         cfg.providers = parse_providers_json(h)
+        cfg.tool_aliases = parse_tool_aliases_json(h)
         cfg
+      end
+
+      private def self.parse_tool_aliases_json(h : Hash(String, JSON::Any)) : Hash(String, String)
+        if aliases_any = h["toolAliases"]?.try(&.as_h?)
+          aliases = {} of String => String
+          aliases_any.each { |k, v| aliases[k] = v.to_s }
+          aliases
+        else
+          {} of String => String
+        end
       end
 
       private def self.parse_providers_json(h : Hash(String, JSON::Any)) : Array(String)

@@ -539,11 +539,25 @@ module Hcode
       end
 
       # Provider-specific MCP servers generated from the active provider's
-      # credentials. Currently empty — Z.AI web search is handled via the
-      # provider's built-in `web_search` tool (injected in ZaiProvider), not
-      # through a standalone MCP server.
+      # credentials. For Z.AI Coding Plan the official Web Search capability is
+      # exposed as a remote MCP server (`webSearchPrime`); the legacy direct
+      # `/web_search` REST endpoint is unreliable on Coding Plan (returns 1113
+      # when no pay-as-you-go balance is present).
       def auto_mcp_servers : Array(Mcp::McpServerConfig)
-        [] of Mcp::McpServerConfig
+        servers = [] of Mcp::McpServerConfig
+
+        if provider_name == "zai-coding-plan" && !zai_api_key.empty?
+          servers << Mcp::McpServerConfig.new(
+            name: "zai-web-search",
+            type: "http",
+            url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
+            headers: {"Authorization" => "Bearer #{zai_api_key}"},
+            providers: ["zai-coding-plan"],
+            tool_aliases: {"web_search_prime" => "WebSearch"}
+          )
+        end
+
+        servers
       end
 
       private def self.parse_hooks_array(arr : Array(JSON::Any)?) : Array(Hooks::HookDef)
