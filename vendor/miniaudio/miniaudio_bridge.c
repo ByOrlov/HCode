@@ -15,6 +15,7 @@
  * STB_VORBIS_INCLUDE_STB_VORBIS_H internally and provides both header
  * declarations and implementation. miniaudio.h checks for that define to
  * enable its built-in Vorbis decoder backend. */
+#define STB_VORBIS_NO_INTEGER_CONVERSION
 #include "stb_vorbis.c"
 
 #define MINIAUDIO_IMPLEMENTATION

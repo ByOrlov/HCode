@@ -5124,17 +5124,13 @@ stb_vorbis * stb_vorbis_open_memory(const unsigned char *data, int len, int *err
 }
 
 #ifndef STB_VORBIS_NO_INTEGER_CONVERSION
-/* Renamed from PLAYBACK_MONO/LEFT/RIGHT: on Windows the SDK (or a force-included
- * toolchain header) pre-defines PLAYBACK_LEFT/RIGHT as non-undefinable macros,
- * which collides with stb_vorbis's own #defines and breaks the build. Prefixing
- * with VORBIS_CHAN_ avoids the collision entirely. */
-#define VORBIS_CHAN_MONO     1
-#define VORBIS_CHAN_LEFT     2
-#define VORBIS_CHAN_RIGHT    4
+#define PLAYBACK_MONO     1
+#define PLAYBACK_LEFT     2
+#define PLAYBACK_RIGHT    4
 
-#define L  (VORBIS_CHAN_LEFT  | VORBIS_CHAN_MONO)
-#define C  (VORBIS_CHAN_LEFT  | VORBIS_CHAN_RIGHT | VORBIS_CHAN_MONO)
-#define R  (VORBIS_CHAN_RIGHT | VORBIS_CHAN_MONO)
+#define L  (PLAYBACK_LEFT  | PLAYBACK_MONO)
+#define C  (PLAYBACK_LEFT  | PLAYBACK_RIGHT | PLAYBACK_MONO)
+#define R  (PLAYBACK_RIGHT | PLAYBACK_MONO)
 
 static int8 channel_position[7][6] =
 {
@@ -5218,17 +5214,17 @@ static void compute_stereo_samples(short *output, int num_c, float **data, int d
       memset(buffer, 0, sizeof(buffer));
       if (o + n > len) n = len - o;
       for (j=0; j < num_c; ++j) {
-         int m = channel_position[num_c][j] & (VORBIS_CHAN_LEFT | VORBIS_CHAN_RIGHT);
-         if (m == (VORBIS_CHAN_LEFT | VORBIS_CHAN_RIGHT)) {
+         int m = channel_position[num_c][j] & (PLAYBACK_LEFT | PLAYBACK_RIGHT);
+         if (m == (PLAYBACK_LEFT | PLAYBACK_RIGHT)) {
             for (i=0; i < n; ++i) {
                buffer[i*2+0] += data[j][d_offset+o+i];
                buffer[i*2+1] += data[j][d_offset+o+i];
             }
-         } else if (m == VORBIS_CHAN_LEFT) {
+         } else if (m == PLAYBACK_LEFT) {
             for (i=0; i < n; ++i) {
                buffer[i*2+0] += data[j][d_offset+o+i];
             }
-         } else if (m == VORBIS_CHAN_RIGHT) {
+         } else if (m == PLAYBACK_RIGHT) {
             for (i=0; i < n; ++i) {
                buffer[i*2+1] += data[j][d_offset+o+i];
             }
@@ -5249,7 +5245,7 @@ static void convert_samples_short(int buf_c, short **buffer, int b_offset, int d
 {
    int i;
    if (buf_c != data_c && buf_c <= 2 && data_c <= 6) {
-      static int channel_selector[3][2] = { {0}, {VORBIS_CHAN_MONO}, {VORBIS_CHAN_LEFT, VORBIS_CHAN_RIGHT} };
+      static int channel_selector[3][2] = { {0}, {PLAYBACK_MONO}, {PLAYBACK_LEFT, PLAYBACK_RIGHT} };
       for (i=0; i < buf_c; ++i)
          compute_samples(channel_selector[buf_c][i], buffer[i]+b_offset, data_c, data, d_offset, samples);
    } else {
