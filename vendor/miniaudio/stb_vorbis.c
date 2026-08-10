@@ -5124,6 +5124,12 @@ stb_vorbis * stb_vorbis_open_memory(const unsigned char *data, int len, int *err
 }
 
 #ifndef STB_VORBIS_NO_INTEGER_CONVERSION
+/* On Windows a system header may pre-define PLAYBACK_LEFT/RIGHT (channel-config
+ * macros), which collides with stb_vorbis's own #defines below and breaks the
+ * build. Undef defensively before (re)defining. */
+#undef PLAYBACK_MONO
+#undef PLAYBACK_LEFT
+#undef PLAYBACK_RIGHT
 #define PLAYBACK_MONO     1
 #define PLAYBACK_LEFT     2
 #define PLAYBACK_RIGHT    4
