@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # HCode installer — macOS / Linux.
-# Usage:  curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+# Usage:  curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/master/install.sh | bash
 set -euo pipefail
 
 REPO="ByOrlov/HCode"
@@ -48,6 +48,89 @@ fi
 # --- Verify + extract ---------------------------------------------------------
 info "Extracting…"
 tar -xzf "${TMP}/${ASSET}" -C "$TMP"
+
+# --- Runtime dependencies -----------------------------------------------------
+# HCode links dynamically against OpenSSL (libssl/libcrypto), libyaml and pcre2.
+# They are part of Crystal's stdlib runtime and not declared in shard.yml, so we
+# make sure they are present via the platform package manager.
+ensure_macos_deps() {
+  command -v brew >/dev/null 2>&1 || {
+    err "Homebrew not found. Install it from https://brew.sh, then:"
+    err "  brew install openssl@3 libyaml pcre2"
+    return 0
+  }
+  local missing=()
+  for pkg in openssl@3 libyaml pcre2; do
+    brew list "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+  done
+  if [ "${#missing[@]}" -eq 0 ]; then
+    info "All runtime dependencies present (Homebrew)."
+    return 0
+  fi
+  info "Installing missing Homebrew packages: ${missing[*]}"
+  brew install "${missing[@]}"
+}
+
+ensure_linux_deps() {
+  # Each entry: "lib<ldconfig-name>|<apt pkgs>|<dnf pkgs>|<pacman pkgs>"
+  # ldconfig-name is used to detect presence without the package manager.
+  local -a rows=(
+    "libssl.so.3|libssl3 libssl3t64|openssl-libs|openssl"
+    "libcrypto.so.3|libssl3 libssl3t64|openssl-libs|openssl"
+    "libyaml-0.so.2|libyaml-0-2|libyaml|libyaml"
+    "libpcre2-8.so.0|libpcre2-8-0|pcre2|pcre2"
+  )
+  local missing_libs=()
+  for row in "${rows[@]}"; do
+    local lib="${row%%|*}"
+    { ldconfig -p 2>/dev/null || true; } | grep -q "$lib" || missing_libs+=("$row")
+  done
+  if [ "${#missing_libs[@]}" -eq 0 ]; then
+    info "All runtime dependencies present."
+    return 0
+  fi
+
+  local sudo=""
+  if [ "$(id -u)" -ne 0 ]; then
+    sudo="sudo"
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    local pkgs=()
+    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f2)); done
+    info "Installing missing packages via apt-get: ${pkgs[*]}"
+    $sudo apt-get update -qq
+    # shellcheck disable=SC2086
+    $sudo apt-get install -y $pkgs
+  elif command -v dnf >/dev/null 2>&1; then
+    local pkgs=()
+    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
+    info "Installing missing packages via dnf: ${pkgs[*]}"
+    # shellcheck disable=SC2086
+    $sudo dnf install -y $pkgs
+  elif command -v yum >/dev/null 2>&1; then
+    local pkgs=()
+    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
+    info "Installing missing packages via yum: ${pkgs[*]}"
+    # shellcheck disable=SC2086
+    $sudo yum install -y $pkgs
+  elif command -v pacman >/dev/null 2>&1; then
+    local pkgs=()
+    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f4)); done
+    info "Installing missing packages via pacman: ${pkgs[*]}"
+    # shellcheck disable=SC2086
+    $sudo pacman -S --noconfirm --needed $pkgs
+  else
+    err "Could not detect a supported package manager."
+    err "Please install OpenSSL, libyaml and pcre2 manually:"
+    err "  ${missing_libs[*]}"
+  fi
+}
+
+case "$os" in
+  darwin) ensure_macos_deps ;;
+  linux)  ensure_linux_deps ;;
+esac
 
 # --- Install ------------------------------------------------------------------
 mkdir -p "$INSTALL_DIR"
