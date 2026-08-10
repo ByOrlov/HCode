@@ -1,30 +1,45 @@
 # HCode — ポテトでも Vibe-code
 
-[English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · **日本語** · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
+**日本語** · [English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
 > **アイドル時エージェントあたり RAM ~3 MB。静的バイナリ 1 つ。ランタイムゼロ。GPL 永遠。**
 > Orlov による空気より軽い AI エージェント —— 水素のように軽い：最も軽い元素から **H**、あなたが届けるものから **Code**。
 
+Linux & MacOS
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+```
+
+Windows
+
+```powershell
+irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex 
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · ネイティブバイナリ · ランタイムなし**
 
 ---
 
-## TL;DR —— これが存在する理由
+### メモリ、整列済み
 
-コーディングエージェントを 5 つ並行で走らせると、ノート PC が火を噴く。HCode エージェント 5 つはアイドルで合計 **~15 MB**。Node.js エージェント 5 つなら？**600 MB から 2 GB** のどこか —— 保証付きで、永遠に、プロセスごとに。
+羽根級から重量級まで。
 
-| 構成                         | アイドル RAM   | 対 HCode  |
-|------------------------------|----------------|-----------|
-| 5 × opencode (Node.js)       | **≈ 2 GB**     | **~130×** |
-| 5 × kimi-code (Node.js)      | **> 1 GB**     | **~80×**  |
-| 5 × Claude Code (Node.js)    | **≈ 600 MB**   | **~40×**  |
-| 5 × HCode (Crystal、ネイティブ)| **≈ 15 MB**   | **1×**    |
+| # | エージェント  | 言語       | アイドル RAM       | ライセンス           | ソース |
+|---|---------------|------------|--------------------|----------------------|--------|
+| 1 | **HCode**     | **Crystal**| **~3 MB**          | **GPL-2.0-or-later** | [1]    |
+| 2 | grok-build    | Rust       | ~20 MB             | Apache-2.0           | [3]    |
+| 3 | Codex CLI     | Rust       | ~30 MB             | Apache-2.0           | [2]    |
+| 4 | Goose         | Rust + TS  | ~50–100 MB（推定） | Apache-2.0           | [4]    |
+| 5 | Claude Code   | TS / Node  | ~120 MB（増加）    | プロプライエタリ     | [7]    |
+| 6 | Aider         | Python     | ~150–250 MB（推定）| Apache-2.0           | [6]    |
+| 7 | kimi-code     | TS / Node  | ~250 MB+           | MIT                  | [5]    |
+| 8 | opencode      | TS / Bun   | ~400 MB            | MIT                  | [8]    |
 
-これがピッチのすべてだ。HCode エージェントを 10 個走らせたノート PC は、1 個も走らせていないように感じられるべきだ。
+**差。** HCode は最寄りの Rust エージェント（grok-build）より ~7× 下、最も軽い Node エージェント（Claude Code）より ~40× 下、kimi-code より ~80× 下、opencode より **~130× 下**に位置する。Node 系は巨大な幅をまたぐ —— ~120 MB から ~400 MB まで —— なぜならそれぞれがプロセスごとに V8 ランタイムを同梱し、使用とともに増大するからだ。Rust エージェント（Codex、grok-build、Goose）はネイティブで軽量；HCode は RAM で互角に並び、可読性とライセンスで勝る（[なぜ Crystal か？](#なぜ-crystal-か)を参照）。
+
+> Aider（推定 ~150–250 MB）と kimi-code（~250 MB+）は同じ重量級の境界にいる —— 相対順序は誤差の範囲内だ。
+
 
 ---
 
@@ -44,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bas
 
 ---
 
-## 問題
+## これが存在する理由
 
 コーディングエージェントを 5 つ並行で立ち上げろ。RAM を見よ。Node.js ランタイムを同梱するエージェントはすべて、その代償を払う —— プロセスごとに、永遠に。各 HCode プロセスは次のプロンプトを待つ間、約 **3 MB resident** に留まる —— 120 でも 250 でも 400 MB でもない。エディタはメモリ予算を守る。ノート PC は涼しいままだ。OS はスワップをやめる。あなたはついに、すでに持っているマシンでエージェントの群れを走らせられる。
 
@@ -61,104 +76,6 @@ Rust、Go、TypeScript を真剣に検討した。どれも、私たちが受け
 - 🟦 **TypeScript と同等に高機能で、プロセスごとの Node.js ランタイムなし。** Crystal は AOT でネイティブな LLVM バイナリにコンパイルされる。V8 ヒープはなく、JIT のウォームアップはなく、エージェントごとに複製されるイベントループもない。メモリコピーは少なく、システムのフリーズは少なく、ミリ秒のコールドスタート。
 
 **1 つの言語。3 つの勝利。ランタイムゼロ。**
-
----
-
-## イデオロギー
-
-**メモリは機能であり、注釈ではない。** ほとんどのエージェントフレームワークは RAM を他人の問題として扱う。V8 ランタイム、バンドラ、トランスパイラ、`node_modules` ツリーを丸ごと同梱し —— そのそれぞれに対して、プロセスごとに、永遠に課税する。HCode は拒否する。アイドル状態のエージェントは不可視であるべきだ。10 個のエージェントを走らせるノート PC は、1 個も走らせていないように感じられるべきだ。
-
-**ワイヤは誰のものでもあり、誰にも属する。** HCode は SSE 上の OpenAI Chat Completions ワイヤフォーマットで構築されている。互換性のあるエンドポイント —— Moonshot、Z.AI、Zhipu、OpenAI、ローカルモデル —— はどれも同じトランスポートに接続できる。ベンダーロックインなし。自分のキー、自分のモデル、自分のエンドポイントを持ってきて、TUI から実行時に切り替えられる。
-
-**オープンソース、取り消し不能。** HCode は GPL-2.0-or-later だ。派生物はすべてソースを同梱しなければならない。研究し、フォークし、本番で走らせ、製品に組み込める —— ソースが付いてくる限り。
-
----
-
-## 国境なし、仲介者なし
-
-Codex と Claude Code はすべてのリクエストをそのベンダーの有料バックエンド経由でルーティングする —— それは同時に、そのベンダーの国別ブロックリストを継承することを意味する。誤った地域からインストールすると起動を拒否する。grok-build はオープンソースだが xAI 形状だ。
-
-HCode はオープンなワイヤを話す。任意の OpenAI 互換エンドポイント —— Moonshot、Z.AI、OpenAI、ローカルの Ollama ボックス、自分の GPU 上のモデル —— に向ける。**インストールにベンダーアカウント不要。「サポートされていない国」なし。マークアップを払うプロキシなし。** あなたの到達範囲はプロバイダによって、決してエージェントによって制限されない。
-
----
-
-## 機能
-
-- 🪶 **極小フットプリント** —— アイドルエージェントあたり ~3 MB resident；Boehm GC は ~1 MB から起動；ファイバはスタック ~8 KB。
-- 🔌 **多数のプロバイダ、バイナリ 1 つ** —— Moonshot、Z.AI/Zhipu（pay-as-you-go + Coding Plan）、および任意の OpenAI 互換エンドポイント。TUI から再起動なしでライブ切替。
-- ⚡ **ネイティブコンパイル** —— `crystal build` が単一の静的バイナリを生成。ランタイムなし、インストーラなし、`node_modules` なし。
-- 🧠 **本物のエージェントループ** —— SSE ストリーミング、ファイバによる並列ツール呼び出し、ストリーク強制停止付きツール呼び出し重複排除、2 秒の猶予タイムアウト付き abort、コンテキスト溢出リカバリ（413 → デグレード → 圧縮）、append-only の JSONL セッション永続化。
-- 🛠️ **組み込みツール** —— Bash、Read、Write、Edit、Glob、Grep、TodoList、そして agent-swarm プリミティブ —— パーミッションゲート付き、危険検出あり。
-- 🧵 **プロセスではなくファイバ** —— 1 プロセス内で数十の並行エージェントを走らせるか、エージェントごとにバイナリ 1 つか。分離のトレードオフはあなたが選ぶ。
-- 💾 **再開可能なセッション** —— append-only の JSONL イベントログ、TypeScript 版とディスク互換。
-- 🎛️ **インタラクティブ TUI** —— ストリーミング markdown、ツールカード、diff プレビュー、複数行エディタ、スラッシュコマンド、モデル / プロバイダ / パーミッションセレクタ、セッションピッカ。
-- 🔒 **GPL-2.0-or-later** —— オープンソース、閉じられない。
-
----
-
-## プロバイダ
-
-HCode は SSE 上の OpenAI Chat Completions ワイヤフォーマットを話す。**それを話すものなら何でも動く。**
-
-| プロバイダ                   | 状態  | 備考                                       |
-|------------------------------|-------|--------------------------------------------|
-| Moonshot                     | ✅    | デフォルトバックエンド。OAuth または API key。 |
-| Z.AI / Zhipu（pay-as-you-go）| ✅    | OpenAI 互換。                              |
-| Z.AI / Zhipu（Coding Plan）  | ✅    | サブスクリプションエンドポイント。          |
-| 任意の OpenAI 互換           | ✅    | ワイヤを話す任意のエンドポイントを指す。    |
-| Mock                         | ✅    | セルフテスト・デモ用スクリプトプロバイダ。  |
-
-TUI からライブ切替（`/provider`）、または `~/.hcode/config.toml` で固定。
-
----
-
-## インストール
-
-HCode は単一のネイティブバイナリとして提供される —— ランタイムなし、`node_modules` なし。プラットフォームを選ぼう：
-
-### macOS / Linux
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
-```
-
-インストーラはあなたのアーキテクチャ向けの最新リリースをダウンロードし、バイナリを `~/.hcode/bin/hcode` に配置して、そのディレクトリを `PATH` に追加する。シェルを再起動（または `source ~/.zshrc` / `~/.bashrc`）して実行：
-
-```sh
-hcode
-```
-
-### Windows（PowerShell）
-
-```powershell
-irm https://raw.githubusercontent.com/ByOrlov/HCode/main/install.ps1 | iex
-```
-
-インストーラは最新リリースをダウンロードし、バイナリを `%LOCALAPPDATA%\hcode\bin\hcode.exe` に配置して、そのディレクトリをユーザの `PATH` に追加する。ターミナルを再起動して実行：
-
-```powershell
-hcode
-```
-
-### サポートされるプラットフォーム
-
-| プラットフォーム       | Asset                              |
-|------------------------|------------------------------------|
-| Linux x86_64           | `hcode-x86_64-linux.tar.gz`        |
-| Linux aarch64          | `hcode-aarch64-linux.tar.gz`       |
-| macOS（Intel）         | `hcode-x86_64-darwin.tar.gz`       |
-| macOS（Apple Silicon） | `hcode-aarch64-darwin.tar.gz`      |
-| Windows x86_64         | `hcode-x86_64-windows.zip`         |
-
-### アップデート
-
-TUI 内で `/upgrade` を実行すると、最新の GitHub リリースを確認し、バイナリをその場で置き換える —— 再インストールもパッケージマネージャも不要：
-
-```
-/upgrade
-```
-
-ローリングリリースのバージョンは `YYYY.MM.DD.N`（例：`2026.07.31.1`）に従う。特定のリリースを手動でインストールするには、[リリースページ](https://github.com/ByOrlov/HCode/releases)から該当するアセットをダウンロードする。
 
 ---
 
@@ -190,29 +107,6 @@ rake build            # → ./hcode (release flags)
 
 ---
 
-## ランドスケープ
-
-アイドル RSS、実世界の値。作者の実測、アップストリームのプロジェクト報告、ラベル付き見積もりの混成 —— 各セルは下のソースに追跡可能。
-
-### メモリ、整列済み
-
-羽根級から重量級まで。
-
-| # | エージェント  | 言語       | アイドル RAM       | ライセンス           | ソース |
-|---|---------------|------------|--------------------|----------------------|--------|
-| 1 | **HCode**     | **Crystal**| **~3 MB**          | **GPL-2.0-or-later** | [1]    |
-| 2 | Codex CLI     | Rust       | ~30 MB             | Apache-2.0           | [2]    |
-| 3 | grok-build    | Rust       | ~30–60 MB（推定）  | Apache-2.0           | [3]    |
-| 4 | Goose         | Rust + TS  | ~50–100 MB（推定） | Apache-2.0           | [4]    |
-| 5 | Claude Code   | TS / Node  | ~120 MB（増加）    | プロプライエタリ     | [7]    |
-| 6 | Aider         | Python     | ~150–250 MB（推定）| Apache-2.0           | [6]    |
-| 7 | kimi-code     | TS / Node  | ~250 MB+           | MIT                  | [5]    |
-| 8 | opencode      | TS / Bun   | ~400 MB            | MIT                  | [8]    |
-
-**差。** HCode は最寄りの Rust エージェント（Codex）より ~10× 下、最も軽い Node エージェント（Claude Code）より ~40× 下、kimi-code より ~80× 下、opencode より **~130× 下**に位置する。Node 系は巨大な幅をまたぐ —— ~120 MB から ~400 MB まで —— なぜならそれぞれがプロセスごとに V8 ランタイムを同梱し、使用とともに増大するからだ。Rust エージェント（Codex、grok-build、Goose）はネイティブで軽量；HCode は RAM で互角に並び、可読性とライセンスで勝る（[なぜ Crystal か？](#なぜ-crystal-か)を参照）。
-
-> Aider（推定 ~150–250 MB）と kimi-code（~250 MB+）は同じ重量級の境界にいる —— 相対順序は誤差の範囲内だ。
-
 ### 自由
 
 メモリは物語の半分だ。もう半分は：コードを誰が所有するか、どこで動かすことを許されるか、そしてプロンプトが実際にどこへ行くか。
@@ -228,47 +122,6 @@ rake build            # → ./hcode (release flags)
 | kimi-code     | MIT                  | なし          | Moonshot          | あり               |
 | **HCode**     | **GPL-2.0-or-later** | **なし**      | **なし**          | **あり**           |
 
-**2 つの物語、1 つのエージェント。** Node エージェント（opencode、Claude Code、kimi-code）に対し、HCode は RAM で 40–130× 勝る。Rust エージェント（Codex、grok-build、Goose）に対しては RAM 差は小さい —— そこでは HCode は**可読性**（borrow checker なし、Ruby 風構文）と**ライセンス**（GPL は永遠に開いたまま；Apache は閉じ得る）で勝る。ベンダー囲い込み（Codex、Claude Code）に対しては、HCode は**自由**で勝る：国別ブロックも有料の仲介者もない。HCode は、最も軽く、最も可読なネイティブであり、唯一のコピーレフトであり、ベンダーの制約が一切ない、唯一のエージェントだ。
-
-### ソース
-
-- **[1] HCode** —— 作者実測、アイドル RSS。ベースラインは [`PLAN.md`](./PLAN.md) に記載（Crystal + Boehm GC、~1 MB の GC ベースライン、ファイバスタックあたり ~8 KB）。
-- **[2] Codex CLI** —— 作者実測、アイドル RSS（~30 MB）。ネイティブ Rust バイナリ、[`openai/codex`](https://github.com/openai/codex)。
-- **[3] grok-build** —— 公式測定値なし；ネイティブ Rust TUI/ハーネスの推定。[`xai-org/grok-build`](https://github.com/xai-org/grok-build)。
-- **[4] Goose** —— 公式測定値なし；Rust コア + 組み込み TS/V8 UI の推定。[`aaif-goose/goose`](https://github.com/aaif-goose/goose)。
-- **[5] kimi-code** —— 作者実測、~250 MB+ のアイドル RSS（TypeScript / Node.js）。`PLAN.md` の内部計画推定を置き換える。
-- **[6] Aider** —— 公式のアイドル値なし；CPython + tree-sitter + litellm 依存の推定。病的増大は [`Aider-AI/aider#573`](https://github.com/Aider-AI/aider/issues/573) で報告。
-- **[7] Claude Code** —— クローズドソース。作者実測、~120 MB のアイドル RSS；ネイティブのメモリリーク（"119.6 MB/hour"）で時間とともに増大：[`anthropics/claude-code#70168`](https://github.com/anthropics/claude-code/issues/70168) および `perf:memory` ラベル。
-- **[8] opencode** —— 作者実測、~400 MB のアイドル RSS（TypeScript / Bun）。[`anomalyco/opencode`](https://github.com/anomalyco/opencode)。
-
-*アイドル RSS は OS、リポジトリサイズ、セッション長によって変動する。ネイティブバイナリ（Rust/Crystal）は安定；ランタイム（Node/Python）は使用とともに増大する。（推定）の印の付いた数値は実験室で測定されたものではない —— メモリデータを公表しないエージェントに対するオーダー推定である。*
-
----
-
-## RAM 消費
-
-HCode はプロセスごとにメモリを有界に保つよう設計されている。
-
-### アイドル
-
-アイドルエージェントあたり ~**3 MB RSS**。これは Crystal ランタイム、Boehm GC ベースライン、小さな TUI 状態だ。プロセスごとの Node.js/V8 ランタイムはない。
-
-### ピーク
-
-Linux で `benchmarks/` のベンチマークにより測定：
-
-| シナリオ | ピーク RSS | 備考 |
-|---|---|---|
-| 2 000 ターン（5 KB assistant + 50 KB ツール結果、圧縮あり） | ~37 MB | TUI はツールプレビューのみ保持；完全な履歴は `wire.jsonl` |
-| 10 000 回の小さなツール呼び出し | ~20 MB | |
-| 単発の 10 MB ツール結果（Bash `MAX_OUTPUT_BYTES`） | ~31 MB | コンテキストが完全な出力を保持；TUI プレビューは ~1 KB |
-| 単発の 10 MB assistant 応答 | ~67 MB | 合成ストレス；10 MB の応答は 262k トークンのコンテキスト窓が許すより大きい |
-
-50 KB のツール結果を伴う典型的なターンはおおよそ **13 000 トークン**。262 144 トークンのコンテキスト窓では、1 コンテキスト長は約 **20 ターン**。つまり **2 000 ターンは 1 プロセスで既に 10 コンテキスト長を優に超え**、ピーク RSS は ~40 MB 以下に留まる。
-
-### ピーク後に RSS が高く留まることがある理由
-
-Boehm GC は解放されたページを直ちに OS に返さない。大きなアロケーションの後（例えば大きなコンテキストでの `request.to_json`）、`live` メモリは下がっても RSS は膨らんだままになり得る。これはアロケータの振る舞いであり、アプリケーションオブジェクトのリークではない。
 
 ## ライセンス
 
