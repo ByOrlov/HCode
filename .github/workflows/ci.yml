@@ -21,4 +21,6 @@ jobs:
         run: shards install
 
       - name: Spec
-        run: crystal spec --warnings none --no-color
+        run: |
+          LINK_FLAGS="$(./scripts/build_miniaudio.sh)"
+          crystal spec --warnings none --no-color --link-flags "$LINK_FLAGS"

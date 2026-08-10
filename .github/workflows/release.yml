@@ -129,9 +129,10 @@ jobs:
         shell: bash
         run: |
           shards install
+          LINK_FLAGS="$(./scripts/build_miniaudio.sh ${{ matrix.target }})"
           TARGET_ARGS=""
           [ -n "${{ matrix.cross_target }}" ] && TARGET_ARGS="--target ${{ matrix.cross_target }}"
-          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none $TARGET_ARGS
+          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none $TARGET_ARGS --link-flags "$LINK_FLAGS"
           if [ -f hcode.exe ]; then ./hcode.exe --version; else ./hcode --version; fi
 
       # ---- Archive + upload ----
