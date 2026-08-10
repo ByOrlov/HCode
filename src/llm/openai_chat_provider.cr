@@ -61,6 +61,18 @@ module Hcode
       def used_context_tokens=(@used_context_tokens : Int32) : Nil
       end
 
+      # Expose the configured endpoint so provider-derived services (e.g.
+      # WebSearch) can build provider-specific URLs such as `<endpoint>/search`.
+      def base_url : String?
+        @endpoint
+      end
+
+      # Expose the live auth token so provider-derived services can reuse the
+      # same bearer/API key without reimplementing OAuth refresh.
+      def auth_token : String?
+        token
+      end
+
       # Build an HTTP::Client for `uri`, applying an HTTP proxy from env when
       # one is set. Crystal's stdlib (1.14) has no built-in proxy support on
       # `HTTP::Client`, so for HTTPS endpoints we open a plaintext TCP socket

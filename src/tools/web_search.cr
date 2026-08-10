@@ -173,21 +173,24 @@ module Hcode
     end
 
     # Конфигурируемый провайдер поиска через Moonshot API.
-    # Поддерживает только API-key path (пока нет OAuth).
+    # Поддерживает API-key или OAuth-token provider (для managed Kimi login).
     class MoonshotWebSearchProvider < WebSearchProvider
       @base_url : String
       @api_key : String?
+      @token_provider : (-> String)?
       @default_headers : Hash(String, String)
       @custom_headers : Hash(String, String)
       @transport : HttpTransport
 
       def initialize(@base_url : String,
                      api_key : String? = nil,
+                     token_provider : (-> String)? = nil,
                      @default_headers : Hash(String, String) = {} of String => String,
                      @custom_headers : Hash(String, String) = {} of String => String,
                      transport : HttpTransport? = nil)
         # trim; пустой → nil
         @api_key = api_key.try(&.strip).try { |s| s.empty? ? nil : s }
+        @token_provider = token_provider
         @transport = transport || HttpTransport::RealHttpTransport.new(->(uri : URI) { HTTP::Client.new(uri) })
       end
 
@@ -233,6 +236,9 @@ module Hcode
       end
 
       private def resolve_api_key : String
+        if tp = @token_provider
+          return tp.call
+        end
         if key = @api_key
           return key
         end
@@ -260,7 +266,11 @@ module Hcode
                      default_headers : Hash(String, String) = {} of String => String,
                      custom_headers : Hash(String, String) = {} of String => String)
         if base_url && !base_url.empty?
-          @provider = MoonshotWebSearchProvider.new(base_url, api_key, default_headers, custom_headers)
+          @provider = MoonshotWebSearchProvider.new(
+            base_url: base_url,
+            api_key: api_key,
+            default_headers: default_headers,
+            custom_headers: custom_headers)
         else
           @provider = nil
         end
@@ -279,13 +289,41 @@ module Hcode
     # — Coding Plan uses the official remote MCP server configured in
     # Config#auto_mcp_servers, and the legacy direct `/web_search` REST endpoint
     # is unreliable on Coding Plan (returns 1113 without pay-as-you-go balance).
-    # Returns nil for providers with no native search backend.
+    #
+    # For Moonshot the search URL is derived from the provider endpoint as
+    # `<endpoint>/search` and the provider's live auth token (API key or OAuth)
+    # is reused, mirroring the TS `ManagedWebSearchService`.
     class ProviderWebSearchService < WebSearchProviderService
       def initialize(@provider : LLM::Provider)
       end
 
       def get_web_search_provider : WebSearchProvider?
-        nil
+        return nil unless @provider.name == "moonshot"
+        base = @provider.base_url
+        return nil if base.nil? || base.empty?
+        token = @provider.auth_token
+        return nil if token.to_s.empty?
+
+        provider = @provider
+        search_url = base.rstrip('/') + "/search"
+        MoonshotWebSearchProvider.new(
+          base_url: search_url,
+          token_provider: -> {
+            provider.auth_token || raise Exception.new("Moonshot auth token became unavailable")
+          },
+        )
+      end
+    end
+
+    # Composite web search service: explicit config wins, otherwise fall back to
+    # the provider-derived backend. Mirrors the TS `CompositeWebSearchService`.
+    class CompositeWebSearchService < WebSearchProviderService
+      def initialize(@config_service : WebSearchProviderService,
+                     @provider_service : WebSearchProviderService)
+      end
+
+      def get_web_search_provider : WebSearchProvider?
+        @config_service.get_web_search_provider || @provider_service.get_web_search_provider
       end
     end
   end

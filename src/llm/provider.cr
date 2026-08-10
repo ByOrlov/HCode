@@ -63,6 +63,20 @@ module Hcode
       def used_context_tokens=(tokens : Int32) : Nil
       end
 
+      # Provider base URL / endpoint, when the backend has one. Used by the
+      # WebSearch service to derive the Moonshot search URL. Base Provider
+      # returns nil; OpenAIChatProvider overrides with its endpoint.
+      def base_url : String?
+        nil
+      end
+
+      # Current bearer token / API key for outbound requests. Used by the
+      # WebSearch service to authorize Moonshot search calls. Base Provider
+      # returns nil; OpenAIChatProvider overrides with its auth token.
+      def auth_token : String?
+        nil
+      end
+
       # Metadata for a selectable backend, listed by the /provider command and
       # the first-run setup wizard. Carries both the selector description and
       # the wizard-facing fields (label, key requirement, defaults). The

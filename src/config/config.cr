@@ -3,6 +3,31 @@ require "../mcp/config"
 
 module Hcode
   module Config
+    # Explicit web-search service configuration. Mirrors the JS
+    # `[services.moonshot_search]` section: when present it wins over the
+    # provider-derived search backend.
+    struct MoonshotServiceConfig
+      include JSON::Serializable
+
+      property base_url : String?
+      property api_key : String?
+      property custom_headers : Hash(String, String) = {} of String => String
+
+      def initialize(@base_url : String? = nil,
+                     @api_key : String? = nil,
+                     @custom_headers : Hash(String, String) = {} of String => String)
+      end
+    end
+
+    struct ServicesConfig
+      include JSON::Serializable
+
+      property moonshot_search : MoonshotServiceConfig? = nil
+
+      def initialize(@moonshot_search : MoonshotServiceConfig? = nil)
+      end
+    end
+
     class Config
       property model : String? = nil
       property provider_name : String? = nil
@@ -49,6 +74,7 @@ module Hcode
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
       property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
+      property services : ServicesConfig = ServicesConfig.new
 
       def initialize
       end
@@ -265,6 +291,24 @@ module Hcode
           end
         end
 
+        if services = root["services"]?.try(&.as_h?)
+          if ms = services["moonshot_search"]?.try(&.as_h?)
+            custom_headers = {} of String => String
+            if ch = ms["custom_headers"]?.try(&.as_h?)
+              ch.each do |k, v|
+                custom_headers[k] = v.to_s
+              end
+            end
+            config.services = ServicesConfig.new(
+              moonshot_search: MoonshotServiceConfig.new(
+                base_url: ms["base_url"]?.try(&.as_s?),
+                api_key: ms["api_key"]?.try(&.as_s?),
+                custom_headers: custom_headers,
+              ),
+            )
+          end
+        end
+
         if agent = root["agent"]?.try(&.as_h?)
           config.max_steps = agent["max_steps"]?.try(&.as_i?) || 100
           config.max_context_tokens = agent["max_context_tokens"]?.try(&.as_i?) || 262144
@@ -431,6 +475,32 @@ module Hcode
                     json.field("api_key", @together_api_key)
                     json.field("endpoint", @together_endpoint)
                     json.field("model", @together_model)
+                  end
+                end
+              end
+            end
+
+            json.field("services") do
+              json.object do
+                if ms = @services.moonshot_search
+                  json.field("moonshot_search") do
+                    json.object do
+                      if bu = ms.base_url
+                        json.field("base_url", bu)
+                      end
+                      if ak = ms.api_key
+                        json.field("api_key", ak)
+                      end
+                      unless ms.custom_headers.empty?
+                        json.field("custom_headers") do
+                          json.object do
+                            ms.custom_headers.each do |k, v|
+                              json.field(k, v)
+                            end
+                          end
+                        end
+                      end
+                    end
                   end
                 end
               end

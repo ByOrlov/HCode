@@ -201,6 +201,31 @@ describe Hcode::Config::Config do
         File.delete(path) rescue nil
       end
     end
+
+    it "round-trips services.moonshot_search" do
+      ms = Hcode::Config::MoonshotServiceConfig.new(
+        base_url: "https://search.example.com",
+        api_key: "search-key",
+        custom_headers: {"X-Foo" => "bar"},
+      )
+      config = Hcode::Config::Config.new
+      config.services = Hcode::Config::ServicesConfig.new(moonshot_search: ms)
+
+      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      begin
+        config.save(path)
+        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        ms = reloaded.services.moonshot_search
+        ms.should_not be_nil
+        if ms
+          ms.base_url.should eq("https://search.example.com")
+          ms.api_key.should eq("search-key")
+          ms.custom_headers.should eq({"X-Foo" => "bar"})
+        end
+      ensure
+        File.delete(path) rescue nil
+      end
+    end
   end
 end
 

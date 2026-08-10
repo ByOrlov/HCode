@@ -298,7 +298,7 @@ module Hcode
       end
 
       provider = build_provider(config, oauth)
-      web_search_service = Tools::ProviderWebSearchService.new(provider)
+      web_search_service = build_web_search_service(config, provider)
       Tools::WebSearch.service = web_search_service
 
       if hi_mode
@@ -474,6 +474,22 @@ module Hcode
       provider.thinking_effort = config.thinking_effort
       provider.max_context_tokens = config.max_context_tokens
       provider.prompt_cache_key = cache_key
+    end
+
+    # Build the WebSearch service for the current session. Explicit
+    # `[services.moonshot_search]` config wins; otherwise derive the search
+    # backend from the active provider (Moonshot endpoint + auth token).
+    def self.build_web_search_service(config : Config::Config,
+                                      provider : LLM::Provider) : Tools::WebSearchProviderService
+      ms = config.services.moonshot_search
+      config_service = Tools::ConfigWebSearchService.new(
+        ms.try(&.base_url),
+        ms.try(&.api_key),
+        {} of String => String,
+        ms.try(&.custom_headers) || {} of String => String,
+      )
+      provider_service = Tools::ProviderWebSearchService.new(provider)
+      Tools::CompositeWebSearchService.new(config_service, provider_service)
     end
 
     # Smoke test: send "hi" to the configured provider and report the
@@ -945,7 +961,7 @@ module Hcode
           provider = build_named_provider(name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
           agent.swap_provider!(provider)
-          Tools::WebSearch.service = Tools::ProviderWebSearchService.new(provider)
+          Tools::WebSearch.service = build_web_search_service(config, provider)
           config.provider_name = name
           config.save
           mcp_manager.reconcile(name)
@@ -977,7 +993,7 @@ module Hcode
           provider = build_named_provider(config.provider_name, config, oauth)
           configure_provider(provider, config, store.meta_id?)
           agent.swap_provider!(provider)
-          Tools::WebSearch.service = Tools::ProviderWebSearchService.new(provider)
+          Tools::WebSearch.service = build_web_search_service(config, provider)
           config.save
           true
         rescue ex : ProviderConfigError

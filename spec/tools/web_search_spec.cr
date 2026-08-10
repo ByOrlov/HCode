@@ -208,6 +208,27 @@ describe Hcode::Tools::MoonshotWebSearchProvider do
     end
     (error.message || "").should contain("Connection reset")
   end
+
+  it "uses token_provider when api_key is absent" do
+    transport = Hcode::MockHttpTransport.new
+    transport.response_status = 200
+    transport.response_body = %({"search_results":[{"title":"T","url":"https://x.com","snippet":"S"}]})
+
+    calls = 0
+    token_provider = -> {
+      calls += 1
+      "oauth-token"
+    }
+    provider = Hcode::Tools::MoonshotWebSearchProvider.new(
+      "https://example.com/search",
+      token_provider: token_provider,
+      transport: transport)
+    results = provider.search("query")
+    results.size.should eq(1)
+    calls.should eq(1)
+    auth = transport.last_headers.try(&.["Authorization"]?) || ""
+    auth.should contain("oauth-token")
+  end
 end
 
 describe Hcode::Tools::ProviderWebSearchService do
@@ -235,5 +256,52 @@ describe Hcode::Tools::ProviderWebSearchService do
     llm = Hcode::LLM::MockProvider.new
     service = Hcode::Tools::ProviderWebSearchService.new(llm)
     service.get_web_search_provider.should be_nil
+  end
+
+  it "builds a Moonshot search provider from the active provider" do
+    llm = Hcode::LLM::MoonshotProvider.new(
+      model: "kimi-for-coding",
+      endpoint: "https://api.kimi.com/coding/v1",
+      api_key: "sk-test")
+    service = Hcode::Tools::ProviderWebSearchService.new(llm)
+    search = service.get_web_search_provider
+    search.should be_a(Hcode::Tools::MoonshotWebSearchProvider)
+  end
+
+  it "returns nil for Moonshot without credentials" do
+    llm = Hcode::LLM::MoonshotProvider.new(
+      model: "kimi-for-coding",
+      endpoint: "https://api.kimi.com/coding/v1",
+      api_key: "")
+    service = Hcode::Tools::ProviderWebSearchService.new(llm)
+    service.get_web_search_provider.should be_nil
+  end
+end
+
+describe Hcode::Tools::CompositeWebSearchService do
+  it "prefers the config service over the provider service" do
+    config_provider = FakeProvider.new(->(_q : String) { [] of Hcode::Tools::WebSearchResult })
+    config_service = FakeService.new(config_provider)
+    provider_service = FakeService.new(nil)
+
+    composite = Hcode::Tools::CompositeWebSearchService.new(config_service, provider_service)
+    composite.get_web_search_provider.should be(config_provider)
+  end
+
+  it "falls back to the provider service when config returns nil" do
+    config_service = FakeService.new(nil)
+    provider_provider = FakeProvider.new(->(_q : String) { [] of Hcode::Tools::WebSearchResult })
+    provider_service = FakeService.new(provider_provider)
+
+    composite = Hcode::Tools::CompositeWebSearchService.new(config_service, provider_service)
+    composite.get_web_search_provider.should be(provider_provider)
+  end
+
+  it "returns nil when neither service has a provider" do
+    config_service = FakeService.new(nil)
+    provider_service = FakeService.new(nil)
+
+    composite = Hcode::Tools::CompositeWebSearchService.new(config_service, provider_service)
+    composite.get_web_search_provider.should be_nil
   end
 end
