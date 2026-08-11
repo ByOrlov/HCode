@@ -293,6 +293,9 @@ module Hcode
       # `/plugins` subcommand handler: receives the raw args string, returns
       # text to display in the transcript.
       property on_plugins_command : (String -> String)? = nil
+      # Memory profiler registry backing the `/memory` command. Wired in
+      # `run_interactive` after the long-lived collections are created.
+      property profiler : ProfiledMemory? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,

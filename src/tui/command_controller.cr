@@ -480,7 +480,9 @@ module Hcode
       TEXT
 
       private def cmd_memory : Nil
-        emit_to_log(Message.new("system", ProfiledMemory.format_report))
+        report = @profiler.try(&.format_report) ||
+                 "Memory profiler not available in this mode."
+        emit_to_log(Message.new("system", report))
       end
 
       private def cmd_sounds(args : String) : Nil

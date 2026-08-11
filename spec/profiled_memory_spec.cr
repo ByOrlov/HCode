@@ -10,16 +10,13 @@ describe Hcode::ProfiledMemory do
   end
 
   describe ".register and .snapshot" do
-    before_each do
-      Hcode::ProfiledMemory.clear
-    end
-
     it "registers a calculator and retrieves its snapshot" do
+      pm = Hcode::ProfiledMemory.new
       val = 100_i64
-      Hcode::ProfiledMemory.register("test", "Test Collection",
+      pm.register("test", "Test Collection",
         calc: -> { val }, count: -> { 3 })
 
-      snaps = Hcode::ProfiledMemory.snapshot
+      snaps = pm.snapshot
       snaps.size.should eq(1)
       snaps.first.id.should eq("test")
       snaps.first.label.should eq("Test Collection")
@@ -28,36 +25,40 @@ describe Hcode::ProfiledMemory do
     end
 
     it "reflects live changes through the closure" do
+      pm = Hcode::ProfiledMemory.new
       mem = Hcode::Context::Memory.new
-      Hcode::ProfiledMemory.register("ctx", "context",
+      pm.register("ctx", "context",
         calc: -> { mem.profiled_bytes }, count: -> { mem.profiled_count })
 
-      before = Hcode::ProfiledMemory.snapshot.first.bytes
+      before = pm.snapshot.first.bytes
       mem.add_user("A" * 1000)
-      after = Hcode::ProfiledMemory.snapshot.first.bytes
+      after = pm.snapshot.first.bytes
       after.should be > before
     end
 
     it "deduplicates by id (re-register replaces)" do
-      Hcode::ProfiledMemory.register("dup", "First", calc: -> { 1_i64 })
-      Hcode::ProfiledMemory.register("dup", "Second", calc: -> { 2_i64 })
+      pm = Hcode::ProfiledMemory.new
+      pm.register("dup", "First", calc: -> { 1_i64 })
+      pm.register("dup", "Second", calc: -> { 2_i64 })
 
-      snaps = Hcode::ProfiledMemory.snapshot
+      snaps = pm.snapshot
       snaps.size.should eq(1)
       snaps.first.bytes.should eq(2)
       snaps.first.label.should eq("Second")
     end
 
     it "total_bytes sums all entries" do
-      Hcode::ProfiledMemory.register("a", "A", calc: -> { 10_i64 })
-      Hcode::ProfiledMemory.register("b", "B", calc: -> { 20_i64 })
-      Hcode::ProfiledMemory.total_bytes.should eq(30)
+      pm = Hcode::ProfiledMemory.new
+      pm.register("a", "A", calc: -> { 10_i64 })
+      pm.register("b", "B", calc: -> { 20_i64 })
+      pm.total_bytes.should eq(30)
     end
 
     it "format_report produces human-readable output" do
-      Hcode::ProfiledMemory.register("big", "Big Collection",
+      pm = Hcode::ProfiledMemory.new
+      pm.register("big", "Big Collection",
         calc: -> { 2_000_000_i64 }, count: -> { 42 })
-      report = Hcode::ProfiledMemory.format_report
+      report = pm.format_report
       report.should contain("Memory Profile")
       report.should contain("tracked:")
       report.should contain("Big Collection")
@@ -70,14 +71,25 @@ describe Hcode::ProfiledMemory do
     end
 
     it "defaults count to 0 when counter omitted" do
-      Hcode::ProfiledMemory.register("n", "NoCount", calc: -> { 50_i64 })
-      Hcode::ProfiledMemory.snapshot.first.count.should eq(0)
+      pm = Hcode::ProfiledMemory.new
+      pm.register("n", "NoCount", calc: -> { 50_i64 })
+      pm.snapshot.first.count.should eq(0)
     end
 
     it "registered? tracks ids" do
-      Hcode::ProfiledMemory.registered?("x").should be_false
-      Hcode::ProfiledMemory.register("x", "X", calc: -> { 0_i64 })
-      Hcode::ProfiledMemory.registered?("x").should be_true
+      pm = Hcode::ProfiledMemory.new
+      pm.registered?("x").should be_false
+      pm.register("x", "X", calc: -> { 0_i64 })
+      pm.registered?("x").should be_true
+    end
+
+    it "isolates state between instances" do
+      a = Hcode::ProfiledMemory.new
+      b = Hcode::ProfiledMemory.new
+      a.register("only-in-a", "A", calc: -> { 1_i64 })
+      a.registered?("only-in-a").should be_true
+      b.registered?("only-in-a").should be_false
+      b.snapshot.should be_empty
     end
   end
 end

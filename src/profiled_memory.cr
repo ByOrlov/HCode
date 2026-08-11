@@ -11,7 +11,7 @@ module Hcode
   # runs `/memory`) and returns the current figures. Computing the totals is
   # O(total elements across ~15 collections) — microseconds-to-milliseconds,
   # acceptable for a manual command invoked a handful of times per session.
-  module ProfiledMemory
+  class ProfiledMemory
     struct Snapshot
       getter id : String
       getter label : String
@@ -32,31 +32,31 @@ module Hcode
       end
     end
 
-    @@entries = [] of Entry
-    @@registered_ids = Set(String).new
+    @entries = [] of Entry
+    @registered_ids = Set(String).new
 
     # Register (or replace) a profiling entry. The `id` deduplicates so
     # re-registration (e.g. on `/new` creating a fresh Memory) replaces the
     # stale closure instead of piling up dead ones. `&calc` returns the deep
     # byte size of the collection; `&count` returns the element count (0 when
     # the concept of "element" does not apply, e.g. a single big string).
-    def self.register(id : String, label : String, *,
-                      calc : -> Int64,
-                      count : -> Int32 = -> { 0 }) : Nil
-      @@entries.reject!(&.id.==(id))
-      @@entries << Entry.new(id, label, calc, count)
-      @@registered_ids << id
+    def register(id : String, label : String, *,
+                 calc : -> Int64,
+                 count : -> Int32 = -> { 0 }) : Nil
+      @entries.reject!(&.id.==(id))
+      @entries << Entry.new(id, label, calc, count)
+      @registered_ids << id
     end
 
-    def self.snapshot : Array(Snapshot)
-      @@entries.map do |e|
+    def snapshot : Array(Snapshot)
+      @entries.map do |e|
         bytes = e.calculator.call rescue 0_i64
         count = e.counter.call rescue 0
         Snapshot.new(e.id, e.label, bytes, count)
       end
     end
 
-    def self.total_bytes : Int64
+    def total_bytes : Int64
       snapshot.sum(&.bytes)
     end
 
@@ -65,7 +65,7 @@ module Hcode
     # the rest of RSS is binary code, shared libraries, and GC arena overhead
     # — none of which the profiler can "track" per-item. The footer breaks
     # RSS into its physical categories so the gap is explainable at a glance.
-    def self.format_report : String
+    def format_report : String
       snaps = snapshot.sort_by!(&.bytes.-)
       total = snaps.sum(&.bytes)
 
@@ -89,8 +89,8 @@ module Hcode
         gc = GC.stats
         gc_kb = gc.heap_size // 1024
         free_kb = gc.free_bytes // 1024
-        total_rss_kb = rss_kb
-        anon_kb, code_kb, libs_kb = rss_breakdown
+        total_rss_kb = ProfiledMemory.rss_kb
+        anon_kb, code_kb, libs_kb = ProfiledMemory.rss_breakdown
         s << sprintf("GC heap:        %5d KB (%d free)\n", gc_kb, free_kb)
         s << sprintf("GC arenas:      %5d KB\n", anon_kb)
         s << sprintf("Binary + libs:  %5d KB\n", code_kb + libs_kb)
@@ -99,7 +99,7 @@ module Hcode
     end
 
     # Current process RSS in KB from /proc/self/status (Linux only).
-    private def self.rss_kb : Int64
+    def self.rss_kb : Int64
       File.read("/proc/self/status").each_line do |line|
         if line.starts_with?("VmRSS:")
           return line.split[1].to_i64
@@ -115,7 +115,7 @@ module Hcode
     # code = the executable's own LOAD segments (text + rodata + data)
     # libs = shared libraries (libc, libssl, libpcre, ...)
     # Returns {anon_kb, code_kb, libs_kb}. On non-Linux returns {0,0,0}.
-    private def self.rss_breakdown : {Int64, Int64, Int64}
+    def self.rss_breakdown : {Int64, Int64, Int64}
       anon = 0_i64
       code = 0_i64
       libs = 0_i64
@@ -155,13 +155,45 @@ module Hcode
       rss_kb.to_f64 / 1024.0
     end
 
-    def self.clear : Nil
-      @@entries.clear
-      @@registered_ids.clear
+    def clear : Nil
+      @entries.clear
+      @registered_ids.clear
     end
 
-    def self.registered?(id : String) : Bool
-      @@registered_ids.includes?(id)
+    def registered?(id : String) : Bool
+      @registered_ids.includes?(id)
+    end
+  end
+
+  # Traces per-tool-call RSS deltas for `--ram` diagnostics. Holds the baseline
+  # reading taken on the first instrumented call, then formats each subsequent
+  # reading as a signed delta line. Disabled instances return nil from `#line`,
+  # so callers can thread a single tracer without per-site guards.
+  class RamTracer
+    @start : Float64 = 0.0
+    @initialised = false
+
+    def initialize(@enabled : Bool = false)
+    end
+
+    def enabled? : Bool
+      @enabled
+    end
+
+    # Returns a formatted `[ram] …` line, or nil when tracing is disabled.
+    def line(tool_name : String, result_bytes : Int32, is_error : Bool) : String?
+      return nil unless @enabled
+
+      unless @initialised
+        @start = ProfiledMemory.rss_mb
+        @initialised = true
+      end
+
+      current = ProfiledMemory.rss_mb
+      delta = current - @start
+      tag = is_error ? "!" : " "
+      sprintf("[ram%s] RSS=%6.1f MB  Δ=%+6.1f MB  %s  result=%.1f KB",
+        tag, current, delta, tool_name, result_bytes / 1024.0)
     end
   end
 end

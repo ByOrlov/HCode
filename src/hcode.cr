@@ -173,34 +173,12 @@ module Hcode
     # Set by `--ram`. When true, every tool_result event prints RSS + tool
     # name + result size to stderr so live memory growth can be observed
     # without a debugger (Crystal + Boehm GC is hard to attach to).
-    class_property? ram_tracing : Bool = false
+    class_property ram_tracer : RamTracer = RamTracer.new
 
     # Read current process RSS in MB. Delegates to ProfiledMemory so the
     # profiler stays self-contained (no dependency back into the CLI module).
     def self.rss_mb : Float64
       ProfiledMemory.rss_mb
-    end
-
-    # Build an RSS log line for a finished tool call. Returns nil when --ram
-    # is not in effect. The caller is responsible for routing it into the
-    # normal message stream (stdout in headless mode, Event.info in TUI) so
-    # it never smears the diff-rendered frame.
-    @@ram_start_rss : Float64 = 0.0
-    @@ram_initialised : Bool = false
-
-    def self.ram_line(tool_name : String, result_bytes : Int32, is_error : Bool) : String?
-      return nil unless ram_tracing?
-
-      unless @@ram_initialised
-        @@ram_start_rss = rss_mb
-        @@ram_initialised = true
-      end
-
-      current = rss_mb
-      delta = current - @@ram_start_rss
-      tag = is_error ? "!" : " "
-      sprintf("[ram%s] RSS=%6.1f MB  Δ=%+6.1f MB  %s  result=%.1f KB",
-        tag, current, delta, tool_name, result_bytes / 1024.0)
     end
 
     def self.run(argv : Array(String)) : Nil
@@ -245,7 +223,7 @@ module Hcode
         when "--hi"
           hi_mode = true
         when "--ram"
-          CLI.ram_tracing = true
+          CLI.ram_tracer = RamTracer.new(enabled: true)
         when "-h", "--help"
           show_help = true
         when "-v", "--version"
@@ -640,7 +618,7 @@ module Hcode
             end
             name, args = pending_calls.delete(event.tool_call_id) || {"Tool", ""}
             render_tool_block(name, args, event.text, event.is_error?)
-            if line = CLI.ram_line(name, event.text.bytesize, event.is_error?)
+            if line = CLI.ram_tracer.line(name, event.text.bytesize, event.is_error?)
               puts line.colorize.yellow
             end
           when .info?
@@ -851,7 +829,9 @@ module Hcode
         nil
       end
 
-      register_profilers(agent, app, permission, ts, system_prompt)
+      profiler = ProfiledMemory.new
+      app.profiler = profiler
+      register_profilers(agent, app, permission, ts, system_prompt, profiler)
 
       app.on_clear = -> { agent.context.clear }
       app.on_undo = -> { agent.context.undo(1) }
@@ -1239,7 +1219,7 @@ module Hcode
               tname = pending_tool_names.delete(event.tool_call_id) || "Tool"
               # Attach the RAM line so the TUI renders it inside the tool
               # block rather than as a separate info message.
-              event.ram_line = CLI.ram_line(tname, event.text.bytesize, event.is_error?)
+              event.ram_line = CLI.ram_tracer.line(tname, event.text.bytesize, event.is_error?)
               app.on_event(event)
               # Keep the TUI's plan-mode flag in sync with the service: the
               # model can toggle it directly via EnterPlanMode/ExitPlanMode,
@@ -1277,58 +1257,59 @@ module Hcode
     private def self.register_profilers(agent : Loop::Agent, app : TUI::App,
                                         permission : Permission::Manager,
                                         task_service : Tools::InMemoryTaskService,
-                                        system_prompt : String) : Nil
+                                        system_prompt : String,
+                                        profiler : ProfiledMemory) : Nil
       ctx_mem = agent.context
       perm_mgr = permission
       dedup = agent.dedup
       tools = agent.tools
-      ProfiledMemory.register("context:history", "context history",
+      profiler.register("context:history", "context history",
         calc: -> { ctx_mem.profiled_bytes }, count: -> { ctx_mem.profiled_count })
-      ProfiledMemory.register("tui:messages", "TUI transcript",
+      profiler.register("tui:messages", "TUI transcript",
         calc: -> { app.profiled_bytes }, count: -> { app.profiled_count })
-      ProfiledMemory.register("tui:render_buf", "render buffer",
+      profiler.register("tui:render_buf", "render buffer",
         calc: -> { app.render_buffer_bytes }, count: -> { app.render_buffer_count })
-      ProfiledMemory.register("tui:queue", "queued messages",
+      profiler.register("tui:queue", "queued messages",
         calc: -> { app.queue_bytes }, count: -> { app.queue_count })
-      ProfiledMemory.register("perm:approvals", "session approvals",
+      profiler.register("perm:approvals", "session approvals",
         calc: -> { perm_mgr.profiled_bytes }, count: -> { perm_mgr.profiled_count })
-      ProfiledMemory.register("tasks", "background tasks",
+      profiler.register("tasks", "background tasks",
         calc: -> { task_service.profiled_bytes }, count: -> { task_service.profiled_count })
-      ProfiledMemory.register("dedup:history", "dedup tracker",
+      profiler.register("dedup:history", "dedup tracker",
         calc: -> { dedup.profiled_bytes }, count: -> { dedup.profiled_count })
-      ProfiledMemory.register("tools:registry", "tool registry",
+      profiler.register("tools:registry", "tool registry",
         calc: -> { tools.profiled_bytes }, count: -> { tools.profiled_count })
-      ProfiledMemory.register("tui:width_cache", "width cache",
+      profiler.register("tui:width_cache", "width cache",
         calc: -> { TUI::CharWidth.cache_bytes }, count: -> { TUI::CharWidth.cache_count })
       unless system_prompt.empty?
         sp = system_prompt
-        ProfiledMemory.register("system_prompt", "system prompt",
+        profiler.register("system_prompt", "system prompt",
           calc: -> { sp.profiled_bytes })
       end
       todo_tool = tools.get(Tools::Names::TODO_LIST)
-      register_todo_profiler(todo_tool) if todo_tool.is_a?(Tools::TodoList)
-      register_cron_profiler
-      register_skill_profiler
+      register_todo_profiler(todo_tool, profiler) if todo_tool.is_a?(Tools::TodoList)
+      register_cron_profiler(profiler)
+      register_skill_profiler(profiler)
     end
 
-    private def self.register_todo_profiler(todo : Tools::TodoList) : Nil
-      ProfiledMemory.register("todos", "todo list",
+    private def self.register_todo_profiler(todo : Tools::TodoList, profiler : ProfiledMemory) : Nil
+      profiler.register("todos", "todo list",
         calc: -> { todo.profiled_bytes },
         count: -> { todo.profiled_count })
     end
 
-    private def self.register_cron_profiler : Nil
+    private def self.register_cron_profiler(profiler : ProfiledMemory) : Nil
       service = Tools::Cron.service
       return unless service.is_a?(Tools::InMemoryCronService)
-      ProfiledMemory.register("cron:tasks", "cron tasks",
+      profiler.register("cron:tasks", "cron tasks",
         calc: -> { service.profiled_bytes },
         count: -> { service.profiled_count })
     end
 
-    private def self.register_skill_profiler : Nil
+    private def self.register_skill_profiler(profiler : ProfiledMemory) : Nil
       catalog = Tools::Skill.catalog
       return unless catalog.is_a?(Tools::InMemorySkillCatalog)
-      ProfiledMemory.register("skills:catalog", "skill catalog",
+      profiler.register("skills:catalog", "skill catalog",
         calc: -> { catalog.profiled_bytes },
         count: -> { catalog.profiled_count })
     end
