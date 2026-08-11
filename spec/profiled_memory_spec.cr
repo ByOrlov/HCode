@@ -92,13 +92,13 @@ describe Hcode::LLM::Message do
     end
 
     it "includes tool_calls arguments" do
-      tc = Hcode::LLM::ToolCall.new("id", Hcode::LLM::ToolCallFunction.new("Bash", "command"))
+      tc = Hcode::LLM::ToolCall.new("id", Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::BASH, "command"))
       msg = Hcode::LLM::Message.assistant("ran a command", [tc])
       part = msg.content.first
       expected = "assistant".profiled_bytes +
                  part.profiled_bytes +
                  "id".profiled_bytes + "function".profiled_bytes +
-                 "Bash".profiled_bytes + "command".profiled_bytes
+                 Hcode::Tools::Names::BASH.profiled_bytes + "command".profiled_bytes
       msg.profiled_bytes.should eq(expected)
     end
   end

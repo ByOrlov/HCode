@@ -3,7 +3,7 @@ require "../spec_helper"
 describe Hcode::Tools::Bash do
   it "exposes command, cwd, timeout, and description in the schema" do
     bash = Hcode::Tools::Bash.new("/tmp")
-    bash.name.should eq("Bash")
+    bash.name.should eq(Hcode::Tools::Names::BASH)
 
     props = bash.parameters["properties"].as_h
     props.has_key?("command").should be_true

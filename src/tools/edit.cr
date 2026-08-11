@@ -21,7 +21,7 @@ module Hcode
       end
 
       def name : String
-        "Edit"
+        Names::EDIT
       end
 
       def description : String

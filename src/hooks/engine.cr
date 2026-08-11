@@ -30,7 +30,7 @@ module Hcode
     #
     #   [[hooks]]
     #   event = "PreToolUse"
-    #   matcher = "Bash"        # regex, empty = match all
+    #   matcher = Tools::Names::BASH        # regex, empty = match all
     #   command = "echo blocked"
     #   timeout = 30            # seconds
     struct HookDef

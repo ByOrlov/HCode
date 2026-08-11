@@ -23,7 +23,7 @@ describe Hcode::Tools::AgentSwarm do
 
   it "exposes the JS-name and identical schema" do
     swarm = Hcode::Tools::AgentSwarm.new
-    swarm.name.should eq("AgentSwarm")
+    swarm.name.should eq(Hcode::Tools::Names::AGENT_SWARM)
     swarm.description.should contain("{{item}}")
     swarm.description.should contain("AgentSwarm supports up to 128 subagents")
 

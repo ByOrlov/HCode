@@ -67,12 +67,12 @@ module Hcode
                 # keep the body preview only when there is no header argument
                 # (e.g. Bash still shows the command under the label header).
                 key_arg = extract_key_argument(name, args)
-                if name == "Bash" || key_arg.nil?
+                if name == Tools::Names::BASH || key_arg.nil?
                   preview = tool_preview(name, args)
                   preview.each { |l| lines << "#{ANSI.color(@theme.colors.dim, nil)}  #{l}#{ANSI.reset}" }
                 end
 
-                if name == "Edit"
+                if name == Tools::Names::EDIT
                   render_edit_diff(msg.tool_display, args).each { |l| lines << l }
                 end
               end
@@ -621,7 +621,7 @@ module Hcode
       private def tool_preview(name : String, args : String) : Array(String)
         parsed = JSON.parse(args)
         case name
-        when "Bash"
+        when Tools::Names::BASH
           cmd = parsed["command"]?.try(&.to_s) || ""
           # Mirror ShellExecutionComponent in the JS TUI: split the command
           # by `\n` so each source line is its own entry in the returned
@@ -635,13 +635,13 @@ module Hcode
           Array(String).new(shown.size) do |i|
             i == 0 ? "$ #{shown[i]}" : "  #{shown[i]}"
           end
-        when "Read", "Write", "Edit"
+        when Tools::Names::READ, Tools::Names::WRITE, Tools::Names::EDIT
           path = (parsed["path"]? || parsed["filePath"]?).try(&.to_s) || ""
           ["file: #{path}"]
-        when "Glob"
+        when Tools::Names::GLOB
           pattern = parsed["pattern"]?.try(&.to_s) || ""
           ["pattern: #{pattern}"]
-        when "Grep"
+        when Tools::Names::GREP
           pattern = parsed["pattern"]?.try(&.to_s) || ""
           ["search: #{pattern}"]
         else
@@ -749,7 +749,7 @@ module Hcode
         lead = "#{kc}#{STREAMING_BAR}#{r} "
         rest_indent = "  "
 
-        if name == "Bash"
+        if name == Tools::Names::BASH
           label_color = sudo_command?(msg.tool_args) ? @theme.colors.warning : @theme.colors.primary
           pc = ANSI.color(label_color, nil)
           lines << "#{lead}#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
@@ -763,7 +763,7 @@ module Hcode
 
         if args = msg.tool_args
           key_arg = extract_key_argument(name, args)
-          if name == "Bash" || key_arg.nil?
+          if name == Tools::Names::BASH || key_arg.nil?
             tool_preview(name, args).each { |l| lines << "#{lead}#{rest_indent}#{dc}#{l}#{r}" }
           end
         end
@@ -782,7 +782,7 @@ module Hcode
             "#{ANSI.color(@theme.colors.text, nil)}● #{ANSI.reset}"
           end
 
-        if name == "Bash"
+        if name == Tools::Names::BASH
           label = has_result ? Hcode.t("tools.ran_command") : Hcode.t("tools.running_command")
           tone = is_error ? @theme.colors.error : (sudo_command?(args) ? @theme.colors.warning : @theme.colors.primary)
           return "#{bullet}#{ANSI.color(tone, nil)}#{ANSI.bold}#{label}#{ANSI.reset}"
@@ -794,7 +794,7 @@ module Hcode
         arg_str = key_arg ? "#{ANSI.color(@theme.colors.dim, nil)} (#{key_arg})#{ANSI.reset}" : ""
         chip_str = ""
 
-        if name == "Read" && has_result && !is_error
+        if name == Tools::Names::READ && has_result && !is_error
           if result = tool_result
             lines_count = count_non_empty_lines(result)
             chip_str = "#{ANSI.color(@theme.colors.dim, nil)} · #{lines_count} #{lines_count == 1 ? Hcode.t("tools.line") : Hcode.t("tools.lines")}#{ANSI.reset}"
@@ -951,10 +951,10 @@ module Hcode
         return nil unless args
         parsed = JSON.parse(args)
         case name
-        when "Read", "Write", "Edit"
+        when Tools::Names::READ, Tools::Names::WRITE, Tools::Names::EDIT
           path = parsed["filePath"]?.try(&.to_s) || parsed["path"]?.try(&.to_s)
           return path if path && !path.empty?
-        when "Glob", "Grep"
+        when Tools::Names::GLOB, Tools::Names::GREP
           pattern = parsed["pattern"]?.try(&.to_s)
           return pattern if pattern && !pattern.empty?
         end

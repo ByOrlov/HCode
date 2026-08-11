@@ -14,7 +14,7 @@ describe Hcode::Tools::SelectTools do
 
   it "exposes snake_case JS-name and identical schema" do
     tool = Hcode::Tools::SelectTools.new
-    tool.name.should eq("select_tools")
+    tool.name.should eq(Hcode::Tools::Names::SELECT_TOOLS)
     props = tool.parameters["properties"].as_h
     props.has_key?("names").should be_true
     tool.parameters["required"].as_a.map(&.as_s).should eq(["names"])

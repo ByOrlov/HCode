@@ -55,7 +55,7 @@ describe Hcode::Loop::Agent do
 
       # Every scripted tool call was dispatched and completed without error.
       started = events.select { |e| e.type.tool_call_start? }.map(&.tool_name)
-      started.sort.should eq(["Bash", "Bash", "Glob", "Write"])
+      started.sort.should eq([Hcode::Tools::Names::BASH, Hcode::Tools::Names::BASH, Hcode::Tools::Names::GLOB, Hcode::Tools::Names::WRITE])
 
       tool_results = events.select { |e| e.type.tool_result? }
       tool_results.size.should eq(4)
@@ -181,7 +181,7 @@ describe Hcode::Loop::Agent do
     provider = Hcode::LLM::MockProvider.new([
       Hcode::LLM::MockStep.new(
         parts: [Hcode::LLM::ToolCallPart.new(
-          "call_1", "Bash", %({"command":"sleep 30"})
+          "call_1", Hcode::Tools::Names::BASH, %({"command":"sleep 30"})
         )] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
@@ -272,26 +272,26 @@ describe Hcode::Loop::Agent do
     recording_provider = Hcode::LLM::MockProvider.new([
       # Step 1: enter plan mode.
       Hcode::LLM::MockStep.new(
-        parts: [Hcode::LLM::ToolCallPart.new("c1", "EnterPlanMode", %({}))] of Hcode::LLM::MessagePart,
+        parts: [Hcode::LLM::ToolCallPart.new("c1", Hcode::Tools::Names::ENTER_PLAN_MODE, %({}))] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
       # Step 2: attempt a Write (should be blocked by the guard).
       Hcode::LLM::MockStep.new(
         parts: [Hcode::LLM::ToolCallPart.new(
-          "c2", "Write", %({"path":"/tmp/hcode-plan-block.txt","content":"x"})
+          "c2", Hcode::Tools::Names::WRITE, %({"path":"/tmp/hcode-plan-block.txt","content":"x"})
         )] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
       # Step 3: write the plan to the plan file (allowed).
       Hcode::LLM::MockStep.new(
         parts: [Hcode::LLM::ToolCallPart.new(
-          "c3", "Write", %({"path":#{plan_path.inspect},"content":"## Plan\\n\\nDo it."})
+          "c3", Hcode::Tools::Names::WRITE, %({"path":#{plan_path.inspect},"content":"## Plan\\n\\nDo it."})
         )] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
       # Step 4: exit plan mode (auto-approved).
       Hcode::LLM::MockStep.new(
-        parts: [Hcode::LLM::ToolCallPart.new("c4", "ExitPlanMode", %({}))] of Hcode::LLM::MessagePart,
+        parts: [Hcode::LLM::ToolCallPart.new("c4", Hcode::Tools::Names::EXIT_PLAN_MODE, %({}))] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
       # Step 5: done.

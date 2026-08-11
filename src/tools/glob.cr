@@ -20,7 +20,7 @@ module Hcode
       end
 
       def name : String
-        "Glob"
+        Names::GLOB
       end
 
       def description : String

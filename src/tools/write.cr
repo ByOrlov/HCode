@@ -7,7 +7,7 @@ module Hcode
       end
 
       def name : String
-        "Write"
+        Names::WRITE
       end
 
       def description : String

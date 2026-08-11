@@ -32,7 +32,7 @@ describe Hcode::Tools::TaskList do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::TaskList.new
-    tool.name.should eq("TaskList")
+    tool.name.should eq(Hcode::Tools::Names::TASK_LIST)
     props = tool.parameters["properties"].as_h
     props.has_key?("active_only").should be_true
     props.has_key?("limit").should be_true
@@ -150,7 +150,7 @@ describe Hcode::Tools::TaskOutput do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::TaskOutput.new
-    tool.name.should eq("TaskOutput")
+    tool.name.should eq(Hcode::Tools::Names::TASK_OUTPUT)
     props = tool.parameters["properties"].as_h
     props.has_key?("task_id").should be_true
     props.has_key?("block").should be_true
@@ -293,7 +293,7 @@ describe Hcode::Tools::TaskStop do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::TaskStop.new
-    tool.name.should eq("TaskStop")
+    tool.name.should eq(Hcode::Tools::Names::TASK_STOP)
     props = tool.parameters["properties"].as_h
     props.has_key?("task_id").should be_true
     props.has_key?("reason").should be_true

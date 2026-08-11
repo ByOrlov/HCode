@@ -43,14 +43,14 @@ module Hcode
       # Only Bash is analysed today; file tools are not dangerous by
       # themselves (the approval flow still gates them).
       def self.detect(tool_name : String, args : String) : String?
-        return nil unless tool_name == "Bash"
+        return nil unless tool_name == Tools::Names::BASH
         command = extract_command(args) || args
         detect_command(command)
       end
 
       # Convenience overload for pre-parsed arguments.
       def self.detect(tool_name : String, args : JSON::Any) : String?
-        return nil unless tool_name == "Bash"
+        return nil unless tool_name == Tools::Names::BASH
         command = args["command"]?.try(&.to_s) || args.to_s
         detect_command(command)
       end

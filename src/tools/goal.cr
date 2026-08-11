@@ -437,7 +437,7 @@ module Hcode
       TEXT
 
       def name : String
-        "CreateGoal"
+        Names::CREATE_GOAL
       end
 
       def description : String
@@ -571,7 +571,7 @@ module Hcode
       TEXT
 
       def name : String
-        "GetGoal"
+        Names::GET_GOAL
       end
 
       def description : String
@@ -610,7 +610,7 @@ module Hcode
       TEXT
 
       def name : String
-        "UpdateGoal"
+        Names::UPDATE_GOAL
       end
 
       def description : String
@@ -778,7 +778,7 @@ module Hcode
       TEXT
 
       def name : String
-        "SetGoalBudget"
+        Names::SET_GOAL_BUDGET
       end
 
       def description : String

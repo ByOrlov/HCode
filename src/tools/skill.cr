@@ -52,7 +52,7 @@ module Hcode
       end
 
       def name : String
-        "Skill"
+        Names::SKILL
       end
 
       def description : String

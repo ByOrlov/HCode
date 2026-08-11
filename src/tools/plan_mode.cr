@@ -37,7 +37,7 @@ module Hcode
       TEXT
 
       def name : String
-        "EnterPlanMode"
+        Names::ENTER_PLAN_MODE
       end
 
       def description : String
@@ -137,7 +137,7 @@ module Hcode
       TEXT
 
       def name : String
-        "ExitPlanMode"
+        Names::EXIT_PLAN_MODE
       end
 
       def description : String
@@ -410,7 +410,7 @@ module Hcode
         return nil unless svc && (status = svc.status)
         plan_path = status.path
 
-        if tool_name == "Write" || tool_name == "Edit"
+        if tool_name == Names::WRITE || tool_name == Names::EDIT
           target = extract_path(tool_name, args)
           if target && plan_path &&
              File.expand_path(target) == File.expand_path(plan_path)
@@ -426,7 +426,7 @@ module Hcode
         nil
       end
 
-      MUTATING_TOOLS = Set{"TaskStop", "CronCreate", "CronDelete"}
+      MUTATING_TOOLS = Set{Names::TASK_STOP, Names::CRON_CREATE, Names::CRON_DELETE}
 
       private def self.extract_path(tool_name : String, args : String) : String?
         return nil if args.empty?

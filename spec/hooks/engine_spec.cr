@@ -31,15 +31,15 @@ describe Hcode::Hooks::Engine do
   describe "matcher" do
     it "matches a hook only when the regex matches the matcher value" do
       hooks = [
-        Hcode::Hooks::HookDef.new("PreToolUse", "echo matched", matcher: "Bash"),
-        Hcode::Hooks::HookDef.new("PreToolUse", "echo other", matcher: "Read"),
+        Hcode::Hooks::HookDef.new("PreToolUse", "echo matched", matcher: Hcode::Tools::Names::BASH),
+        Hcode::Hooks::HookDef.new("PreToolUse", "echo other", matcher: Hcode::Tools::Names::READ),
       ]
       engine = Hcode::Hooks::Engine.new(hooks)
 
-      # Both Bash and Read hooks exist; trigger with "Bash" runs only the Bash one.
+      # Both Bash and Read hooks exist; trigger with Hcode::Tools::Names::BASH runs only the Bash one.
       # We can't assert command output here (echo is the command), but we can
       # verify via exit-code-based block logic. echo exits 0 → allow.
-      results = engine.trigger("PreToolUse", "Bash")
+      results = engine.trigger("PreToolUse", Hcode::Tools::Names::BASH)
       results.size.should eq(1)
     end
 
@@ -54,14 +54,14 @@ describe Hcode::Hooks::Engine do
     it "exit code 2 blocks" do
       hooks = [Hcode::Hooks::HookDef.new("PreToolUse", "exit 2")]
       engine = Hcode::Hooks::Engine.new(hooks)
-      results = engine.trigger("PreToolUse", "Bash")
+      results = engine.trigger("PreToolUse", Hcode::Tools::Names::BASH)
       results.first.block?.should be_true
     end
 
     it "exit code 0 allows" do
       hooks = [Hcode::Hooks::HookDef.new("PreToolUse", "true")]
       engine = Hcode::Hooks::Engine.new(hooks)
-      results = engine.trigger("PreToolUse", "Bash")
+      results = engine.trigger("PreToolUse", Hcode::Tools::Names::BASH)
       results.first.block?.should be_false
     end
   end
@@ -70,7 +70,7 @@ describe Hcode::Hooks::Engine do
     it "returns a BlockDecision when a hook blocks" do
       hooks = [Hcode::Hooks::HookDef.new("PreToolUse", "echo err >&2; exit 2")]
       engine = Hcode::Hooks::Engine.new(hooks)
-      block = engine.trigger_block("PreToolUse", "Bash")
+      block = engine.trigger_block("PreToolUse", Hcode::Tools::Names::BASH)
       block.should_not be_nil
       block.as(Hcode::Hooks::BlockDecision).reason.should contain("err")
     end
@@ -78,7 +78,7 @@ describe Hcode::Hooks::Engine do
     it "returns nil when no hook blocks" do
       hooks = [Hcode::Hooks::HookDef.new("PreToolUse", "true")]
       engine = Hcode::Hooks::Engine.new(hooks)
-      engine.trigger_block("PreToolUse", "Bash").should be_nil
+      engine.trigger_block("PreToolUse", Hcode::Tools::Names::BASH).should be_nil
     end
   end
 
@@ -89,7 +89,7 @@ describe Hcode::Hooks::Engine do
         %{echo '{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"not allowed"}}'},
       )]
       engine = Hcode::Hooks::Engine.new(hooks)
-      block = engine.trigger_block("PreToolUse", "Bash")
+      block = engine.trigger_block("PreToolUse", Hcode::Tools::Names::BASH)
       block.should_not be_nil
       block.as(Hcode::Hooks::BlockDecision).reason.should eq("not allowed")
     end
@@ -100,7 +100,7 @@ describe Hcode::Hooks::Engine do
         %{echo '{"hookSpecificOutput":{"permissionDecision":"allow"}}'},
       )]
       engine = Hcode::Hooks::Engine.new(hooks)
-      engine.trigger_block("PreToolUse", "Bash").should be_nil
+      engine.trigger_block("PreToolUse", Hcode::Tools::Names::BASH).should be_nil
     end
   end
 

@@ -28,8 +28,8 @@ describe Hcode::TUI::App do
     app = Hcode::TUI::App.new
 
     app.add_message("user", "hello")
-    app.on_event(Hcode::Loop::Event.tool_call_start("c1", "Glob", %({"pattern":"*.cr"})))
-    app.on_event(Hcode::Loop::Event.tool_call_start("c2", "Bash", %({"command":"echo hi"})))
+    app.on_event(Hcode::Loop::Event.tool_call_start("c1", Hcode::Tools::Names::GLOB, %({"pattern":"*.cr"})))
+    app.on_event(Hcode::Loop::Event.tool_call_start("c2", Hcode::Tools::Names::BASH, %({"command":"echo hi"})))
 
     # Results arrive in reverse order; the handler must still find c1.
     app.on_event(Hcode::Loop::Event.tool_result("c2", "hi", false))
@@ -59,7 +59,7 @@ describe Hcode::TUI::App do
     app = Hcode::TUI::App.new
 
     # tool_call_start → tool is pending (no result), goes to active zone.
-    app.on_event(Hcode::Loop::Event.tool_call_start("c1", "Read", %({"path":"f.ts"})))
+    app.on_event(Hcode::Loop::Event.tool_call_start("c1", Hcode::Tools::Names::READ, %({"path":"f.ts"})))
     tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
     tool.should_not be_nil
     (tool || raise "tool should not be nil").tool_result.should be_nil
@@ -104,14 +104,14 @@ describe Hcode::TUI::App do
 
     # Partially done → stays in the active zone, no snapshot.
     todos.replace([{"Task A", "done"}, {"Task B", "in_progress"}])
-    app.on_event(Hcode::Loop::Event.tool_call_start("t1", "TodoList", %({"todos":[]})))
+    app.on_event(Hcode::Loop::Event.tool_call_start("t1", Hcode::Tools::Names::TODO_LIST, %({"todos":[]})))
     app.on_event(Hcode::Loop::Event.tool_result("t1", "ok", false))
     app.@messages.any? { |m| m.role == "todo_snapshot" }.should be_false
     todos.should_not be_empty
 
     # All done → snapshot appended, tool cleared.
     todos.replace([{"Task A", "done"}, {"Task B", "done"}])
-    app.on_event(Hcode::Loop::Event.tool_call_start("t2", "TodoList", %({"todos":[]})))
+    app.on_event(Hcode::Loop::Event.tool_call_start("t2", Hcode::Tools::Names::TODO_LIST, %({"todos":[]})))
     app.on_event(Hcode::Loop::Event.tool_result("t2", "ok", false))
 
     snapshot = app.@messages.find { |m| m.role == "todo_snapshot" }
@@ -278,7 +278,7 @@ describe Hcode::TUI::App do
     memory.add_user("list files")
     memory.add_assistant("", [Hcode::LLM::ToolCall.new(
       "tc1",
-      Hcode::LLM::ToolCallFunction.new("Glob", %({"pattern":"*.cr"}))
+      Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::GLOB, %({"pattern":"*.cr"}))
     )])
     memory.add_tool_result("tc1", "a.cr\nb.cr")
     app.load_transcript_from(memory)
@@ -287,7 +287,7 @@ describe Hcode::TUI::App do
     roles.should eq(["user", "tool"])
     tool_msg = app.@messages.find { |m| m.role == "tool" } || raise "tool message not found"
     tool_msg.tool_call_id.should eq("tc1")
-    tool_msg.tool_name.should eq("Glob")
+    tool_msg.tool_name.should eq(Hcode::Tools::Names::GLOB)
     tool_msg.tool_result.should eq("a.cr\nb.cr")
   end
 
@@ -602,7 +602,7 @@ describe Hcode::TUI::App do
     it "marks members Completed/Failed and clears swarm_active" do
       app = Hcode::TUI::App.new
       tc = "call_swarm_1"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "AgentSwarm", "{}"))
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT_SWARM, "{}"))
       app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
       app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-b", 2, "item b"))
 
@@ -633,19 +633,19 @@ describe Hcode::TUI::App do
     it "renders a pending swarm in the active zone, then migrates to log on result" do
       app = Hcode::TUI::App.new
       tc = "call_swarm_routing"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "AgentSwarm", %({"description":"do work"})))
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT_SWARM, %({"description":"do work"})))
       app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
 
       # Pending (no tool_result yet): swarm progress lives in the active zone.
       log, active, _ = app.build_rendered_lines_split(80)
-      log.any?(&.includes?("AgentSwarm")).should be_false
-      active.any?(&.includes?("AgentSwarm")).should be_true
+      log.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_false
+      active.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_true
 
       # Result arrives: the entry migrates into the append-only log.
       app.on_event(Hcode::Loop::Event.tool_result(tc, "all done", false))
       log, active, _ = app.build_rendered_lines_split(80)
-      log.any?(&.includes?("AgentSwarm")).should be_true
-      active.any?(&.includes?("AgentSwarm")).should be_false
+      log.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_true
+      active.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_false
     end
   end
 
@@ -657,7 +657,7 @@ describe Hcode::TUI::App do
     it "accumulates latest_text and renders it in the active zone" do
       app = Hcode::TUI::App.new
       tc = "call_stream"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, "Agent", %({"description":"review"})))
+      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT, %({"description":"review"})))
       app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-1"))
 
       member = app.@messages.last.swarm_members.first

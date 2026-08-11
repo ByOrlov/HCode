@@ -1,3 +1,8 @@
+# Pull in the tool-name constants so any file that loads `Tool` (directly
+# or via the centralized require chain) can reference `Names::*` without a
+# separate require. Idempotent with the explicit require in hcode.cr.
+require "./names"
+
 module Hcode
   module Tools
     abstract class Tool

@@ -34,7 +34,7 @@ module Hcode
       end
 
       def name : String
-        "WebSearch"
+        Names::WEB_SEARCH
       end
 
       def description : String

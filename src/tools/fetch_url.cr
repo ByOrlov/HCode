@@ -39,7 +39,7 @@ module Hcode
       end
 
       def name : String
-        "FetchURL"
+        Names::FETCH_URL
       end
 
       def description : String

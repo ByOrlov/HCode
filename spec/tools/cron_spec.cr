@@ -134,7 +134,7 @@ describe Hcode::Tools::CronCreate do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::CronCreate.new
-    tool.name.should eq("CronCreate")
+    tool.name.should eq(Hcode::Tools::Names::CRON_CREATE)
     props = tool.parameters["properties"].as_h
     props.has_key?("cron").should be_true
     props.has_key?("prompt").should be_true
@@ -247,7 +247,7 @@ describe Hcode::Tools::CronList do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::CronList.new
-    tool.name.should eq("CronList")
+    tool.name.should eq(Hcode::Tools::Names::CRON_LIST)
     tool.parameters["additionalProperties"].as_bool.should be_false
   end
 
@@ -322,7 +322,7 @@ describe Hcode::Tools::CronDelete do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::CronDelete.new
-    tool.name.should eq("CronDelete")
+    tool.name.should eq(Hcode::Tools::Names::CRON_DELETE)
     tool.parameters["required"].as_a.map(&.as_s).should eq(["id"])
     tool.parameters["additionalProperties"].as_bool.should be_false
   end

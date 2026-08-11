@@ -22,7 +22,7 @@ end
 describe Hcode::Tools::EnterPlanMode do
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::EnterPlanMode.new
-    tool.name.should eq("EnterPlanMode")
+    tool.name.should eq(Hcode::Tools::Names::ENTER_PLAN_MODE)
     tool.description.should contain("non-trivial implementation")
 
     tool.parameters["properties"].as_h.empty?.should be_true
@@ -74,7 +74,7 @@ end
 describe Hcode::Tools::ExitPlanMode do
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::ExitPlanMode.new
-    tool.name.should eq("ExitPlanMode")
+    tool.name.should eq(Hcode::Tools::Names::EXIT_PLAN_MODE)
     tool.description.should contain("plan mode")
     props = tool.parameters["properties"].as_h
     props.has_key?("options").should be_true

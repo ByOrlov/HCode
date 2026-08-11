@@ -5,7 +5,7 @@ module Hcode
     #
     # Rules use a small DSL, mirroring the TS `matches-rule.ts` parser:
     #
-    #   "Write"              → matches any Write call (tool-name only)
+    #   Tools::Names::WRITE              → matches any Write call (tool-name only)
     #   "Read(/etc/**)"      → Read on paths under /etc
     #   "Bash(rm *)"         → Bash commands starting with "rm"
     #   "mcp__github__*"     → glob on the tool name itself
@@ -81,7 +81,7 @@ module Hcode
         end
 
         # Parse a rule pattern into its tool-name + optional arg-pattern
-        # components. `Bash(rm *)` → {"Bash", "rm *"}, `Write` → {"Write", nil}.
+        # components. `Bash(rm *)` → {Tools::Names::BASH, "rm *"}, `Write` → {Tools::Names::WRITE, nil}.
         # Returns nil on a malformed pattern (missing close paren, empty name).
         def parsed : NamedTuple(tool: String, args: String?)?
           Policies.parse_pattern(@pattern)
@@ -143,13 +143,13 @@ module Hcode
         return args if args.empty?
         parsed = JSON.parse(args)
         case tool_name
-        when "Bash"
+        when Tools::Names::BASH
           parsed["command"]?.try(&.to_s) || args
-        when "Read", "ReadMedia"
+        when Tools::Names::READ, Tools::Names::READ_MEDIA_FILE
           parsed["path"]?.try(&.to_s) || parsed["filePath"]?.try(&.to_s) || args
-        when "Write", "Edit"
+        when Tools::Names::WRITE, Tools::Names::EDIT
           parsed["filePath"]?.try(&.to_s) || args
-        when "Glob", "Grep"
+        when Tools::Names::GLOB, Tools::Names::GREP
           parsed["pattern"]?.try(&.to_s) || parsed["path"]?.try(&.to_s) || args
         else
           args

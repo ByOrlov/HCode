@@ -73,7 +73,7 @@ module Hcode
       end
 
       def name : String
-        "Bash"
+        Names::BASH
       end
 
       def description : String

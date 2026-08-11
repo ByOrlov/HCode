@@ -122,8 +122,8 @@ describe Hcode::Config::Config do
       server.url.should eq("https://api.z.ai/api/mcp/web_search_prime/mcp")
       server.headers["Authorization"].should eq("Bearer test-key")
       server.providers.should eq(["zai-coding-plan"])
-      server.tool_aliases.should eq({"web_search_prime" => "WebSearch"})
-      server.aliased_tool_name("web_search_prime").should eq("WebSearch")
+      server.tool_aliases.should eq({"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
+      server.aliased_tool_name("web_search_prime").should eq(Hcode::Tools::Names::WEB_SEARCH)
       server.aliased_tool_name("other_tool").should eq("other_tool")
     end
 

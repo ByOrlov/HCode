@@ -131,7 +131,7 @@ module Hcode
           @step_tool_count += 1
           @turn_tool_count += 1
 
-          if event.tool_name == "Read" && (group = @pending_read_group) && group.step == @current_step
+          if event.tool_name == Tools::Names::READ && (group = @pending_read_group) && group.step == @current_step
             reads = (group.read_group ||= [] of ReadGroupEntry)
             reads << ReadGroupEntry.new(event.tool_call_id, event.tool_args)
           else
@@ -141,7 +141,7 @@ module Hcode
             msg.tool_args = tool_args_preview(event.tool_name, event.tool_args)
             msg.step = @current_step
             emit_to_log(msg)
-            @pending_read_group = event.tool_name == "Read" ? msg : nil
+            @pending_read_group = event.tool_name == Tools::Names::READ ? msg : nil
           end
 
           @streaming_tool = event.tool_name

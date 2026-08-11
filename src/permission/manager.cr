@@ -134,7 +134,7 @@ module Hcode
 
       private def auto_approve?(tool_name : String) : Bool
         case tool_name
-        when "Read", "Glob", "Grep", "TodoList"
+        when Tools::Names::READ, Tools::Names::GLOB, Tools::Names::GREP, Tools::Names::TODO_LIST
           true
         else
           false

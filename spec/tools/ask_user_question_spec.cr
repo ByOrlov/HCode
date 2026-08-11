@@ -33,7 +33,7 @@ describe Hcode::Tools::AskUserQuestion do
 
   it "exposes the JS-name and identical schema" do
     tool = Hcode::Tools::AskUserQuestion.new
-    tool.name.should eq("AskUserQuestion")
+    tool.name.should eq(Hcode::Tools::Names::ASK_USER_QUESTION)
     tool.description.should contain("structured options")
 
     props = tool.parameters["properties"].as_h

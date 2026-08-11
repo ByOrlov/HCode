@@ -23,7 +23,7 @@ describe Hcode::Tools::Agent do
 
   it "exposes the JS-name and identical schema" do
     agent = Hcode::Tools::Agent.new
-    agent.name.should eq("Agent")
+    agent.name.should eq(Hcode::Tools::Names::AGENT)
     agent.description.should contain("Launch a subagent")
     agent.description.should contain("agent")
     agent.description.should contain("coder")

@@ -526,7 +526,7 @@ module Hcode
       TEXT
 
       def name : String
-        "TaskList"
+        Names::TASK_LIST
       end
 
       def description : String
@@ -611,7 +611,7 @@ module Hcode
       TEXT
 
       def name : String
-        "TaskOutput"
+        Names::TASK_OUTPUT
       end
 
       def description : String
@@ -697,7 +697,7 @@ module Hcode
 
         hint = full_output_hint(output)
         unless hint.nil?
-          pairs << {"fullOutputTool", "Read"}
+          pairs << {"fullOutputTool", Names::READ}
           pairs << {"fullOutputHint", hint}
         end
 
@@ -780,7 +780,7 @@ module Hcode
       DEFAULT_REASON = "Stopped by TaskStop"
 
       def name : String
-        "TaskStop"
+        Names::TASK_STOP
       end
 
       def description : String

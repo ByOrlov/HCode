@@ -44,7 +44,7 @@ module Hcode
       end
 
       def name : String
-        "AgentSwarm"
+        Names::AGENT_SWARM
       end
 
       def description : String

@@ -18,7 +18,7 @@ describe Hcode::Loop::Agent do
       provider = Hcode::LLM::MockProvider.new([
         Hcode::LLM::MockStep.new(
           parts: [Hcode::LLM::ToolCallPart.new(
-            "gc_1", "CreateGoal",
+            "gc_1", Hcode::Tools::Names::CREATE_GOAL,
             %({"objective":"Fix all failing tests","completionCriterion":"crystal spec passes"})
           )] of Hcode::LLM::MessagePart,
           stop_reason: "tool_use",
@@ -35,7 +35,7 @@ describe Hcode::Loop::Agent do
         ),
         Hcode::LLM::MockStep.new(
           parts: [Hcode::LLM::ToolCallPart.new(
-            "ug_1", "UpdateGoal", %({"status":"complete"})
+            "ug_1", Hcode::Tools::Names::UPDATE_GOAL, %({"status":"complete"})
           )] of Hcode::LLM::MessagePart,
           stop_reason: "tool_use",
         ),
@@ -86,11 +86,11 @@ describe Hcode::Loop::Agent do
         Hcode::LLM::MockStep.new(
           parts: [
             Hcode::LLM::ToolCallPart.new(
-              "gc_1", "CreateGoal",
+              "gc_1", Hcode::Tools::Names::CREATE_GOAL,
               %({"objective":"Small task"})
             ),
             Hcode::LLM::ToolCallPart.new(
-              "sb_1", "SetGoalBudget", %({"value":1,"unit":"turns"})
+              "sb_1", Hcode::Tools::Names::SET_GOAL_BUDGET, %({"value":1,"unit":"turns"})
             ),
           ] of Hcode::LLM::MessagePart,
           stop_reason: "tool_use",

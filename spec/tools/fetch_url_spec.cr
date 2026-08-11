@@ -29,7 +29,7 @@ describe Hcode::Tools::FetchURL do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::FetchURL.new
-    tool.name.should eq("FetchURL")
+    tool.name.should eq(Hcode::Tools::Names::FETCH_URL)
     tool.description.should contain("http")
     props = tool.parameters["properties"].as_h
     props.has_key?("url").should be_true

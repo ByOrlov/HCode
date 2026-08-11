@@ -9,8 +9,6 @@ module Hcode
     #
     # См. детальный план портирования в `md-tools/select-tools.md`.
     module ToolSelect
-      SELECT_TOOLS_TOOL_NAME = "select_tools"
-
       @@service : ToolSelectService?
 
       def self.service=(s : ToolSelectService?)
@@ -94,7 +92,7 @@ module Hcode
       TEXT
 
       def name : String
-        ToolSelect::SELECT_TOOLS_TOOL_NAME
+        Names::SELECT_TOOLS
       end
 
       def description : String

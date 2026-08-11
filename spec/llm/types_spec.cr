@@ -27,13 +27,13 @@ describe Hcode::LLM::Message do
     end
 
     it "creates an assistant message with tool_calls" do
-      tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new("Bash", "{\"command\":\"ls\"}"))
+      tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::BASH, "{\"command\":\"ls\"}"))
       msg = Hcode::LLM::Message.assistant("", [tc])
       msg.role.should eq("assistant")
       msg.tool_calls.should_not be_nil
       if tcs = msg.tool_calls
         tcs.size.should eq(1)
-        tcs[0].name.should eq("Bash")
+        tcs[0].name.should eq(Hcode::Tools::Names::BASH)
       end
     end
 
@@ -71,7 +71,7 @@ describe Hcode::LLM::Message do
     end
 
     it "includes tool_calls when present" do
-      tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new("Bash", "{}"))
+      tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::BASH, "{}"))
       msg = Hcode::LLM::Message.assistant(nil, [tc])
       json = JSON.parse(msg.to_json)
       json["tool_calls"].as_a.size.should eq(1)
@@ -150,7 +150,7 @@ describe "Message wire serialization" do
   end
 
   it "omits content when an assistant tool-call message has only empty text" do
-    tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new("Bash", "{}"))
+    tc = Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::BASH, "{}"))
     msg = Hcode::LLM::Message.assistant("", [tc])
     json = JSON.parse(JSON.build { |b| msg.to_wire_json(b) })
     json["role"].should eq("assistant")
@@ -233,7 +233,7 @@ describe Hcode::LLM::ChatRequest do
   end
 
   it "includes parallel_tool_calls when set" do
-    tool = Hcode::LLM::ToolDefinition.new(Hcode::LLM::ToolFunction.new("Read", "reads", JSON.parse("{}")))
+    tool = Hcode::LLM::ToolDefinition.new(Hcode::LLM::ToolFunction.new(Hcode::Tools::Names::READ, "reads", JSON.parse("{}")))
     req = Hcode::LLM::ChatRequest.new("m", [Hcode::LLM::Message.user("hi")], tools: [tool])
     req.parallel_tool_calls = true
     json = JSON.parse(req.to_json)
@@ -436,7 +436,7 @@ describe Hcode::LLM::MockProvider do
   it "replays the script step by step and terminates" do
     provider = Hcode::LLM::MockProvider.new([
       Hcode::LLM::MockStep.new(
-        parts: [Hcode::LLM::ToolCallPart.new("c1", "Bash", %({"command":"echo hi"}))] of Hcode::LLM::MessagePart,
+        parts: [Hcode::LLM::ToolCallPart.new("c1", Hcode::Tools::Names::BASH, %({"command":"echo hi"}))] of Hcode::LLM::MessagePart,
         stop_reason: "tool_use",
       ),
       Hcode::LLM::MockStep.new(
@@ -459,7 +459,7 @@ describe Hcode::LLM::MockProvider do
     provider = Hcode::LLM::MockProvider.new([
       Hcode::LLM::MockStep.new(
         parts: [
-          Hcode::LLM::ToolCallPart.new("c1", "Glob", %({"pattern":"*"})),
+          Hcode::LLM::ToolCallPart.new("c1", Hcode::Tools::Names::GLOB, %({"pattern":"*"})),
           Hcode::LLM::TextPart.new("hello"),
         ] of Hcode::LLM::MessagePart,
         stop_reason: "end_turn",
@@ -642,7 +642,7 @@ describe "OpenAIChatProvider request shaping" do
 
   it "enables parallel_tool_calls when tools are present" do
     provider = Hcode::LLM::MoonshotProvider.new(model: "hcode-for-coding")
-    tool = Hcode::LLM::ToolDefinition.new(Hcode::LLM::ToolFunction.new("Read", "reads", JSON.parse("{}")))
+    tool = Hcode::LLM::ToolDefinition.new(Hcode::LLM::ToolFunction.new(Hcode::Tools::Names::READ, "reads", JSON.parse("{}")))
     json = JSON.parse(provider.build_request([Hcode::LLM::Message.user("hi")], [tool]).to_json)
     json["parallel_tool_calls"].should be_true
   end

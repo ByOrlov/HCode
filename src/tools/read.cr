@@ -11,7 +11,7 @@ module Hcode
       end
 
       def name : String
-        "Read"
+        Names::READ
       end
 
       def description : String

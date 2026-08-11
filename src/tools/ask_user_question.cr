@@ -73,7 +73,7 @@ module Hcode
       end
 
       def name : String
-        "AskUserQuestion"
+        Names::ASK_USER_QUESTION
       end
 
       def description : String

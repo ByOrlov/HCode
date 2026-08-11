@@ -111,7 +111,7 @@ module Hcode
       end
 
       def name : String
-        "Agent"
+        Names::AGENT
       end
 
       def description : String

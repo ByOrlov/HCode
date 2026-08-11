@@ -35,17 +35,17 @@ module Hcode
       DEFAULT_SCRIPT = [
         MockStep.new(
           parts: [
-            ToolCallPart.new("m_call_1", "Glob", %({"pattern":"*"})),
-            ToolCallPart.new("m_call_2", "Bash", %({"command":"echo mock-selftest-ok"})),
+            ToolCallPart.new("m_call_1", Tools::Names::GLOB, %({"pattern":"*"})),
+            ToolCallPart.new("m_call_2", Tools::Names::BASH, %({"command":"echo mock-selftest-ok"})),
           ] of MessagePart,
           stop_reason: "tool_use",
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_call_fail", "Bash", %({"command":"echo step2"}))] of MessagePart,
+          parts: [ToolCallPart.new("m_call_fail", Tools::Names::BASH, %({"command":"echo step2"}))] of MessagePart,
           stop_reason: "tool_use",
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_call_3", "Write", %({"path":".mock-selftest","content":"mock ran"}))] of MessagePart,
+          parts: [ToolCallPart.new("m_call_3", Tools::Names::WRITE, %({"path":".mock-selftest","content":"mock ran"}))] of MessagePart,
           stop_reason: "tool_use",
         ),
         MockStep.new(
@@ -89,7 +89,7 @@ module Hcode
             ThinkPart.new(" I should list the source files first."),
             ThinkPart.new(" A Glob call with pattern \"src/**/*.cr\" would work."),
             ThinkPart.new(" Let me do that now."),
-            ToolCallPart.new("m_think_1", "Glob", %({"pattern":"src/**/*.cr"})),
+            ToolCallPart.new("m_think_1", Tools::Names::GLOB, %({"pattern":"src/**/*.cr"})),
           ] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 600,
@@ -135,7 +135,7 @@ module Hcode
         MockStep.new(
           parts: [
             TextPart.new(build_markdown_long_preamble),
-            ToolCallPart.new("m_md_read_1", "Read", %({"path":"README.md"})),
+            ToolCallPart.new("m_md_read_1", Tools::Names::READ, %({"path":"README.md"})),
           ] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 80,
@@ -221,7 +221,7 @@ module Hcode
         MockStep.new(
           parts: [
             TextPart.new("I'll run a sudo command to demonstrate terminal exec."),
-            ToolCallPart.new("m_sudo_1", "Bash", %({"command":"sudo echo \\"Hello from sudo\\""})),
+            ToolCallPart.new("m_sudo_1", Tools::Names::BASH, %({"command":"sudo echo \\"Hello from sudo\\""})),
           ] of MessagePart,
           stop_reason: "tool_use",
         ),
@@ -240,22 +240,22 @@ module Hcode
       #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos
       TODOS_DEMO_SCRIPT = [
         MockStep.new(
-          parts: [ToolCallPart.new("m_todo_1", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"in_progress"},{"title":"Write the fix","status":"pending"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
+          parts: [ToolCallPart.new("m_todo_1", Tools::Names::TODO_LIST, %({"todos":[{"title":"Analyze codebase","status":"in_progress"},{"title":"Write the fix","status":"pending"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 400,
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_todo_2", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"in_progress"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
+          parts: [ToolCallPart.new("m_todo_2", Tools::Names::TODO_LIST, %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"in_progress"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 1000,
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_todo_3", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"in_progress"}]}))] of MessagePart,
+          parts: [ToolCallPart.new("m_todo_3", Tools::Names::TODO_LIST, %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"in_progress"}]}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 1000,
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_todo_4", "TodoList", %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"done"}]}))] of MessagePart,
+          parts: [ToolCallPart.new("m_todo_4", Tools::Names::TODO_LIST, %({"todos":[{"title":"Analyze codebase","status":"done"},{"title":"Write the fix","status":"done"},{"title":"Run the test suite","status":"done"}]}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 1000,
         ),
@@ -361,21 +361,21 @@ module Hcode
 
       PLAN_DEMO_SCRIPT = [
         MockStep.new(
-          parts: [ToolCallPart.new("m_plan_enter", "EnterPlanMode", %q({}))] of MessagePart,
+          parts: [ToolCallPart.new("m_plan_enter", Tools::Names::ENTER_PLAN_MODE, %q({}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 300,
         ),
         MockStep.new(
           parts: [ToolCallPart.new(
             "m_plan_write",
-            "Write",
+            Tools::Names::WRITE,
             %q({"path":") + PLAN_SENTINEL + %q(","content":") + build_plan_content.gsub('"', "\\\"").gsub('\n', "\\n") + %q("}),
           )] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 300,
         ),
         MockStep.new(
-          parts: [ToolCallPart.new("m_plan_exit", "ExitPlanMode", %q({}))] of MessagePart,
+          parts: [ToolCallPart.new("m_plan_exit", Tools::Names::EXIT_PLAN_MODE, %q({}))] of MessagePart,
           stop_reason: "tool_use",
           part_delay_ms: 300,
         ),
@@ -430,7 +430,7 @@ module Hcode
       # runs. At chat-time we look it up from the live plan service and patch
       # the JSON arguments so the Write lands on the actual plan file.
       private def resolve_tool_arguments(name : String, args : String) : String
-        return args unless name == "Write" && args.includes?(PLAN_SENTINEL)
+        return args unless name == Tools::Names::WRITE && args.includes?(PLAN_SENTINEL)
         path = Hcode::Tools::PlanMode.plan_service.try(&.status).try(&.path) || ""
         return args if path.empty?
         # Linux paths contain no characters that need JSON escaping; a literal

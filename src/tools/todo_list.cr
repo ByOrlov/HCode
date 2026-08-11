@@ -27,7 +27,7 @@ module Hcode
       end
 
       def name : String
-        "TodoList"
+        Names::TODO_LIST
       end
 
       def description : String

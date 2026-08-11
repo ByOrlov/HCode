@@ -70,7 +70,7 @@ module Hcode
         end
 
         it "split rejects non-mcp names" do
-          ToolNaming.split("Bash").should be_nil
+          ToolNaming.split(Hcode::Tools::Names::BASH).should be_nil
         end
 
         it "preserves distinctness for different long tools" do
@@ -224,7 +224,7 @@ module Hcode
                   "zai-web-search": {
                     "type": "http",
                     "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
-                    "toolAliases": { "web_search_prime": "WebSearch" }
+                    "toolAliases": { "web_search_prime": Hcode::Tools::Names::WEB_SEARCH }
                   }
                 }
               }
@@ -232,8 +232,8 @@ module Hcode
             servers = ConfigLoader.parse_mcp_json(home)
             servers.size.should eq(1)
             server = servers.first
-            server.tool_aliases.should eq({"web_search_prime" => "WebSearch"})
-            server.aliased_tool_name("web_search_prime").should eq("WebSearch")
+            server.tool_aliases.should eq({"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
+            server.aliased_tool_name("web_search_prime").should eq(Hcode::Tools::Names::WEB_SEARCH)
             server.aliased_tool_name("other").should eq("other")
           ensure
             FileUtils.rm_r(home) rescue nil
@@ -582,7 +582,7 @@ module Hcode
             cfg = McpServerConfig.new("zai-web-search", type: "http",
               url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
               providers: ["zai-coding-plan"],
-              tool_aliases: {"web_search_prime" => "WebSearch"})
+              tool_aliases: {"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
             reg = Tools::Registry.new
             m.register_from_cache([cfg], reg,
               active_provider: "zai-coding-plan", blocking: true)

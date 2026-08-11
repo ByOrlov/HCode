@@ -623,7 +623,7 @@ module Hcode
             url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
             headers: {"Authorization" => "Bearer #{zai_api_key}"},
             providers: ["zai-coding-plan"],
-            tool_aliases: {"web_search_prime" => "WebSearch"}
+            tool_aliases: {"web_search_prime" => Tools::Names::WEB_SEARCH}
           )
         end
 

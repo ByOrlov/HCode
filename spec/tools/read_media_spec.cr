@@ -159,7 +159,7 @@ describe Hcode::Tools::ReadMediaFile do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::ReadMediaFile.new
-    tool.name.should eq("ReadMediaFile")
+    tool.name.should eq(Hcode::Tools::Names::READ_MEDIA_FILE)
     props = tool.parameters["properties"].as_h
     props.has_key?("path").should be_true
     props.has_key?("region").should be_true

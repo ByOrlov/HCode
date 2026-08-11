@@ -799,7 +799,7 @@ module Hcode
       TEXT
 
       def name : String
-        "CronCreate"
+        Names::CRON_CREATE
       end
 
       def description : String
@@ -920,7 +920,7 @@ module Hcode
       TEXT
 
       def name : String
-        "CronList"
+        Names::CRON_LIST
       end
 
       def description : String
@@ -998,7 +998,7 @@ module Hcode
       TEXT
 
       def name : String
-        "CronDelete"
+        Names::CRON_DELETE
       end
 
       def description : String

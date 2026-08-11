@@ -15,7 +15,7 @@ module Hcode
       end
 
       def name : String
-        "Grep"
+        Names::GREP
       end
 
       def description : String

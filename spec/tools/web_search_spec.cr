@@ -27,7 +27,7 @@ describe Hcode::Tools::WebSearch do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::WebSearch.new
-    tool.name.should eq("WebSearch")
+    tool.name.should eq(Hcode::Tools::Names::WEB_SEARCH)
     tool.description.should contain("up-to-date information")
     props = tool.parameters["properties"].as_h
     props.has_key?("query").should be_true

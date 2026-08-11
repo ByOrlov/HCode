@@ -23,7 +23,7 @@ describe Hcode::Tools::Skill do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::Skill.new
-    tool.name.should eq("Skill")
+    tool.name.should eq(Hcode::Tools::Names::SKILL)
     tool.description.should contain("BLOCKING REQUIREMENT")
 
     props = tool.parameters["properties"].as_h

@@ -397,7 +397,7 @@ module Hcode
       end
 
       private def inject_step_reminders(steps : Int32) : Nil
-        todo_tool = @tools.get("TodoList")
+        todo_tool = @tools.get(Tools::Names::TODO_LIST)
         return unless todo_tool.is_a?(Tools::TodoList)
 
         pending = todo_tool.pending_count

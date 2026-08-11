@@ -414,7 +414,7 @@ module Hcode
       TEXT
 
       def name : String
-        "ReadMediaFile"
+        Names::READ_MEDIA_FILE
       end
 
       def description : String

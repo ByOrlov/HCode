@@ -11,7 +11,7 @@ describe Hcode::Tools::CreateGoal do
 
   it "exposes JS-name and identical schema" do
     tool = Hcode::Tools::CreateGoal.new
-    tool.name.should eq("CreateGoal")
+    tool.name.should eq(Hcode::Tools::Names::CREATE_GOAL)
     tool.description.should contain("durable")
     props = tool.parameters["properties"].as_h
     props.has_key?("objective").should be_true

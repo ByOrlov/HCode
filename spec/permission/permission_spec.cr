@@ -42,16 +42,16 @@ describe Hcode::Permission::Danger do
   end
 
   it "only analyses Bash tool calls" do
-    Hcode::Permission::Danger.detect("Read", %({"filePath": "/etc/passwd"})).should be_nil
-    Hcode::Permission::Danger.detect("Bash", %({"command": "sudo apt-get update"})).should eq("elevated privileges")
+    Hcode::Permission::Danger.detect(Hcode::Tools::Names::READ, %({"filePath": "/etc/passwd"})).should be_nil
+    Hcode::Permission::Danger.detect(Hcode::Tools::Names::BASH, %({"command": "sudo apt-get update"})).should eq("elevated privileges")
   end
 
   it "extracts the command from JSON args" do
-    Hcode::Permission::Danger.detect("Bash", %({"command": "rm -rf x"})).should eq("recursive delete")
+    Hcode::Permission::Danger.detect(Hcode::Tools::Names::BASH, %({"command": "rm -rf x"})).should eq("recursive delete")
   end
 
   it "falls back to raw args when command field is absent" do
-    Hcode::Permission::Danger.detect("Bash", "sudo something").should eq("elevated privileges")
+    Hcode::Permission::Danger.detect(Hcode::Tools::Names::BASH, "sudo something").should eq("elevated privileges")
   end
 end
 
@@ -59,10 +59,10 @@ end
 describe Hcode::Permission::Policies do
   describe ".parse_pattern" do
     it "parses a bare tool name" do
-      parsed = Hcode::Permission::Policies.parse_pattern("Write")
+      parsed = Hcode::Permission::Policies.parse_pattern(Hcode::Tools::Names::WRITE)
       parsed.should_not be_nil
       if parsed
-        parsed[:tool].should eq("Write")
+        parsed[:tool].should eq(Hcode::Tools::Names::WRITE)
         parsed[:args].should be_nil
       end
     end
@@ -71,7 +71,7 @@ describe Hcode::Permission::Policies do
       parsed = Hcode::Permission::Policies.parse_pattern("Bash(rm *)")
       parsed.should_not be_nil
       if parsed
-        parsed[:tool].should eq("Bash")
+        parsed[:tool].should eq(Hcode::Tools::Names::BASH)
         parsed[:args].should eq("rm *")
       end
     end
@@ -112,33 +112,33 @@ describe Hcode::Permission::Policies do
 
   describe ".match?" do
     it "matches by tool name only when no arg pattern" do
-      rule = Hcode::Permission::Policies::Rule.new(:allow, "Write")
-      Hcode::Permission::Policies.match?(rule, "Write", %({"filePath": "x"})).should be_true
-      Hcode::Permission::Policies.match?(rule, "Read", %({"filePath": "x"})).should be_false
+      rule = Hcode::Permission::Policies::Rule.new(:allow, Hcode::Tools::Names::WRITE)
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::WRITE, %({"filePath": "x"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::READ, %({"filePath": "x"})).should be_false
     end
 
     it "matches Bash commands against the command field" do
       rule = Hcode::Permission::Policies::Rule.new(:deny, "Bash(rm *)")
-      Hcode::Permission::Policies.match?(rule, "Bash", %({"command": "rm -rf /"})).should be_true
-      Hcode::Permission::Policies.match?(rule, "Bash", %({"command": "ls"})).should be_false
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::BASH, %({"command": "rm -rf /"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::BASH, %({"command": "ls"})).should be_false
     end
 
     it "matches file paths for Read/Write/Edit" do
       rule = Hcode::Permission::Policies::Rule.new(:deny, "Read(/etc/**)")
-      Hcode::Permission::Policies.match?(rule, "Read", %({"filePath": "/etc/passwd"})).should be_true
-      Hcode::Permission::Policies.match?(rule, "Read", %({"filePath": "/home/x"})).should be_false
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::READ, %({"filePath": "/etc/passwd"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::READ, %({"filePath": "/home/x"})).should be_false
     end
 
     it "supports negated arg patterns" do
       rule = Hcode::Permission::Policies::Rule.new(:allow, "Bash(!rm *)")
-      Hcode::Permission::Policies.match?(rule, "Bash", %({"command": "ls"})).should be_true
-      Hcode::Permission::Policies.match?(rule, "Bash", %({"command": "rm x"})).should be_false
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::BASH, %({"command": "ls"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::BASH, %({"command": "rm x"})).should be_false
     end
 
     it "wildcard tool name matches any tool" do
       rule = Hcode::Permission::Policies::Rule.new(:allow, "*")
-      Hcode::Permission::Policies.match?(rule, "Bash", %({"command": "ls"})).should be_true
-      Hcode::Permission::Policies.match?(rule, "Write", %({"filePath": "x"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::BASH, %({"command": "ls"})).should be_true
+      Hcode::Permission::Policies.match?(rule, Hcode::Tools::Names::WRITE, %({"filePath": "x"})).should be_true
     end
   end
 
@@ -146,9 +146,9 @@ describe Hcode::Permission::Policies do
     it "returns the first matching rule's decision" do
       rs = Hcode::Permission::Policies::RuleSet.new
       rs << Hcode::Permission::Policies::Rule.new(:deny, "Bash(rm *)")
-      rs << Hcode::Permission::Policies::Rule.new(:allow, "Bash")
+      rs << Hcode::Permission::Policies::Rule.new(:allow, Hcode::Tools::Names::BASH)
 
-      match = rs.evaluate("Bash", %({"command": "rm -rf /"}))
+      match = rs.evaluate(Hcode::Tools::Names::BASH, %({"command": "rm -rf /"}))
       match.should_not be_nil
       (match || raise "match should not be nil").decision.deny?.should be_true
     end
@@ -156,7 +156,7 @@ describe Hcode::Permission::Policies do
     it "returns nil when nothing matches" do
       rs = Hcode::Permission::Policies::RuleSet.new
       rs << Hcode::Permission::Policies::Rule.new(:deny, "Bash(rm *)")
-      rs.evaluate("Read", %({"filePath": "x"})).should be_nil
+      rs.evaluate(Hcode::Tools::Names::READ, %({"filePath": "x"})).should be_nil
     end
   end
 end
@@ -168,7 +168,7 @@ describe Hcode::Permission::Manager do
     manager.rules << Hcode::Permission::Policies::Rule.new(:deny, "Bash(rm *)")
 
     events = [] of Hcode::Loop::Event
-    manager.check("Bash", %({"command": "rm -rf /"}), ->(e : Hcode::Loop::Event) { events << e }).should be_false
+    manager.check(Hcode::Tools::Names::BASH, %({"command": "rm -rf /"}), ->(e : Hcode::Loop::Event) { events << e }).should be_false
   end
 
   it "allow rule bypasses the prompt" do
@@ -176,13 +176,13 @@ describe Hcode::Permission::Manager do
     manager.rules << Hcode::Permission::Policies::Rule.new(:allow, "Bash(ls *)")
 
     events = [] of Hcode::Loop::Event
-    manager.check("Bash", %({"command": "ls -la"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+    manager.check(Hcode::Tools::Names::BASH, %({"command": "ls -la"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
   end
 
   it "detect_danger delegates to the Danger module" do
     manager = Hcode::Permission::Manager.new
-    manager.detect_danger("Bash", %({"command": "sudo x"})).should eq("elevated privileges")
-    manager.detect_danger("Read", %({"filePath": "x"})).should be_nil
+    manager.detect_danger(Hcode::Tools::Names::BASH, %({"command": "sudo x"})).should eq("elevated privileges")
+    manager.detect_danger(Hcode::Tools::Names::READ, %({"filePath": "x"})).should be_nil
   end
 
   # Fix 2 regression: cache approval key uses SHA256(args) so the Set never
@@ -198,7 +198,7 @@ describe Hcode::Permission::Manager do
       events = [] of Hcode::Loop::Event
       args = %({"filePath":"/tmp/x","oldString":"a","newString":"b"})
 
-      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      manager.check(Hcode::Tools::Names::EDIT, args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
 
       # Second call with the same args must short-circuit (callback not
       # invoked a second time). Track invocations via a counter closure.
@@ -207,7 +207,7 @@ describe Hcode::Permission::Manager do
         calls += 1
         Hcode::Permission::ApprovalChoice::ApproveSession
       }
-      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      manager.check(Hcode::Tools::Names::EDIT, args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
       calls.should eq(0)
     end
 
@@ -220,8 +220,8 @@ describe Hcode::Permission::Manager do
       }
 
       events = [] of Hcode::Loop::Event
-      manager.check("Edit", %({"filePath":"a","oldString":"x","newString":"y"}), ->(e : Hcode::Loop::Event) { events << e })
-      manager.check("Edit", %({"filePath":"a","oldString":"x","newString":"z"}), ->(e : Hcode::Loop::Event) { events << e })
+      manager.check(Hcode::Tools::Names::EDIT, %({"filePath":"a","oldString":"x","newString":"y"}), ->(e : Hcode::Loop::Event) { events << e })
+      manager.check(Hcode::Tools::Names::EDIT, %({"filePath":"a","oldString":"x","newString":"z"}), ->(e : Hcode::Loop::Event) { events << e })
       calls.should eq(2)
     end
 
@@ -234,7 +234,7 @@ describe Hcode::Permission::Manager do
       payload = "q" * 200_000
       args = %({"filePath":"a","oldString":"#{payload}","newString":"y"})
       events = [] of Hcode::Loop::Event
-      manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e })
+      manager.check(Hcode::Tools::Names::EDIT, args, ->(e : Hcode::Loop::Event) { events << e })
 
       # The cached key should be `tool:64-hex-digest`, never the payload.
       manager.@session_approvals.each do |key|
@@ -260,7 +260,7 @@ describe Hcode::Permission::Manager do
         manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
         events = [] of Hcode::Loop::Event
         args = %({"path":"/tmp/other.txt","content":"x"})
-        manager.check("Write", args, ->(e : Hcode::Loop::Event) { events << e }).should be_false
+        manager.check(Hcode::Tools::Names::WRITE, args, ->(e : Hcode::Loop::Event) { events << e }).should be_false
         events.any?(&.text.try(&.includes?("Plan mode is active"))).should be_true
       ensure
         Hcode::Tools::PlanMode.plan_service = nil
@@ -280,7 +280,7 @@ describe Hcode::Permission::Manager do
         manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
         events = [] of Hcode::Loop::Event
         args = %({"path":#{plan_path.inspect},"content":"plan body"})
-        manager.check("Write", args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check(Hcode::Tools::Names::WRITE, args, ->(e : Hcode::Loop::Event) { events << e }).should be_true
       ensure
         Hcode::Tools::PlanMode.plan_service = nil
         FileUtils.rm_rf(dir)
@@ -298,7 +298,7 @@ describe Hcode::Permission::Manager do
       begin
         manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
         events = [] of Hcode::Loop::Event
-        ["TaskStop", "CronCreate", "CronDelete"].each do |tool|
+        [Hcode::Tools::Names::TASK_STOP, Hcode::Tools::Names::CRON_CREATE, Hcode::Tools::Names::CRON_DELETE].each do |tool|
           manager.check(tool, "{}", ->(e : Hcode::Loop::Event) { events << e }).should be_false
         end
       ensure
@@ -318,9 +318,9 @@ describe Hcode::Permission::Manager do
       begin
         manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
         events = [] of Hcode::Loop::Event
-        manager.check("Read", %({"path":"/tmp/x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
-        manager.check("Grep", %({"pattern":"x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
-        manager.check("Glob", %({"pattern":"*"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check(Hcode::Tools::Names::READ, %({"path":"/tmp/x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check(Hcode::Tools::Names::GREP, %({"pattern":"x"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+        manager.check(Hcode::Tools::Names::GLOB, %({"pattern":"*"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
       ensure
         Hcode::Tools::PlanMode.plan_service = nil
         FileUtils.rm_rf(dir)
@@ -331,7 +331,7 @@ describe Hcode::Permission::Manager do
       Hcode::Tools::PlanMode.plan_service = nil
       manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
       events = [] of Hcode::Loop::Event
-      manager.check("Write", %({"path":"/tmp/x","content":"y"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
+      manager.check(Hcode::Tools::Names::WRITE, %({"path":"/tmp/x","content":"y"}), ->(e : Hcode::Loop::Event) { events << e }).should be_true
     end
   end
 end

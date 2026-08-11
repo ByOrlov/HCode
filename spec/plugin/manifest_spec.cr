@@ -93,7 +93,7 @@ describe Hcode::Plugin::ManifestParser do
       manifest = {
         "name"  => "hooks-plugin",
         "hooks" => [
-          {"event" => "PreToolUse", "matcher" => "Bash", "command" => "echo check"},
+          {"event" => "PreToolUse", "matcher" => Hcode::Tools::Names::BASH, "command" => "echo check"},
         ],
       }
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)

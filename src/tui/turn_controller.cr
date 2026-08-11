@@ -70,7 +70,7 @@ module Hcode
         # The tiny async hop lets the TurnEnd handler finish flipping phase
         # back to idle before we start the next turn (otherwise start_turn
         # would see agent_busy=true and re-queue the message).
-        spawn(same_thread: true) do
+        spawn do
           @dispatch_pending = false
           # Already persisted when enqueued — skip the duplicate write.
           start_turn(next_msg.text, persisted: true)
@@ -132,10 +132,10 @@ module Hcode
         begin
           parsed = JSON.parse(args)
           case name
-          when "Edit"
+          when Tools::Names::EDIT
             truncate_json_field(parsed, "old_string", "oldString")
             truncate_json_field(parsed, "new_string", "newString")
-          when "Write"
+          when Tools::Names::WRITE
             truncate_json_field(parsed, "content")
           end
           parsed.to_json

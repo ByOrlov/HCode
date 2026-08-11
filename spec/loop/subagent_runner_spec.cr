@@ -308,22 +308,22 @@ end
 describe Hcode::Loop::ProfileRegistry do
   it "builds a read-only registry for the explore profile" do
     registry = Hcode::Loop::ProfileRegistry.build("explore", Dir.current)
-    registry.get("Read").should_not be_nil
-    registry.get("Grep").should_not be_nil
-    registry.get("Glob").should_not be_nil
+    registry.get(Hcode::Tools::Names::READ).should_not be_nil
+    registry.get(Hcode::Tools::Names::GREP).should_not be_nil
+    registry.get(Hcode::Tools::Names::GLOB).should_not be_nil
     # explore has no file-editing tools and no Agent/Swarm delegation.
-    registry.get("Write").should be_nil
-    registry.get("Edit").should be_nil
-    registry.get("Agent").should be_nil
+    registry.get(Hcode::Tools::Names::WRITE).should be_nil
+    registry.get(Hcode::Tools::Names::EDIT).should be_nil
+    registry.get(Hcode::Tools::Names::AGENT).should be_nil
   end
 
   it "builds a full registry for the coder profile" do
     registry = Hcode::Loop::ProfileRegistry.build("coder", Dir.current)
-    registry.get("Read").should_not be_nil
-    registry.get("Write").should_not be_nil
-    registry.get("Edit").should_not be_nil
-    registry.get("Bash").should_not be_nil
-    registry.get("Agent").should_not be_nil
+    registry.get(Hcode::Tools::Names::READ).should_not be_nil
+    registry.get(Hcode::Tools::Names::WRITE).should_not be_nil
+    registry.get(Hcode::Tools::Names::EDIT).should_not be_nil
+    registry.get(Hcode::Tools::Names::BASH).should_not be_nil
+    registry.get(Hcode::Tools::Names::AGENT).should_not be_nil
   end
 
   it "raises for an unknown profile" do

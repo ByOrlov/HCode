@@ -35,6 +35,7 @@ require "./llm/fireworks_provider"
 require "./llm/together_provider"
 require "./llm/mock_provider"
 require "./tools/tool"
+require "./tools/names"
 require "./tools/registry"
 require "./tools/line_endings"
 require "./tools/sensitive"
@@ -1046,14 +1047,14 @@ module Hcode
       # progress panel above the editor. Returns nil if the tool isn't
       # registered (no TodoList in this agent) or the list is empty.
       app.on_fetch_todos = -> : Array({String, String})? do
-        todo_tool = agent.tools.get("TodoList")
+        todo_tool = agent.tools.get(Tools::Names::TODO_LIST)
         return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
         todos = t.todos
         return nil if todos.empty?
         todos.map { |todo| {todo.title, todo.status.to_s.downcase} }
       end
       app.on_clear_todos = -> : Nil do
-        todo_tool = agent.tools.get("TodoList")
+        todo_tool = agent.tools.get(Tools::Names::TODO_LIST)
         return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
         t.todos.clear
         nil
@@ -1304,7 +1305,7 @@ module Hcode
         ProfiledMemory.register("system_prompt", "system prompt",
           calc: -> { sp.profiled_bytes })
       end
-      todo_tool = tools.get("TodoList")
+      todo_tool = tools.get(Tools::Names::TODO_LIST)
       register_todo_profiler(todo_tool) if todo_tool.is_a?(Tools::TodoList)
       register_cron_profiler
       register_skill_profiler
@@ -1519,7 +1520,7 @@ module Hcode
 
       marker = failed ? "✗".colorize.fore(C_ERROR) : "●".colorize.fore(C_SUCCESS)
       label_c = failed ? C_ERROR : C_PRIMARY
-      header = name == "Bash" ? "Ran a command" : name
+      header = name == Tools::Names::BASH ? "Ran a command" : name
       puts " #{marker} #{header.colorize.fore(label_c).bold}"
 
       parsed = args.empty? ? nil : begin
@@ -1580,19 +1581,19 @@ module Hcode
     private def self.echo_tool_args(name : String, parsed : JSON::Any?) : Nil
       return if parsed.nil?
       case name
-      when "Bash"
+      when Tools::Names::BASH
         if cmd = parsed["command"]?.try(&.as_s?)
           puts "   #{"$ ".colorize.fore(C_SHELL)}#{cmd.colorize.fore(C_DIM).dim}"
         end
-      when "Read", "Write", "Edit"
+      when Tools::Names::READ, Tools::Names::WRITE, Tools::Names::EDIT
         if path = (parsed["path"]? || parsed["filePath"]?).try(&.as_s?)
           puts "   file: #{path}".colorize.fore(C_DIM).dim
         end
-      when "Glob"
+      when Tools::Names::GLOB
         if pat = parsed["pattern"]?.try(&.as_s?)
           puts "   pattern: #{pat}".colorize.fore(C_DIM).dim
         end
-      when "Grep"
+      when Tools::Names::GREP
         if pat = parsed["pattern"]?.try(&.as_s?)
           puts "   search: #{pat}".colorize.fore(C_DIM).dim
         end
