@@ -80,13 +80,18 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 ## सोर्स से बिल्ड करें
 
-यदि आप HCode को स्वयं बिल्ड करना पसंद करते हैं, तो आपको Crystal ≥ 1.14 चाहिए:
+यदि आप HCode को स्वयं बिल्ड करना पसंद करते हैं, तो आपको Crystal ≥ 1.14 और ripgrep (`rg`) चाहिए:
 
 ```sh
 # Crystal ≥ 1.14 इंस्टॉल करें — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # Debian/Ubuntu/Windows के लिए डॉक्स देखें
+
+# ripgrep इंस्टॉल करें (Grep और Glob टूल के लिए आवश्यक)
+brew install ripgrep            # macOS
+# sudo apt-get install ripgrep  # Debian/Ubuntu
+# sudo pacman -S ripgrep        # Arch
 
 # बिल्ड करें
 git clone https://github.com/ByOrlov/HCode

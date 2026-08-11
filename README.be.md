@@ -81,13 +81,18 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 ## Зборка з зыходнікаў
 
-Калі ты воліш збіраць HCode сам, табе патрэбны Crystal ≥ 1.14:
+Калі ты воліш збіраць HCode сам, табе патрэбны Crystal ≥ 1.14 і ripgrep (`rg`):
 
 ```sh
 # Устанаві Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # гл. дакументацыю для Debian/Ubuntu/Windows
+
+# Устанаві ripgrep (патрэбен для інструментаў Grep і Glob)
+brew install ripgrep            # macOS
+# sudo apt-get install ripgrep  # Debian/Ubuntu
+# sudo pacman -S ripgrep        # Arch
 
 # Зборка
 git clone https://github.com/ByOrlov/HCode

@@ -81,13 +81,18 @@ We looked hard at Rust, Go, and TypeScript. Each forced a trade-off we did not w
 
 ## Build from source
 
-If you prefer to build HCode yourself, you need Crystal ≥ 1.14:
+If you prefer to build HCode yourself, you need Crystal ≥ 1.14 and ripgrep (`rg`):
 
 ```sh
 # Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # see docs for Debian/Ubuntu/Windows
+
+# Install ripgrep (required by the Grep and Glob tools)
+brew install ripgrep          # macOS
+# sudo apt-get install ripgrep  # Debian/Ubuntu
+# sudo pacman -S ripgrep        # Arch
 
 # Build
 git clone https://github.com/ByOrlov/HCode

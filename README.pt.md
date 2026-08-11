@@ -81,13 +81,18 @@ Olhamos com atenção Rust, Go e TypeScript. Cada um nos obrigava a um compromis
 
 ## Compilação a partir do código-fonte
 
-Se você prefere compilar o HCode por conta própria, precisa do Crystal ≥ 1.14:
+Se você prefere compilar o HCode por conta própria, precisa do Crystal ≥ 1.14 e do ripgrep (`rg`):
 
 ```sh
 # Instale o Crystal ≥ 1.14 — https://crystal-lang.org/install/
 brew install crystal          # macOS
 # sudo pacman -S crystal      # Arch
 # veja a docs para Debian/Ubuntu/Windows
+
+# Instale o ripgrep (necessário para as ferramentas Grep e Glob)
+brew install ripgrep            # macOS
+# sudo apt-get install ripgrep  # Debian/Ubuntu
+# sudo pacman -S ripgrep        # Arch
 
 # Compilação
 git clone https://github.com/ByOrlov/HCode
