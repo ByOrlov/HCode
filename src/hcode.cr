@@ -544,13 +544,15 @@ module Hcode
     private def self.run_headless(prompt, agent, system_prompt, store, config, task_service, mcp_manager)
       store.append_simple("turn.prompt", "prompt", prompt)
 
-      Signal::INT.trap do
-        STDERR.puts "\nInterrupted."
-        agent.cancel
-        # Kill any background processes spawned during this headless run.
-        task_service.stop_all_on_exit("process interrupted")
-        mcp_manager.shutdown
-      end
+      {% if flag?(:unix) %}
+        Signal::INT.trap do
+          STDERR.puts "\nInterrupted."
+          agent.cancel
+          # Kill any background processes spawned during this headless run.
+          task_service.stop_all_on_exit("process interrupted")
+          mcp_manager.shutdown
+        end
+      {% end %}
 
       # Headless dispatcher: useful for CI/automation webhooks. StatusTracker
       # drives Working→Done around the single turn.

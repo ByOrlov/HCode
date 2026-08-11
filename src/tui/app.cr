@@ -345,25 +345,27 @@ module Hcode
         @terminal.refresh_size
         @run_turn_cb = run_turn
 
-        Signal::INT.trap do
-          if @agent_busy
-            @status = "Cancelling..."
-            @dirty = true
-            @on_cancel.try(&.call)
-          else
-            @running = false
-            # Move cursor to end and print newline before restoring
-            if @cursor_line > 0
-              print "\r"
+        {% if flag?(:unix) %}
+          Signal::INT.trap do
+            if @agent_busy
+              @status = "Cancelling..."
+              @dirty = true
+              @on_cancel.try(&.call)
+            else
+              @running = false
+              # Move cursor to end and print newline before restoring
+              if @cursor_line > 0
+                print "\r"
+              end
+              print "\n"
+              STDOUT.flush
+              @on_exit.try(&.call)
+              @terminal.restore!
+              print "\n"
+              exit(0)
             end
-            print "\n"
-            STDOUT.flush
-            @on_exit.try(&.call)
-            @terminal.restore!
-            print "\n"
-            exit(0)
           end
-        end
+        {% end %}
 
         {% if flag?(:unix) %}
           Signal::WINCH.trap do
