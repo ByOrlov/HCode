@@ -77,6 +77,69 @@ function Ensure-WindowsDeps($binPath) {
     }
 }
 
+# Installs ripgrep (rg.exe), required by the Grep and Glob tools. Tries
+# winget/choco first; if neither is available (or they fail), downloads
+# rg.exe directly from the ripgrep GitHub release into the install directory
+# so it sits next to hcode.exe and is found via PATH.
+function Ensure-Ripgrep($installDir) {
+    if (Get-Command rg -ErrorAction SilentlyContinue) {
+        Write-Info "ripgrep (rg) is available."
+        return
+    }
+
+    Write-Info "ripgrep (rg) not found — installing…"
+
+    # Try winget.
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Info "Trying: winget install BurntSushi.ripgrep.MSVC"
+        & winget install --id BurntSushi.ripgrep.MSVC --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Host
+        if (Get-Command rg -ErrorAction SilentlyContinue) {
+            Write-Info "ripgrep installed via winget."
+            return
+        }
+    }
+
+    # Try choco.
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Info "Trying: choco install ripgrep -y"
+        & choco install ripgrep -y 2>&1 | Out-Host
+        if (Get-Command rg -ErrorAction SilentlyContinue) {
+            Write-Info "ripgrep installed via choco."
+            return
+        }
+    }
+
+    # Fallback: download rg.exe from the latest ripgrep GitHub release and
+    # drop it next to hcode.exe so PATH picks it up.
+    Write-Info "Downloading rg.exe from ripgrep GitHub releases…"
+    try {
+        $apiUrl = "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest"
+        $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
+        $asset = $release.assets | Where-Object { $_.name -like "*x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
+        if (-not $asset) {
+            Write-Err "Could not find ripgrep Windows release asset."
+            Write-Err "Install ripgrep manually: https://github.com/BurntSushi/ripgrep#installation"
+            return
+        }
+        $rgZip = Join-Path $installDir "ripgrep-download.zip"
+        $extractDir = Join-Path $installDir "ripgrep-tmp"
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $rgZip -UseBasicParsing
+        Expand-Archive -Path $rgZip -DestinationPath $extractDir -Force
+        $rgExe = Get-ChildItem -Path $extractDir -Filter "rg.exe" -Recurse | Select-Object -First 1
+        if ($rgExe) {
+            Move-Item -Path $rgExe.FullName -Destination (Join-Path $installDir "rg.exe") -Force
+            Write-Info "Installed rg.exe to $installDir"
+        } else {
+            Write-Err "rg.exe not found in ripgrep archive."
+        }
+        Remove-Item $rgZip -ErrorAction SilentlyContinue
+        Remove-Item $extractDir -Recurse -ErrorAction SilentlyContinue
+    } catch {
+        Write-Err "Could not download ripgrep: $_"
+        Write-Err "Install ripgrep manually: https://github.com/BurntSushi/ripgrep#installation"
+    }
+}
+
 # --- Detect arch --------------------------------------------------------------
 $Arch = $env:PROCESSOR_ARCHITECTURE
 if ($Arch -eq 'AMD64' -or $Arch -eq 'x64') {
@@ -125,6 +188,11 @@ try {
     # install the dependencies: OpenSSL via winget/choco when available, then
     # always drop the pinned runtime DLL bundle next to the binary.
     Ensure-WindowsDeps $Dest
+
+    # ripgrep (rg.exe) — required by the Grep and Glob tools. Installed via
+    # winget/choco when available, otherwise downloaded directly from the
+    # ripgrep GitHub release into the install directory.
+    Ensure-Ripgrep $InstallDir
 
     # --- PATH -----------------------------------------------------------------
     $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')

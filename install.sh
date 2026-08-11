@@ -52,7 +52,8 @@ tar -xzf "${TMP}/${ASSET}" -C "$TMP"
 # --- Runtime dependencies -----------------------------------------------------
 # HCode links dynamically against OpenSSL (libssl/libcrypto), libyaml and pcre2.
 # They are part of Crystal's stdlib runtime and not declared in shard.yml, so we
-# make sure they are present via the platform package manager.
+# make sure they are present via the platform package manager. ripgrep (rg) is
+# also required by the Grep and Glob tools and is installed the same way.
 ensure_macos_deps() {
   command -v brew >/dev/null 2>&1 || {
     err "Homebrew not found. Install it from https://brew.sh, then:"
@@ -60,7 +61,7 @@ ensure_macos_deps() {
     return 0
   }
   local missing=()
-  for pkg in openssl@3 libyaml pcre2; do
+  for pkg in openssl@3 libyaml pcre2 ripgrep; do
     brew list "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
   done
   if [ "${#missing[@]}" -eq 0 ]; then
@@ -85,45 +86,64 @@ ensure_linux_deps() {
     local lib="${row%%|*}"
     { ldconfig -p 2>/dev/null || true; } | grep -q "$lib" || missing_libs+=("$row")
   done
-  if [ "${#missing_libs[@]}" -eq 0 ]; then
-    info "All runtime dependencies present."
-    return 0
-  fi
 
   local sudo=""
   if [ "$(id -u)" -ne 0 ]; then
     sudo="sudo"
   fi
 
-  if command -v apt-get >/dev/null 2>&1; then
-    local pkgs=()
-    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f2)); done
-    info "Installing missing packages via apt-get: ${pkgs[*]}"
-    $sudo apt-get update -qq
-    # shellcheck disable=SC2086
-    $sudo apt-get install -y $pkgs
-  elif command -v dnf >/dev/null 2>&1; then
-    local pkgs=()
-    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
-    info "Installing missing packages via dnf: ${pkgs[*]}"
-    # shellcheck disable=SC2086
-    $sudo dnf install -y $pkgs
-  elif command -v yum >/dev/null 2>&1; then
-    local pkgs=()
-    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
-    info "Installing missing packages via yum: ${pkgs[*]}"
-    # shellcheck disable=SC2086
-    $sudo yum install -y $pkgs
-  elif command -v pacman >/dev/null 2>&1; then
-    local pkgs=()
-    for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f4)); done
-    info "Installing missing packages via pacman: ${pkgs[*]}"
-    # shellcheck disable=SC2086
-    $sudo pacman -S --noconfirm --needed $pkgs
+  if [ "${#missing_libs[@]}" -eq 0 ]; then
+    info "All runtime libraries present."
   else
-    err "Could not detect a supported package manager."
-    err "Please install OpenSSL, libyaml and pcre2 manually:"
-    err "  ${missing_libs[*]}"
+    if command -v apt-get >/dev/null 2>&1; then
+      local pkgs=()
+      for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f2)); done
+      info "Installing missing packages via apt-get: ${pkgs[*]}"
+      $sudo apt-get update -qq
+      # shellcheck disable=SC2086
+      $sudo apt-get install -y $pkgs
+    elif command -v dnf >/dev/null 2>&1; then
+      local pkgs=()
+      for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
+      info "Installing missing packages via dnf: ${pkgs[*]}"
+      # shellcheck disable=SC2086
+      $sudo dnf install -y $pkgs
+    elif command -v yum >/dev/null 2>&1; then
+      local pkgs=()
+      for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f3)); done
+      info "Installing missing packages via yum: ${pkgs[*]}"
+      # shellcheck disable=SC2086
+      $sudo yum install -y $pkgs
+    elif command -v pacman >/dev/null 2>&1; then
+      local pkgs=()
+      for row in "${missing_libs[@]}"; do pkgs+=($(echo "$row" | cut -d'|' -f4)); done
+      info "Installing missing packages via pacman: ${pkgs[*]}"
+      # shellcheck disable=SC2086
+      $sudo pacman -S --noconfirm --needed $pkgs
+    else
+      err "Could not detect a supported package manager."
+      err "Please install OpenSSL, libyaml and pcre2 manually:"
+      err "  ${missing_libs[*]}"
+    fi
+  fi
+
+  # ripgrep (rg) — standalone binary required by the Grep and Glob tools.
+  # Not a shared library, so it needs its own `command -v` detection.
+  if command -v rg >/dev/null 2>&1; then
+    info "ripgrep (rg) is available."
+  else
+    info "ripgrep (rg) not found — installing…"
+    if command -v apt-get >/dev/null 2>&1; then
+      $sudo apt-get update -qq
+      $sudo apt-get install -y ripgrep
+    elif command -v dnf >/dev/null 2>&1; then
+      $sudo dnf install -y ripgrep
+    elif command -v pacman >/dev/null 2>&1; then
+      $sudo pacman -S --noconfirm --needed ripgrep
+    else
+      err "Could not install ripgrep automatically."
+      err "Install it manually: https://github.com/BurntSushi/ripgrep#installation"
+    fi
   fi
 }
 
