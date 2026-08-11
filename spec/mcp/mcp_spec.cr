@@ -224,7 +224,7 @@ module Hcode
                   "zai-web-search": {
                     "type": "http",
                     "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
-                    "toolAliases": { "web_search_prime": Hcode::Tools::Names::WEB_SEARCH }
+                    "toolAliases": { "web_search_prime": #{Hcode::Tools::Names::WEB_SEARCH.inspect} }
                   }
                 }
               }
