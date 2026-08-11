@@ -55,6 +55,18 @@ module Hcode
             end
           when .escape?, .ctrl_d?
             back_setup_step
+          when .paste?
+            # Bracketed paste: insert the text into the editor, same logic as
+            # the normal input handler. Without this, pasting an API key into
+            # the setup wizard silently does nothing.
+            if text = key.text
+              paste_lines = text.count('\n') + 1
+              if paste_lines > 10 || text.size > 1000
+                @editor.insert_paste_marker(text, paste_lines)
+              else
+                @editor.insert_text(text)
+              end
+            end
           else
             @editor.handle_input(key)
           end
