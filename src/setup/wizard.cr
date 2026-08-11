@@ -127,6 +127,9 @@ module Hcode
         "zai" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
           c.zai_api_key = k; c.zai_endpoint = ep || ""; c.zai_model = m || ""
         },
+        "zai-coding-plan" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
+          c.zai_api_key = k; c.zai_coding_plan_endpoint = ep || ""; c.zai_coding_plan_model = m || ""
+        },
         "deepseek" => ->(c : Config::Config, k : String, ep : String?, m : String?) {
           c.deepseek_api_key = k; c.deepseek_endpoint = ep || ""; c.deepseek_model = m || ""
         },

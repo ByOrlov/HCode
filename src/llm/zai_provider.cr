@@ -70,7 +70,9 @@ module Hcode
 
     Provider.register("zai-coding-plan", "Z.AI / Zhipu — Coding Plan subscription",
       label: "Z.AI / Zhipu — Coding Plan", needs_key: true,
-      hidden: true) do |config, _|
+      default_endpoint: "https://api.z.ai/api/coding/paas/v4",
+      default_model: "glm-5.2",
+      key_hint: "Get a key at https://z.ai") do |config, _|
       if config.zai_api_key.empty?
         raise ProviderConfigError.new(
           "No Z.AI credentials found. Set the ZAI_API_KEY or ZHIPU_API_KEY environment variable.")
