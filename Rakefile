@@ -15,11 +15,24 @@ def windows?
   RUBY_PLATFORM =~ /mingw|mswin|cygwin/i
 end
 
+# Locate a Visual Studio installation via vswhere. Returns the installation
+# path (forward slashes) or nil.
+def find_vs_install
+  vswhere = [
+    "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe",
+    "C:/Program Files/Microsoft Visual Studio/Installer/vswhere.exe",
+  ].find { |p| File.file?(p) }
+  return nil unless vswhere
+  install_path = `"#{vswhere}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`.strip
+  return nil if install_path.empty?
+  install_path.tr("\\", "/")
+end
+
 # Locate an MSVC cl.exe on Windows. Crystal uses MSVC as its native toolchain,
 # so the bridge must be compiled with cl.exe too — mixing a MinGW-compiled
 # archive with the MSVC link step causes C-runtime symbol mismatches.
 def find_msvc_cl
-  # Already on PATH?
+  # Already on PATH (Developer Command Prompt)?
   exts = ENV["PATHEXT"] ? ENV["PATHEXT"].split(";") : [".EXE", ".BAT", ".CMD"]
   ENV["PATH"].split(File::PATH_SEPARATOR).each do |dir|
     exts.each do |ext|
@@ -28,15 +41,28 @@ def find_msvc_cl
     end
   end
   # Locate via vswhere (covers "Developer Command Prompt not open" cases).
-  vswhere = [
-    "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe",
-    "C:/Program Files/Microsoft Visual Studio/Installer/vswhere.exe",
-  ].find { |p| File.file?(p) }
-  return nil unless vswhere
-  install_path = `"#{vswhere}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`.strip
-  return nil if install_path.empty?
-  install_path = install_path.tr("\\", "/")
+  install_path = find_vs_install
+  return nil unless install_path
   Dir.glob("#{install_path}/VC/Tools/MSVC/*/bin/Hostx64/x64/cl.exe").sort.last
+end
+
+# Set up the MSVC environment (INCLUDE, LIB, PATH) by running vcvarsall.bat.
+# When cl.exe is launched from a plain cmd.exe the SDK headers/libs are not on
+# the default search paths, so #include <stdio.h> fails with C1083.
+# Idempotent: no-op if INCLUDE is already set (Developer Command Prompt).
+def setup_msvc_environment
+  return if ENV["INCLUDE"] && !ENV["INCLUDE"].empty?
+  install_path = find_vs_install
+  return unless install_path
+  vcvarsall = "#{install_path}/VC/Auxiliary/Build/vcvarsall.bat"
+  return unless File.file?(vcvarsall)
+  # Run vcvarsall and dump the resulting environment, then merge it in.
+  output = `cmd /c "#{vcvarsall}" x64 >nul 2>nul && set`
+  output.each_line do |line|
+    key, val = line.chomp.split("=", 2)
+    next unless key && val
+    ENV[key] = val
+  end
 end
 
 # Full linker flags for miniaudio: the object/archive path plus platform-specific
@@ -58,6 +84,7 @@ end
 
 def build_miniaudio_bridge(release: false)
   if windows?
+    setup_msvc_environment
     cl = find_msvc_cl
     unless cl
       abort "Could not find MSVC cl.exe. Open the \"Developer Command Prompt for VS\" " \
