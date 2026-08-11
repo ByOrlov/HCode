@@ -11,23 +11,70 @@ end
 MINIAUDIO_DIR = File.expand_path("vendor/miniaudio", __dir__)
 MINIAUDIO_LIB = File.join(MINIAUDIO_DIR, "libminiaudio_bridge.a")
 
-# Platform-specific linker flags for miniaudio. On Linux it dlopens the audio
-# backend (PulseAudio/ALSA) at runtime, so only -ldl/-lpthread/-lm are needed.
+def windows?
+  RUBY_PLATFORM =~ /mingw|mswin|cygwin/i
+end
+
+# Locate an MSVC cl.exe on Windows. Crystal uses MSVC as its native toolchain,
+# so the bridge must be compiled with cl.exe too — mixing a MinGW-compiled
+# archive with the MSVC link step causes C-runtime symbol mismatches.
+def find_msvc_cl
+  # Already on PATH?
+  exts = ENV["PATHEXT"] ? ENV["PATHEXT"].split(";") : [".EXE", ".BAT", ".CMD"]
+  ENV["PATH"].split(File::PATH_SEPARATOR).each do |dir|
+    exts.each do |ext|
+      candidate = File.join(dir, "cl#{ext}")
+      return candidate if File.file?(candidate) && File.executable?(candidate)
+    end
+  end
+  # Locate via vswhere (covers "Developer Command Prompt not open" cases).
+  vswhere = [
+    "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe",
+    "C:/Program Files/Microsoft Visual Studio/Installer/vswhere.exe",
+  ].find { |p| File.file?(p) }
+  return nil unless vswhere
+  install_path = `"#{vswhere}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`.strip
+  return nil if install_path.empty?
+  install_path = install_path.tr("\\", "/")
+  Dir.glob("#{install_path}/VC/Tools/MSVC/*/bin/Hostx64/x64/cl.exe").sort.last
+end
+
+# Full linker flags for miniaudio: the object/archive path plus platform-specific
+# backend libraries. On Linux the backend (PulseAudio/ALSA) is dlopened at
+# runtime, so only -ldl/-lpthread/-lm are needed.
 def miniaudio_link_flags
-  case RUBY_PLATFORM
-  when /darwin/
-    "-framework CoreAudio -framework AudioToolbox -framework CoreFoundation"
+  if windows?
+    "#{File.join(MINIAUDIO_DIR, "miniaudio_bridge.obj")} winmm.lib ole32.lib ksuser.lib"
   else
-    "-ldl -lpthread -lm"
+    extra = case RUBY_PLATFORM
+            when /darwin/
+              "-framework CoreAudio -framework AudioToolbox -framework CoreFoundation"
+            else
+              "-ldl -lpthread -lm"
+            end
+    "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{extra}"
   end
 end
 
 def build_miniaudio_bridge(release: false)
-  cflags = release ? "-O2" : "-O0 -g"
-  sh "cc -c #{cflags} -I#{MINIAUDIO_DIR} " \
-     "#{File.join(MINIAUDIO_DIR, "miniaudio_bridge.c")} " \
-     "-o #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
-  sh "ar rcs #{MINIAUDIO_LIB} #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
+  if windows?
+    cl = find_msvc_cl
+    unless cl
+      abort "Could not find MSVC cl.exe. Open the \"Developer Command Prompt for VS\" " \
+            "or install Visual Studio Build Tools with the \"Desktop development with C++\" workload."
+    end
+    obj = File.join(MINIAUDIO_DIR, "miniaudio_bridge.obj")
+    rm_f Dir.glob("#{MINIAUDIO_DIR}/miniaudio_bridge.{o,a,obj,lib}")
+    opt = release ? "-O2" : "-Od -Z7"
+    sh "\"#{cl}\" -nologo #{opt} -c -I\"#{MINIAUDIO_DIR}\" " \
+       "\"#{File.join(MINIAUDIO_DIR, "miniaudio_bridge.c")}\" -Fo\"#{obj}\""
+  else
+    cflags = release ? "-O2" : "-O0 -g"
+    sh "cc -c #{cflags} -I#{MINIAUDIO_DIR} " \
+       "#{File.join(MINIAUDIO_DIR, "miniaudio_bridge.c")} " \
+       "-o #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
+    sh "ar rcs #{MINIAUDIO_LIB} #{File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")}"
+  end
 end
 
 # Print a blue "building X" banner before each build step.
@@ -37,11 +84,12 @@ end
 
 def build_hcode(output = "hcode", release: false)
   build_miniaudio_bridge(release: release)
-  link_flags = "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{miniaudio_link_flags}"
+  link_flags = miniaudio_link_flags
   flags = ["--warnings none", "--no-color"]
   flags << "--release" if release
   flags << "--link-flags \"#{link_flags}\""
-  sh "HCODE_VERSION=#{hcode_build_version} crystal build src/hcode.cr -o #{output} #{flags.join(' ')}"
+  ENV["HCODE_VERSION"] = hcode_build_version
+  sh "crystal build src/hcode.cr -o #{output} #{flags.join(' ')}"
 end
 
 desc "Build the hcode binary"
@@ -114,7 +162,7 @@ task :run => "run:default"
 desc "Run the test suite"
 task :spec do
   build_miniaudio_bridge
-  link_flags = "-L#{MINIAUDIO_DIR} -lminiaudio_bridge #{miniaudio_link_flags}"
+  link_flags = miniaudio_link_flags
   sh "crystal spec --warnings none --no-color --link-flags \"#{link_flags}\""
 end
 
@@ -208,6 +256,5 @@ end
 desc "Remove build artifacts"
 task :clean do
   rm_f "hcode"
-  rm_f File.join(MINIAUDIO_DIR, "miniaudio_bridge.o")
-  rm_f MINIAUDIO_LIB
+  rm_f Dir.glob("#{MINIAUDIO_DIR}/miniaudio_bridge.{o,a,obj,lib}")
 end
