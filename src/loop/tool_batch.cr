@@ -191,7 +191,7 @@ module Hcode
           # tooling observe completed tool calls.
           if engine = @hooks
             event_type = result.is_error? ? "PostToolUseFailure" : "PostToolUse"
-            spawn(same_thread: true) do
+            spawn do
               engine.trigger(event_type, tc.name,
                 {"tool_name"   => JSON::Any.new(tc.name),
                  "tool_input"  => JSON.parse(tc.arguments),

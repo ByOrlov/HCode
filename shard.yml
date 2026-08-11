@@ -4,7 +4,7 @@ version: 0.1.0
 authors:
   - Oleg Orlov <orelcokolov@gmail.com>
 
-crystal: 1.14.0
+crystal: 1.21.0
 
 license: GPL-2.0-or-later
 
