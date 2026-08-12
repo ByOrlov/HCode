@@ -78,8 +78,11 @@ module Hcode
       end
 
       private def truncate_preview(text : String) : String
-        return text if text.size <= 40
-        "#{text[0...40]}..."
+        # Collapse newlines/tabs so the preview stays on a single line in the
+        # queue pane (pasted text may contain embedded line breaks).
+        flat = text.gsub(/[\r\n]+/, " ").strip
+        return flat if flat.size <= 40
+        "#{flat[0...40]}..."
       end
 
       # Public entry point for external systems (cron scheduler, background-task
