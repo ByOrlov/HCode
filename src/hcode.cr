@@ -114,6 +114,11 @@ require "./prompt/system_prompt"
 require "./session/store"
 require "./session/index"
 require "./session/lifecycle"
+require "./acp/json_rpc"
+require "./acp/event_translator"
+require "./acp/approval"
+require "./acp/session"
+require "./acp/server"
 require "./setup/wizard"
 require "./tui/terminal"
 require "./tui/char_width"
@@ -182,6 +187,11 @@ module Hcode
     end
 
     def self.run(argv : Array(String)) : Nil
+      # Subcommand dispatch: `hcode acp` starts the ACP server for IDE integration.
+      if argv.size > 0 && argv[0] == "acp"
+        return run_acp(argv[1..])
+      end
+
       prompt = nil
       tui_prompt = nil
       work_dir = Dir.current
@@ -655,7 +665,48 @@ module Hcode
       end
     end
 
-    # Run the interactive setup wizard inside a minimal TUI. The wizard collects
+    # Start the ACP (Agent Client Protocol) server for IDE integration.
+    # Communicates with ACP clients (Zed, JetBrains, Neovim, etc.) over
+    # JSON-RPC on stdin/stdout. See `src/acp/` and `ACP-Plan.md`.
+    private def self.run_acp(rest_argv : Array(String)) : Nil
+      # Handle --login flag (terminal-auth pivot)
+      if rest_argv.includes?("--login")
+        config = Config::Config.load
+        Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
+        config.ensure_hcode_home
+
+        unless config.provider_name && config.provider_configured?
+          if STDIN.tty?
+            run_setup_wizard(config)
+          else
+            STDERR.puts Hcode.t("errors.no_provider")
+            exit(2)
+          end
+        end
+        # After login/setup, exit — the IDE will re-invoke without --login
+        return
+      end
+
+      config = Config::Config.load
+      Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
+      config.ensure_hcode_home
+
+      # Provider gate
+      unless config.provider_name && config.provider_configured?
+        STDERR.puts Hcode.t("errors.no_provider")
+        STDERR.puts ""
+        STDERR.puts Hcode.t("errors.setup_hint")
+        exit(2)
+      end
+
+      home = ENV["HOME"]? || "/tmp"
+      oauth_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
+      oauth = LLM::OAuthCredentials.load(oauth_path)
+
+      server = Acp::Server.new(config, home, oauth)
+      server.run
+    end
+
     # the provider choice and credentials, writes them to config.json, then
     # returns so the caller can build the real provider and proceed.
     # Returns true if the wizard completed and wrote a provider to `config`,
