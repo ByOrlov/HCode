@@ -240,13 +240,13 @@ module Hcode
         end
         case arg
         when "off"
-          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Off
+          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Off))
           emit_to_log(Message.new("system", "Sudo mode: off (sudo commands disallowed)"))
         when "request"
-          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Request
+          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Request))
           emit_to_log(Message.new("system", "Sudo mode: request (ask before each sudo command)"))
         when "always"
-          Tools::Bash.sudo_mode = Tools::Bash::SudoMode::Always
+          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Always))
           emit_to_log(Message.new("system", "Sudo mode: always (sudo commands allowed)"))
         else
           emit_to_log(Message.new("error", "Unknown sudo mode: #{args}. Use: off, request, or always."))

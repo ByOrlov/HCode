@@ -36,40 +36,57 @@ module Hcode
         Deny
       end
 
-      @@sudo_mode : SudoMode = SudoMode::Request
-      @@sudo_approval : (String -> SudoApprovalChoice)?
+      # Sudo permission state is per-instance: subagents (which build their
+      # own Bash) must not inherit the parent's mode, and multiple sessions in
+      # one process must not share it. Defaults to Off — sudo commands are
+      # disallowed until the host (TUI `/sudo`, or a programmatic caller)
+      # raises the mode.
+      @sudo_mode : SudoMode = SudoMode::Off
+      @sudo_approval : (String -> SudoApprovalChoice)?
+      @terminal_exec : TerminalExecService?
 
-      def self.sudo_mode=(mode : SudoMode) : Nil
-        @@sudo_mode = mode
+      def sudo_mode=(mode : SudoMode) : Nil
+        @sudo_mode = mode
       end
 
-      def self.sudo_mode : SudoMode
-        @@sudo_mode
+      def sudo_mode : SudoMode
+        @sudo_mode
       end
 
-      def self.sudo_approval=(cb : (String -> SudoApprovalChoice)?) : Nil
-        @@sudo_approval = cb
+      def sudo_approval=(cb : (String -> SudoApprovalChoice)?) : Nil
+        @sudo_approval = cb
+      end
+
+      def sudo_approval : (String -> SudoApprovalChoice)?
+        @sudo_approval
       end
 
       # Injected terminal-exec bridge. When set and a command is detected as
       # requiring elevated privileges (sudo), the command is routed through this
       # service instead of the normal piped execution path. nil → sudo commands
       # fall back to the normal path (stdin closed, sudo will fail with
-      # "a terminal is required to read the password").
-      @@terminal_exec : TerminalExecService?
-
-      def self.terminal_exec=(svc : TerminalExecService?) : Nil
-        @@terminal_exec = svc
+      # "a terminal is required to read the password"). Wired only by the TUI.
+      def terminal_exec=(svc : TerminalExecService?) : Nil
+        @terminal_exec = svc
       end
 
-      def self.terminal_exec : TerminalExecService?
-        @@terminal_exec
+      def terminal_exec : TerminalExecService?
+        @terminal_exec
       end
 
       def initialize(@work_dir : String = Dir.current,
                      @task_service : TaskService? = nil,
                      @session_dir : String? = nil,
                      @delivery : (String -> Nil)? = nil)
+        @sudo_approval = nil
+        @terminal_exec = nil
+      end
+
+      # Late-injected delivery callback (TUI pumps background-completion
+      # notifications into the active turn). Set after registration so the
+      # same Bash instance serves both headless (nil) and interactive runs.
+      def delivery=(callback : (String -> Nil)?) : Nil
+        @delivery = callback
       end
 
       def name : String
@@ -110,6 +127,26 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
       end
 
       def parameters : JSON::Any
+        # Background-related params are advertised only when a TaskService is
+        # wired, so the model never sees run_in_background for an agent that
+        # cannot honour it (e.g. subagents). The runtime guard in `execute`
+        # remains as a defence-in-depth check.
+        bg_params = if @task_service
+                      %(
+            "run_in_background": {
+              "type": "boolean",
+              "default": false,
+              "description": "Run the command in the background and return immediately with a task_id. The full output is streamed to a file; use TaskOutput to read it and TaskStop to cancel. Completion is delivered as a notification."
+            },
+            "disable_timeout": {
+              "type": "boolean",
+              "default": false,
+              "description": "When true and run_in_background is true, the background process runs with no timeout. Only effective for background tasks."
+            }
+          )
+                    else
+                      ""
+                    end
         JSON.parse(%({
           "type": "object",
           "properties": {
@@ -129,17 +166,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
             "description": {
               "type": "string",
               "description": "A short description of what this command does. Shown in the approval UI."
-            },
-            "run_in_background": {
-              "type": "boolean",
-              "default": false,
-              "description": "Run the command in the background and return immediately with a task_id. The full output is streamed to a file; use TaskOutput to read it and TaskStop to cancel. Completion is delivered as a notification."
-            },
-            "disable_timeout": {
-              "type": "boolean",
-              "default": false,
-              "description": "When true and run_in_background is true, the background process runs with no timeout. Only effective for background tasks."
-            }
+            }#{bg_params.empty? ? "" : ", #{bg_params}"}
           },
           "required": ["command"]
         }))
@@ -183,7 +210,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
           unless sudo_allowed?(command)
             return ToolResult.error("sudo disallowed for agent. Use /sudo always or /sudo request to enable.")
           end
-          if svc = @@terminal_exec
+          if svc = @terminal_exec
             return execute_in_terminal(svc, command, effective_cwd, spawn_env, timeout_s)
           end
         end
@@ -246,18 +273,18 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
       end
 
       private def sudo_allowed?(command : String) : Bool
-        case @@sudo_mode
+        case @sudo_mode
         in SudoMode::Off
           false
         in SudoMode::Always
           true
         in SudoMode::Request
-          if cb = @@sudo_approval
+          if cb = @sudo_approval
             case cb.call(command)
             in SudoApprovalChoice::AllowOnce
               true
             in SudoApprovalChoice::AlwaysAllow
-              @@sudo_mode = SudoMode::Always
+              @sudo_mode = SudoMode::Always
               true
             in SudoApprovalChoice::Deny
               false
@@ -642,7 +669,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
     # Bridge for executing commands in a real terminal (alt screen + cooked
     # termios) so programs that read from /dev/tty (sudo, ssh, …) can prompt
     # for passwords naturally. The TUI provides a concrete implementation
-    # wired via `Bash.terminal_exec=`. When nil, sudo commands fall back to
+    # wired via `Bash#terminal_exec=`. When nil, sudo commands fall back to
     # the normal piped path (which will fail for password prompts).
     abstract class TerminalExecService
       abstract def run(command : String, cwd : String?,

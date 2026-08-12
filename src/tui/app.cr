@@ -302,6 +302,10 @@ module Hcode
       # Memory profiler registry backing the `/memory` command. Wired in
       # `run_interactive` after the long-lived collections are created.
       property profiler : ProfiledMemory? = nil
+      # The active Bash tool instance, wired in `run_interactive`. Lets `/sudo`
+      # and the status panel read/mutate the per-agent sudo mode (now an
+      # instance field) instead of the former class-level global.
+      property bash_tool : Tools::Bash? = nil
 
       def initialize(
         @terminal : Terminal = Terminal.current,

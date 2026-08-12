@@ -300,7 +300,10 @@ module Hcode
       memory.max_context_tokens = config.max_context_tokens
 
       tools = Tools::Registry.new
-      tools.register(Tools::Bash.new(work_dir))
+      # Bash is registered later, once the TaskService + session dir are
+      # available, so both headless and interactive paths get the same
+      # fully-wired instance (background execution, sudo bridges added by
+      # the TUI afterwards).
       tools.register(Tools::Read.new(work_dir))
       tools.register(Tools::Write.new(work_dir))
       tools.register(Tools::Edit.new(work_dir))
@@ -408,6 +411,13 @@ module Hcode
 
       task_service = Hcode::Tools::InMemoryTaskService.new(store)
       Hcode::Tools::Task.service = task_service
+
+      # Register Bash with the shared TaskService + session dir so background
+      # execution works in both headless and interactive modes. The TUI adds
+      # the delivery/terminal/sudo-approval bridges to this same instance
+      # later; headless runs leave them nil.
+      bash_tool = Tools::Bash.new(work_dir, task_service, store.session_dir)
+      tools.register(bash_tool)
 
       goal_service = Hcode::Tools::AgentGoalService.new
       Hcode::Tools::Goal.service = goal_service
@@ -795,16 +805,18 @@ module Hcode
       # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
       Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
 
-      # Wire the Bash tool's terminal-exec bridge so sudo commands run in a
-      # real terminal (alt screen + cooked termios) where /dev/tty is available.
-      Hcode::Tools::Bash.terminal_exec = AppTerminalExecService.new(app)
-
-      # Wire the sudo approval callback: when SudoMode is Request, the Bash
-      # tool calls this to ask the user before running a sudo command. Reuses
-      # the existing approval panel (y/n/s prompt).
-      Hcode::Tools::Bash.sudo_approval = ->(command : String) do
+      # Wire the Bash tool's TUI-only bridges onto the instance registered in
+      # `run`. terminal_exec routes sudo commands into a real terminal (alt
+      # screen + cooked termios) where /dev/tty is available; sudo_approval is
+      # the callback invoked under SudoMode::Request to ask the user before
+      # running a sudo command (reuses the y/n/s approval panel). The instance
+      # is shared with the headless path; these bridges are TUI-only.
+      bash_tool = agent.tools.get(Tools::Names::BASH).as(Tools::Bash)
+      bash_tool.terminal_exec = AppTerminalExecService.new(app)
+      bash_tool.sudo_approval = ->(command : String) do
         app.request_sudo_approval(command)
       end
+      app.bash_tool = bash_tool
 
       # Plan-mode wiring: instantiate the per-session plan service, expose its
       # permission mode, and bridge ExitPlanMode's interactive review to the
@@ -845,14 +857,10 @@ module Hcode
       # fresh turn when idle.
       delivery = ->(text : String) { app.deliver_external_prompt(text) }
 
-      # Re-register the Bash tool with task-service + delivery wiring so
-      # run_in_background=true spawns a tracked process instead of erroring.
-      app_work_dir = work_dir
-      ts_value = ts
-      delivery_value = delivery
-      session_dir_value = store.session_dir
-      bash_tool = Hcode::Tools::Bash.new(app_work_dir, ts_value, session_dir_value, delivery_value)
-      agent.tools.register(bash_tool)
+      # Attach the TUI delivery callback to the already-registered Bash tool so
+      # background-completion notifications land in the active turn. The
+      # TaskService/session_dir were wired in `run`.
+      bash_tool.delivery = delivery
 
       # Create + start the cron scheduler. Reconcile any persisted tasks on
       # resume; missed fires are coalesced on the next tick.

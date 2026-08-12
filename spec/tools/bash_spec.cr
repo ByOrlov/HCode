@@ -222,4 +222,49 @@ describe Hcode::Tools::Bash do
       stopped.try(&.status.terminal?).should be_true
     end
   end
+
+  describe "per-instance sudo state" do
+    it "defaults sudo_mode to Off" do
+      bash = Hcode::Tools::Bash.new("/tmp")
+      bash.sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Off)
+    end
+
+    it "isolates sudo_mode between instances (subagents don't inherit parent)" do
+      parent = Hcode::Tools::Bash.new("/tmp")
+      parent.sudo_mode = Hcode::Tools::Bash::SudoMode::Always
+
+      child = Hcode::Tools::Bash.new("/tmp")
+      child.sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Off)
+    end
+
+    it "holds terminal_exec and sudo_approval per instance" do
+      a = Hcode::Tools::Bash.new("/tmp")
+      b = Hcode::Tools::Bash.new("/tmp")
+
+      a.terminal_exec.should be_nil
+      a.sudo_approval.should be_nil
+      b.terminal_exec.should be_nil
+
+      a.sudo_approval = ->(_cmd : String) { Hcode::Tools::Bash::SudoApprovalChoice::Deny }
+      a.sudo_approval.should_not be_nil
+      b.sudo_approval.should be_nil
+    end
+  end
+
+  describe "background-parameter schema" do
+    it "omits run_in_background when no TaskService is wired" do
+      bash = Hcode::Tools::Bash.new("/tmp")
+      props = bash.parameters["properties"].as_h
+      props.has_key?("run_in_background").should be_false
+      props.has_key?("disable_timeout").should be_false
+    end
+
+    it "advertises run_in_background when a TaskService is wired" do
+      task_svc = Hcode::Tools::InMemoryTaskService.new
+      bash = Hcode::Tools::Bash.new("/tmp", task_svc, "/tmp")
+      props = bash.parameters["properties"].as_h
+      props.has_key?("run_in_background").should be_true
+      props.has_key?("disable_timeout").should be_true
+    end
+  end
 end

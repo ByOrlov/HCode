@@ -617,7 +617,7 @@ module Hcode
                  when @permission_list then @permission_mode
                  when @effort_list     then @on_get_effort.try(&.call) || "off"
                  when @theme_list      then @theme.name
-                 when @sudo_list       then Tools::Bash.sudo_mode.to_s.downcase
+                 when @sudo_list       then (@bash_tool.try(&.sudo_mode) || Tools::Bash::SudoMode::Off).to_s.downcase
                  else                       ""
                  end
 

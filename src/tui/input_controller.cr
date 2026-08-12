@@ -980,7 +980,7 @@ module Hcode
 
       private def open_sudo_selector : Nil
         @sudo_list.show("Select sudo mode", SUDO_MODES)
-        current = Tools::Bash.sudo_mode.to_s.downcase
+        current = (@bash_tool.try(&.sudo_mode) || Tools::Bash::SudoMode::Off).to_s.downcase
         @sudo_list.selected = SUDO_MODES.index(current) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -1000,7 +1000,7 @@ module Hcode
                  when "always" then Tools::Bash::SudoMode::Always
                  else               Tools::Bash::SudoMode::Request
                  end
-          Tools::Bash.sudo_mode = mode
+          @bash_tool.try(&.sudo_mode=(mode))
           emit_to_log(Message.new("system", "Sudo mode: #{mode_str}"))
         when .escape?
           @sudo_list.hide
