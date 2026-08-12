@@ -287,31 +287,33 @@ module Hcode
 
         active_lines << render_footer(cols)
 
+        # Sync-bug detection runs unconditionally (not just under @debug_zones)
+        # so the telemetry tracker can sample SyncBugsCount even when the debug
+        # overlay is hidden. Detect a missing-line desync: the combined coverage
+        # (LogZone flushed + pending + ActiveZone size) must never shrink — when
+        # the active zone drops faster than the log grows (counting pending
+        # lines not yet flushed), a line was lost.
+        active_zone_size_dbg = active_lines.size + 1
+        pending_dbg = log_lines.size - @log_zone.flushed
+        log_zone_full = @log_zone.flushed + pending_dbg
+        curr_state = {log_zone_full, active_zone_size_dbg}
+        if prev = @sync_prev_states.last?
+          @sync_bugs_count &+= 1 if prev[0] + prev[1] > curr_state[0] + curr_state[1]
+        end
+        @sync_prev_states << curr_state
+        @sync_prev_states.shift if @sync_prev_states.size > 2
+
         if @debug_zones
           rows = @terminal.rows
-          active_zone_size = active_lines.size + 1
-          total = log_lines.size + active_zone_size
-          pending = log_lines.size - @log_zone.flushed
-
-          # Detect a missing-line desync: the combined coverage
-          # (LogZone flushed + pending + ActiveZone size) must never shrink —
-          # when the active zone drops faster than the log grows (counting
-          # pending lines not yet flushed), a line was lost.
-          log_zone_full = @log_zone.flushed + pending
-          curr_state = {log_zone_full, active_zone_size}
-          if prev = @sync_prev_states.last?
-            @sync_bugs_count &+= 1 if prev[0] + prev[1] > curr_state[0] + curr_state[1]
-          end
-          @sync_prev_states << curr_state
-          @sync_prev_states.shift if @sync_prev_states.size > 2
+          total = log_lines.size + active_zone_size_dbg
 
           active_lines << String.build do |s|
             s << ANSI.color(@theme.colors.dim, nil)
             s << "Msgs: #{@messages.size}, "
             s << "LogZone: #{@log_zone.flushed}/#{log_lines.size}"
-            s << (pending > 0 ? " (pending: #{pending})" : "")
+            s << (pending_dbg > 0 ? " (pending: #{pending_dbg})" : "")
             s << ", "
-            s << "ActiveZone: #{active_zone_size}, "
+            s << "ActiveZone: #{active_zone_size_dbg}, "
             s << "RenderQuery: #{@render_pending} (#{@render_ms}ms), "
             s << "Cache: #{@log_cache_dirty ? "dirty" : "hit"}"
             s << ", "

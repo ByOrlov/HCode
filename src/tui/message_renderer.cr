@@ -88,6 +88,12 @@ module Hcode
               if ram = msg.ram_line
                 lines << "#{ANSI.color(@theme.colors.dim, nil)}#{ANSI.italic}  #{ram}#{ANSI.reset}"
               end
+              # Telemetry line: rendered in yellow (bold) right under the RAM
+              # line so render-quality regressions are visually attached to the
+              # tool call that triggered them.
+              if tl = msg.telemetry_line
+                lines << "#{ANSI.color(@theme.colors.telemetry, nil)}#{ANSI.bold}  #{tl}#{ANSI.reset}"
+              end
               lines << ""
             end
           end

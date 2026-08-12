@@ -71,6 +71,7 @@ module Hcode
         CommandInfo.new("/logout", "Clear credentials from config", description_key: "logout"),
         CommandInfo.new("/tasks", "Browse background tasks", description_key: "tasks"),
         CommandInfo.new("/memory", "Show memory profile of live collections", description_key: "memory"),
+        CommandInfo.new("/telemetry", "Toggle render-quality telemetry", "on|off", "telemetry"),
         CommandInfo.new("/goal", "Show goal status", "[status|pause|resume|cancel]", "goal"),
         CommandInfo.new("/language", "Switch interface language", "[en|ru|es|zh|ja|pt|hi|fa|uk|be]", "language"),
         CommandInfo.new("/sounds", "Toggle sound notifications", "on|off", "sounds"),

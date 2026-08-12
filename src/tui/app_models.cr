@@ -148,6 +148,10 @@ module Hcode
       # block right under the result preview, dim+italic so it visually
       # separates from the actual tool output.
       property ram_line : String? = nil
+      # Optional telemetry line (set when `/telemetry` is on and a tracked
+      # counter increased during this tool call's render). Rendered in yellow
+      # right under the result preview, mirroring `ram_line`.
+      property telemetry_line : String? = nil
       # Swarm/Agent live progress: when non-empty, the tool block renders an
       # animated grid of per-subagent cells instead of the static header.
       property swarm_members : Array(SwarmMember) = [] of SwarmMember
@@ -171,6 +175,7 @@ module Hcode
         total += @summary.profiled_bytes unless @summary.empty?
         total += @tip.profiled_bytes unless @tip.empty?
         total += @ram_line.try(&.profiled_bytes) || 0_i64
+        total += @telemetry_line.try(&.profiled_bytes) || 0_i64
         if d = @tool_display
           total += d.before.try(&.profiled_bytes) || 0_i64
           total += d.after.try(&.profiled_bytes) || 0_i64

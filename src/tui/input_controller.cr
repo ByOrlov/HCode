@@ -545,6 +545,8 @@ module Hcode
           open_tasks_browser
         when "/memory"
           cmd_memory
+        when "/telemetry"
+          cmd_telemetry(args)
         when "/goal"
           handle_goal_command(args)
         when "/language"

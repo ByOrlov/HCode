@@ -22,6 +22,7 @@ module Hcode
         property link : Int32
         property code : Int32
         property logo : Int32
+        property telemetry : Int32
 
         def initialize(
           @primary = 52,
@@ -44,6 +45,7 @@ module Hcode
           @link = 52,
           @code = 228,
           @logo = 144,
+          @telemetry = 221,
         )
         end
       end
@@ -73,6 +75,7 @@ module Hcode
           link: 75,
           code: 75,
           logo: 144,
+          telemetry: 221,
         ))
       end
 
@@ -98,6 +101,7 @@ module Hcode
           link: 32,
           code: 32,
           logo: 137,
+          telemetry: 136,
         ))
       end
 

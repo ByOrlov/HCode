@@ -334,6 +334,13 @@ module Hcode
 
         @dirty = true
         render_now
+
+        # Post-render telemetry: only after tool results, since the user wants
+        # metric changes attributed to the tool that caused them. Must run
+        # AFTER render_now because SyncBugsCount is incremented during render.
+        if event.type.tool_result?
+          check_post_render_telemetry!
+        end
       end
 
       # Find the tool-call Message that owns the parent AgentSwarm/Agent
@@ -570,6 +577,45 @@ module Hcode
       # Todo panel: mirrors TS `components/chrome/todo-panel.ts`. Shows the
       # agent's structured TODO list (title + status) above the editor so
       # the user sees progress without scrolling through the transcript.
+      # Post-render telemetry check. Called AFTER render_now so that any
+      # sync_bugs_count increment caused by rendering this tool's result is
+      # already reflected. If a tracked counter went up, the delta line is
+      # attached to the last completed tool message and a second render shows
+      # it. This must run after the render (not during event handling) because
+      # SyncBugsCount is incremented inside build_rendered_lines_split.
+      #
+      # No infinite-loop risk: @telemetry.sample consumes the delta (updates
+      # prev_values), so the second render_now produces delta=0 and the method
+      # returns early.
+      private def check_post_render_telemetry! : Nil
+        parts = [] of String
+        @telemetry.counter_names.each do |name|
+          case name
+          when "SyncBugsCount"
+            if (delta = @telemetry.sample(name, @sync_bugs_count)) > 0
+              parts << "SyncBugsCount +#{delta}"
+            end
+          end
+        end
+        return if parts.empty?
+
+        line = parts.join(" · ")
+        # Attach to the last tool message that has a result (the one whose
+        # render just completed).
+        i = @messages.size - 1
+        while i >= 0
+          msg = @messages[i]
+          if msg.role == "tool" && !msg.tool_result.nil?
+            msg.telemetry_line = line
+            @messages[i] = msg
+            break
+          end
+          i -= 1
+        end
+        invalidate_log_cache!
+        @dirty = true
+        render_now
+      end
     end
   end
 end

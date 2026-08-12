@@ -485,6 +485,26 @@ module Hcode
         emit_to_log(Message.new("system", report))
       end
 
+      private def cmd_telemetry(args : String) : Nil
+        case args.strip.downcase
+        when "on"
+          @telemetry.enabled = true
+          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_on")))
+        when "off"
+          @telemetry.enabled = false
+          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_off")))
+        when ""
+          state = @telemetry.enabled? ? Hcode.t("ui.telemetry_on_label") : Hcode.t("ui.telemetry_off_label")
+          counters = @telemetry.counter_names.map do |name|
+            flag = @telemetry.counter_enabled?(name) ? "✓" : "✗"
+            "  #{flag} #{name}"
+          end.join("\n")
+          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_status", state: state, counters: counters)))
+        else
+          emit_to_log(Message.new("error", Hcode.t("ui.telemetry_usage")))
+        end
+      end
+
       private def cmd_sounds(args : String) : Nil
         case args.strip.downcase
         when "on"

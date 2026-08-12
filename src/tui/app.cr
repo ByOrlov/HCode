@@ -87,6 +87,12 @@ module Hcode
       # SyncBugsCount in the debug status line.
       @sync_bugs_count : Int32 = 0
       @sync_prev_states : Array({Int32, Int32}) = [] of {Int32, Int32}
+      # Counter-delta telemetry: tracks render-quality counters (e.g.
+      # SyncBugsCount) and reports increases as yellow lines attached to the
+      # tool call that triggered the render. Toggled via `/telemetry`.
+      @telemetry : Telemetry = Telemetry.new
+      getter telemetry
+      getter sync_bugs_count
       # Cached rendered lines for the log zone. Log-zone messages are immutable
       # once finalized, so their rendered output is cached here and only
       # rebuilt when @messages changes or terminal width changes. During
