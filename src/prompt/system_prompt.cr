@@ -157,11 +157,11 @@ module Hcode
       TEXT
 
       def self.build(work_dir : String, additional_dirs : Array(String) = [] of String,
-                     skills_listing : String = "") : String
+                     skills_listing : String = "", shell : String? = nil) : String
         vars = {} of String => String
 
         vars["HCODE_OS"] = os_name
-        vars["HCODE_SHELL"] = shell_name
+        vars["HCODE_SHELL"] = shell_name(shell)
         vars["HCODE_NOW"] = Time.utc.to_rfc3339
         vars["HCODE_WORK_DIR"] = work_dir
         vars["HCODE_WORK_DIR_LS"] = directory_listing(work_dir)
@@ -185,8 +185,8 @@ module Hcode
         {% end %}
       end
 
-      private def self.shell_name : String
-        shell = ENV["SHELL"]? || "/bin/bash"
+      private def self.shell_name(shell : String? = nil) : String
+        shell = shell || "/bin/bash"
         name = File.basename(shell)
         "#{name} (`#{shell}`)"
       end

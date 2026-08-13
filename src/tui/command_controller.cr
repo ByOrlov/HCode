@@ -378,7 +378,7 @@ module Hcode
       # HCODE_EXPERIMENTAL_FLAG=1. Surface the env so the user knows what is
       # on.
       private def cmd_experiments : Nil
-        master = ENV["HCODE_EXPERIMENTAL_FLAG"]?
+        master = @app_config.try(&.experimental_flag)
         env_flags = ENV.keys.select { |k|
           k.starts_with?("HCODE_EXPERIMENTAL_") && k != "HCODE_EXPERIMENTAL_FLAG"
         }.sort!

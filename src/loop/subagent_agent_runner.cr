@@ -24,7 +24,8 @@ module Hcode
                      @task_service : Tools::TaskService,
                      @system_prompt : String,
                      @work_dir : String,
-                     @permission_mode : Permission::Mode)
+                     @permission_mode : Permission::Mode,
+                     @subagent_timeout_ms : Int32? = nil)
       end
 
       def launch(spec : Tools::AgentLaunchSpec,
@@ -296,9 +297,8 @@ module Hcode
       end
 
       private def timeout_ms : Int32
-        env = ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?
-        if env && (v = env.to_i?) && v >= 1
-          return v
+        if (t = @subagent_timeout_ms) && t >= 1
+          return t
         end
         DEFAULT_TIMEOUT_MS
       end

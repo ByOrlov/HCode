@@ -17,6 +17,94 @@ describe Hcode::Config::Config do
       config.permission_mode.should eq("manual")
       config.max_context_tokens.should eq(262144)
     end
+
+    it "defaults behavioral flags to safe values" do
+      config = Hcode::Config::Config.new
+      config.debug?.should be_false
+      config.cron_enabled?.should be_true
+      config.cron_no_stale?.should be_false
+      config.subagent_timeout_ms.should be_nil
+      config.experimental_flag.should be_nil
+      config.mock_script.should be_nil
+      config.editor.should be_nil
+      config.tmp_dir.should be_nil
+      config.git_terminal_prompt.should be_nil
+      config.shell.should be_nil
+    end
+
+    it "allows behavioral flags to be set" do
+      config = Hcode::Config::Config.new
+      config.debug = true
+      config.cron_enabled = false
+      config.cron_no_stale = true
+      config.subagent_timeout_ms = 5000
+      config.experimental_flag = "1"
+      config.mock_script = "plan"
+      config.editor = "nano"
+      config.tmp_dir = "/var/tmp"
+      config.git_terminal_prompt = "1"
+      config.shell = "/bin/zsh"
+      config.debug?.should be_true
+      config.cron_enabled?.should be_false
+      config.cron_no_stale?.should be_true
+      config.subagent_timeout_ms.should eq(5000)
+      config.experimental_flag.should eq("1")
+      config.mock_script.should eq("plan")
+      config.editor.should eq("nano")
+      config.tmp_dir.should eq("/var/tmp")
+      config.git_terminal_prompt.should eq("1")
+      config.shell.should eq("/bin/zsh")
+    end
+  end
+
+  describe ".load" do
+    it "maps behavioral ENV overrides to config fields" do
+      prev = {
+        "HCODE_DEBUG"               => ENV["HCODE_DEBUG"]?,
+        "HCODE_DISABLE_CRON"        => ENV["HCODE_DISABLE_CRON"]?,
+        "HCODE_CRON_NO_STALE"       => ENV["HCODE_CRON_NO_STALE"]?,
+        "HCODE_SUBAGENT_TIMEOUT_MS" => ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?,
+        "HCODE_EXPERIMENTAL_FLAG"   => ENV["HCODE_EXPERIMENTAL_FLAG"]?,
+        "HCODE_MOCK_SCRIPT"         => ENV["HCODE_MOCK_SCRIPT"]?,
+        "EDITOR"                    => ENV["EDITOR"]?,
+        "TMPDIR"                    => ENV["TMPDIR"]?,
+        "GIT_TERMINAL_PROMPT"       => ENV["GIT_TERMINAL_PROMPT"]?,
+        "SHELL"                     => ENV["SHELL"]?,
+      }
+      begin
+        ENV["HCODE_DEBUG"] = "1"
+        ENV["HCODE_DISABLE_CRON"] = "1"
+        ENV["HCODE_CRON_NO_STALE"] = "1"
+        ENV["HCODE_SUBAGENT_TIMEOUT_MS"] = "9000"
+        ENV["HCODE_EXPERIMENTAL_FLAG"] = "on"
+        ENV["HCODE_MOCK_SCRIPT"] = "plan"
+        ENV["EDITOR"] = "emacs"
+        ENV["TMPDIR"] = "/custom-tmp"
+        ENV["GIT_TERMINAL_PROMPT"] = "1"
+        ENV["SHELL"] = "/bin/fish"
+
+        # Load from a nonexistent path so only ENV overrides apply.
+        config = Hcode::Config::Config.load("/tmp/hcode-spec-nonexistent-#{Random::Secure.hex(4)}.json")
+        config.debug?.should be_true
+        config.cron_enabled?.should be_false
+        config.cron_no_stale?.should be_true
+        config.subagent_timeout_ms.should eq(9000)
+        config.experimental_flag.should eq("on")
+        config.mock_script.should eq("plan")
+        config.editor.should eq("emacs")
+        config.tmp_dir.should eq("/custom-tmp")
+        config.git_terminal_prompt.should eq("1")
+        config.shell.should eq("/bin/fish")
+      ensure
+        prev.each do |k, v|
+          if v.nil?
+            ENV.delete(k)
+          else
+            ENV[k] = v.as(String)
+          end
+        end
+      end
+    end
   end
 
   describe "#provider_configured?" do

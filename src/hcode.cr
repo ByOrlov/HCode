@@ -335,7 +335,7 @@ module Hcode
 
       # Load installed plugins and merge their declared capabilities (skills,
       # MCP servers, hooks, commands, session-start) into the session.
-      plugin_manager = Plugin::Manager.new(home)
+      plugin_manager = Plugin::Manager.new(home, config.tmp_dir)
       plugin_manager.load
       plugin_mcp_servers = plugin_manager.enabled_mcp_servers
       plugin_hooks = plugin_manager.enabled_hooks
@@ -394,6 +394,7 @@ module Hcode
       configure_provider(provider, config, sid_for_cache)
 
       agent = Loop::Agent.new(provider, memory, tools, permission)
+      agent.debug = config.debug?
       merged_hooks = config.hooks + plugin_hooks
       agent.hooks = Hooks::Engine.new(merged_hooks, cwd: work_dir, session_id: store.meta_id?) unless merged_hooks.empty?
 
@@ -407,7 +408,8 @@ module Hcode
 
       system_prompt = Prompt::SystemPrompt.build(work_dir,
         additional_dirs: [] of String,
-        skills_listing: skill_catalog.model_listing)
+        skills_listing: skill_catalog.model_listing,
+        shell: config.shell)
 
       task_service = Hcode::Tools::InMemoryTaskService.new(store)
       Hcode::Tools::Task.service = task_service
@@ -417,6 +419,10 @@ module Hcode
       # the delivery/terminal/sudo-approval bridges to this same instance
       # later; headless runs leave them nil.
       bash_tool = Tools::Bash.new(work_dir, task_service, store.session_dir)
+      # Propagate OS-env proxies from Config so all Bash instances (main,
+      # subagents, ACP) share the same values without re-reading ENV.
+      Tools::Bash.git_terminal_prompt = config.git_terminal_prompt
+      Tools::Bash.shell = config.shell
       tools.register(bash_tool)
 
       goal_service = Hcode::Tools::AgentGoalService.new
@@ -474,6 +480,7 @@ module Hcode
       provider.thinking_effort = config.thinking_effort
       provider.max_context_tokens = config.max_context_tokens
       provider.prompt_cache_key = cache_key
+      provider.debug = config.debug?
     end
 
     # Build the WebSearch service for the current session. Explicit
@@ -546,6 +553,7 @@ module Hcode
         system_prompt: system_prompt,
         work_dir: work_dir,
         permission_mode: permission_mode,
+        subagent_timeout_ms: config.subagent_timeout_ms,
       )
       swarm_runner = Loop::SubagentSwarmRunner.new(
         registry: registry,
@@ -553,6 +561,7 @@ module Hcode
         system_prompt: system_prompt,
         work_dir: work_dir,
         permission_mode: permission_mode,
+        subagent_timeout_ms: config.subagent_timeout_ms,
       )
       Tools::Agent.runner = agent_runner
       Tools::AgentSwarm.runner = swarm_runner
@@ -668,7 +677,7 @@ module Hcode
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex
         STDERR.puts Hcode.t("errors.fatal", message: ex.message.to_s).colorize.red
-        ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
+        ex.backtrace.each { |b| STDERR.puts "  #{b}" } if config.debug?
         ExceptionHandler.report_and_notify(ex, "run_headless")
         exit(1)
       ensure
@@ -791,7 +800,7 @@ module Hcode
         listing = catalog.is_a?(Hcode::Tools::InMemorySkillCatalog) ? catalog.model_listing : ""
         # Reassigning the captured arg is intentional: other closures capturing
         # `system_prompt` read the new value (closures share it by reference).
-        system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing) # ameba:disable Lint/ShadowedArgument
+        system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing, shell: config.shell) # ameba:disable Lint/ShadowedArgument
         nil
       end
 
@@ -868,7 +877,8 @@ module Hcode
         store: store,
         agent: agent,
         delivery: delivery,
-        enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+        enabled: config.cron_enabled?,
+        no_stale: config.cron_no_stale?,
       )
       Hcode::Tools::Cron.service = cron_service
       ts.mark_lost_on_resume
@@ -942,7 +952,8 @@ module Hcode
           store: store,
           agent: agent,
           delivery: delivery,
-          enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+          enabled: config.cron_enabled?,
+          no_stale: config.cron_no_stale?,
         )
         Hcode::Tools::Cron.service = new_cron
         new_cron.start
@@ -965,7 +976,8 @@ module Hcode
           store: store,
           agent: agent,
           delivery: delivery,
-          enabled: !ENV.has_key?("HCODE_DISABLE_CRON"),
+          enabled: config.cron_enabled?,
+          no_stale: config.cron_no_stale?,
         )
         Hcode::Tools::Cron.service = new_cron
         new_cron.start

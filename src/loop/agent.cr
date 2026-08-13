@@ -16,6 +16,7 @@ module Hcode
       getter dedup : DedupTracker = DedupTracker.new
       property abort_controller : AbortController = AbortController.new
       property hooks : Hooks::Engine?
+      property? debug : Bool = false
 
       @overflow_recovery : Context::Overflow::Recovery = Context::Overflow::Recovery.new
       @max_steps : Int32 = 100
@@ -304,7 +305,7 @@ module Hcode
           messages = @context.messages
           tool_defs = @tools.definitions
 
-          if ENV["HCODE_DEBUG"]?
+          if @debug
             STDERR.puts "[debug] Last 3 messages:"
             messages.last(3).each_with_index(1) do |msg, i|
               STDERR.puts "[debug]   msg #{i}: role=#{msg.role} content=#{msg.text[0...80].inspect} " \
@@ -380,7 +381,7 @@ module Hcode
 
       private def run_tool_batch(tool_calls : Array(LLM::ToolCall),
                                  on_event : Event ->) : Array(LLM::Message)
-        if ENV["HCODE_DEBUG"]?
+        if @debug
           tool_calls.each do |tc|
             STDERR.puts "[debug] ToolCall: id=#{tc.id.inspect} name=#{tc.name} args=#{tc.arguments[0...100]}"
           end

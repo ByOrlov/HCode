@@ -502,7 +502,7 @@ module Hcode
                     chunk = StreamChunk.from_json(data)
                     chunks.send(chunk)
                   rescue ex : JSON::ParseException
-                    if ENV["HCODE_DEBUG"]?
+                    if @debug
                       STDERR.puts "[debug] Failed to parse SSE: #{ex.message}"
                       STDERR.puts "[debug] Data: #{data[0..200]}"
                     end

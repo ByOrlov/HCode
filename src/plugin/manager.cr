@@ -87,7 +87,7 @@ module Hcode
       @kimi_home : String
       @records = {} of String => PluginRecord
 
-      def initialize(@kimi_home : String)
+      def initialize(@kimi_home : String, @tmp_dir : String? = nil)
       end
 
       def load : Nil
@@ -412,7 +412,7 @@ module Hcode
       end
 
       private def tmpdir : String
-        ENV["TMPDIR"]? || "/tmp"
+        @tmp_dir || "/tmp"
       end
 
       private def source_from_string(s : String) : PluginSource

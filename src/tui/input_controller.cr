@@ -295,8 +295,9 @@ module Hcode
       end
 
       private def handle_external_editor : Nil
-        editor_cmd = ENV["EDITOR"]? || ENV["VISUAL"]? || "vim"
-        tmp_dir = ENV["TMPDIR"]? || "/tmp"
+        cfg = @app_config
+        editor_cmd = cfg.try(&.editor) || "vim"
+        tmp_dir = cfg.try(&.tmp_dir) || "/tmp"
         tmp_file = File.join(tmp_dir, "hcode-edit-#{Random::Secure.hex(4)}.md")
         File.write(tmp_file, @editor.expanded_text)
 
@@ -353,7 +354,7 @@ module Hcode
         return nil unless session_dir = @on_session_dir.try(&.call)
         return nil unless Process.find_executable("tar")
 
-        tmp_dir = ENV["TMPDIR"]? || "/tmp"
+        tmp_dir = @app_config.try(&.tmp_dir) || "/tmp"
         bundle_dir = File.join(tmp_dir, "hcode-debug-#{Random::Secure.hex(4)}")
         Dir.mkdir_p(bundle_dir)
 

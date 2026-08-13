@@ -71,6 +71,17 @@ module Hcode
       property proxy : String? = nil
       property language : String? = nil
       property? debug_zones : Bool = false
+      # --- Поведенческие флаги (раньше читались из ENV напрямую) ---
+      property? debug : Bool = false
+      property? cron_enabled : Bool = true
+      property? cron_no_stale : Bool = false
+      property subagent_timeout_ms : Int32? = nil
+      property experimental_flag : String? = nil
+      property mock_script : String? = nil
+      property editor : String? = nil
+      property tmp_dir : String? = nil
+      property git_terminal_prompt : String? = nil
+      property shell : String? = nil
       property notifications : Notify::Config = Notify::Config.default
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
       property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
@@ -208,6 +219,20 @@ module Hcode
         if proxy = ENV["HTTP_PROXY"]? || ENV["HTTPS_PROXY"]? || ENV["ALL_PROXY"]?
           config.proxy = proxy
         end
+
+        # --- Поведенческие флаги: единственная точка чтения из ENV ---
+        config.debug = ENV.has_key?("HCODE_DEBUG")
+        config.cron_enabled = !ENV.has_key?("HCODE_DISABLE_CRON")
+        config.cron_no_stale = ENV.has_key?("HCODE_CRON_NO_STALE")
+        if v = ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?.try(&.to_i?)
+          config.subagent_timeout_ms = v if v >= 1
+        end
+        config.experimental_flag = ENV["HCODE_EXPERIMENTAL_FLAG"]?
+        config.mock_script = ENV["HCODE_MOCK_SCRIPT"]?
+        config.editor = ENV["EDITOR"]? || ENV["VISUAL"]?
+        config.tmp_dir = ENV["TMPDIR"]?
+        config.git_terminal_prompt = ENV["GIT_TERMINAL_PROMPT"]?
+        config.shell = ENV["SHELL"]?
 
         config
       end

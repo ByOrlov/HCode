@@ -45,6 +45,12 @@ module Hcode
       @sudo_approval : (String -> SudoApprovalChoice)?
       @terminal_exec : TerminalExecService?
 
+      # Class-level OS-env proxies, set once from Config at startup so every
+      # Bash instance (main agent, subagents, ACP server) shares the same value
+      # without each one re-reading ENV. Defaults mirror the prior inline reads.
+      class_property git_terminal_prompt : String? = nil
+      class_property shell : String? = nil
+
       def sudo_mode=(mode : SudoMode) : Nil
         @sudo_mode = mode
       end
@@ -591,8 +597,8 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
         env["TERM"] = "dumb"
         # Default to '0' so git fails fast on private remotes if a TTY happens
         # to be inherited; honour an explicit ambient value when set.
-        env["GIT_TERMINAL_PROMPT"] = ENV["GIT_TERMINAL_PROMPT"]? || "0"
-        env["SHELL"] = ENV["SHELL"]? || "/bin/sh"
+        env["GIT_TERMINAL_PROMPT"] = Bash.git_terminal_prompt || "0"
+        env["SHELL"] = Bash.shell || "/bin/sh"
         env
       end
 

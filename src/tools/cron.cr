@@ -145,9 +145,10 @@ module Hcode
     class InMemoryCronService < SessionCronService
       @tasks = [] of CronTask
       @enabled : Bool = true
+      @no_stale : Bool = false
       @next_fires = {} of String => Int64
 
-      def initialize(@enabled : Bool = true)
+      def initialize(@enabled : Bool = true, @no_stale : Bool = false)
       end
 
       def profiled_bytes : Int64
@@ -219,7 +220,7 @@ module Hcode
 
       def stale?(task : CronTask) : Bool
         return false unless task.recurring?
-        return false if ENV.has_key?("HCODE_CRON_NO_STALE")
+        return false if @no_stale
         (now - task.created_at) >= Cron::STALE_THRESHOLD_MS
       end
 
@@ -270,8 +271,9 @@ module Hcode
       def initialize(@store : Session::Store? = nil,
                      @agent : Loop::Agent? = nil,
                      @delivery : (String -> Nil)? = nil,
-                     enabled : Bool = true)
-        super(enabled)
+                     enabled : Bool = true,
+                     no_stale : Bool = false)
+        super(enabled, no_stale)
       end
 
       # Test-only setter for the delivery callback.
@@ -298,7 +300,7 @@ module Hcode
               tick
             rescue ex
               # A tick must never crash the loop — log and continue.
-              STDERR.puts "[cron] tick error: #{ex.message}" if ENV["HCODE_DEBUG"]?
+              STDERR.puts "[cron] tick error: #{ex.message}" if @agent.try(&.debug?)
             end
             sleep DEFAULT_POLL_INTERVAL_MS.milliseconds
             Fiber.yield
@@ -838,7 +840,7 @@ module Hcode
         svc = service
 
         if svc.disabled?
-          return ToolResult.error("Cron scheduling is disabled (HCODE_DISABLE_CRON=1).")
+          return ToolResult.error("Cron scheduling is disabled.")
         end
 
         cron_raw = input["cron"]?.try(&.to_s) || ""

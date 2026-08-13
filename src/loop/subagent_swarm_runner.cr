@@ -19,7 +19,8 @@ module Hcode
                      @parent_agent : Loop::Agent,
                      @system_prompt : String,
                      @work_dir : String,
-                     @permission_mode : Permission::Mode)
+                     @permission_mode : Permission::Mode,
+                     @subagent_timeout_ms : Int32? = nil)
       end
 
       def call(spec : Tools::AgentSwarmSpec,
@@ -36,10 +37,9 @@ module Hcode
       end
 
       def timeout_ms : Int32?
-        env = ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?
-        return nil unless env
-        v = env.to_i?
-        (v && v >= 1) ? v : nil
+        t = @subagent_timeout_ms
+        return nil unless t
+        t >= 1 ? t : nil
       end
 
       # ----------------------------------------------------------------

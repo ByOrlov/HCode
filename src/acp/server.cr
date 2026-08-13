@@ -471,7 +471,8 @@ module Hcode
         # Build system prompt
         system_prompt = Prompt::SystemPrompt.build(cwd,
           additional_dirs: [] of String,
-          skills_listing: "")
+          skills_listing: "",
+          shell: @config.shell)
 
         # Create the ACP session wrapper
         acp_session = Acp::Session.new(session_id, agent, store, @rpc, system_prompt)

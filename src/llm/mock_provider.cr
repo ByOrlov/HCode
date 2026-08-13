@@ -393,10 +393,11 @@ module Hcode
       def initialize(@script : Array(MockStep) = DEFAULT_SCRIPT.dup, @model : String = DEFAULT_MODEL)
       end
 
-      # Select a named demo script via HCODE_MOCK_SCRIPT env var.
-      # Returns nil if the env var is unset or doesn't match a known script.
-      def self.script_from_env : Array(MockStep)?
-        case ENV["HCODE_MOCK_SCRIPT"]?
+      # Select a named demo script by the value configured in
+      # `Config#mock_script` (originally the HCODE_MOCK_SCRIPT env var, now
+      # surfaced through Config). Returns nil when unset or unknown.
+      def self.script_for(name : String?) : Array(MockStep)?
+        case name
         when "thinking"        then THINKING_DEMO_SCRIPT.dup
         when "thinking-tools"  then THINKING_TOOLS_DEMO_SCRIPT.dup
         when "markdown"        then MARKDOWN_DEMO_SCRIPT.dup
@@ -479,8 +480,8 @@ module Hcode
     end
 
     Provider.register("mock", "Mock — scripted self-test provider (testing)",
-      label: "Mock (testing)", hidden: true) do |_, _|
-      MockProvider.new(MockProvider.script_from_env || MockProvider::DEFAULT_SCRIPT.dup)
+      label: "Mock (testing)", hidden: true) do |config, _|
+      MockProvider.new(MockProvider.script_for(config.try(&.mock_script)) || MockProvider::DEFAULT_SCRIPT.dup)
     end
   end
 end

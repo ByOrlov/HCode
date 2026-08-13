@@ -68,18 +68,14 @@ describe Hcode::Tools::Bash do
   end
 
   it "honors an ambient GIT_TERMINAL_PROMPT instead of forcing 0" do
-    prev = ENV["GIT_TERMINAL_PROMPT"]?
-    ENV["GIT_TERMINAL_PROMPT"] = "1"
+    prev = Hcode::Tools::Bash.git_terminal_prompt
+    Hcode::Tools::Bash.git_terminal_prompt = "1"
     begin
       bash = Hcode::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv GIT_TERMINAL_PROMPT"})))
       result.content.strip.should eq("1")
     ensure
-      if prev.nil?
-        ENV.delete("GIT_TERMINAL_PROMPT")
-      else
-        ENV["GIT_TERMINAL_PROMPT"] = prev
-      end
+      Hcode::Tools::Bash.git_terminal_prompt = prev
     end
   end
 

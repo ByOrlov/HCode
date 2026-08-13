@@ -15,6 +15,10 @@ module Hcode
     # only on this abstraction, so a new backend can be added by subclassing
     # Provider and appending a `Provider.register` call to it.
     abstract class Provider
+      # Debug logging toggle, propagated from Config.debug. When true,
+      # providers emit verbose stderr diagnostics (e.g. failed SSE parses).
+      property? debug : Bool = false
+
       # Short stable identifier for the backend ("moonshot", "openai", ...).
       # Surfaced by the /provider selector and the status footer.
       abstract def name : String
