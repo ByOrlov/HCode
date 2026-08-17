@@ -65,7 +65,7 @@ module Hcode
       property together_api_key : String = ""
       property together_endpoint : String = "https://api.together.xyz/v1"
       property together_model : String = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-      property max_steps : Int32 = 100
+      property max_steps : Int32 = 150
       property max_context_tokens : Int32 = 262144
       property temperature : Float64? = nil
       property proxy : String? = nil
@@ -335,7 +335,7 @@ module Hcode
         end
 
         if agent = root["agent"]?.try(&.as_h?)
-          config.max_steps = agent["max_steps"]?.try(&.as_i?) || 100
+          config.max_steps = agent["max_steps"]?.try(&.as_i?) || 150
           config.max_context_tokens = agent["max_context_tokens"]?.try(&.as_i?) || 262144
           config.temperature = agent["temperature"]?.try(&.as_f?)
         end

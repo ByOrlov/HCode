@@ -19,7 +19,7 @@ module Hcode
       property? debug : Bool = false
 
       @overflow_recovery : Context::Overflow::Recovery = Context::Overflow::Recovery.new
-      @max_steps : Int32 = 100
+      @max_steps : Int32 = 150
       @busy : Bool = false
 
       def busy? : Bool
