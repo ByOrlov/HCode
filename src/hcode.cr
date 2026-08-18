@@ -414,6 +414,10 @@ module Hcode
       task_service = Hcode::Tools::InMemoryTaskService.new(store)
       Hcode::Tools::Task.service = task_service
 
+      # App-wide sudo mode from config: every Bash instance (main agent,
+      # subagents, ACP) starts with it; the TUI `/sudo` command changes it
+      # at runtime and persists the new value back to config.json.
+      Tools::Bash.default_sudo_mode = Tools::Bash::SudoMode.parse?(config.sudo_mode) || Tools::Bash::SudoMode::Off
       # Register Bash with the shared TaskService + session dir so background
       # execution works in both headless and interactive modes. The TUI adds
       # the delivery/terminal/sudo-approval bridges to this same instance
@@ -1193,6 +1197,13 @@ module Hcode
       end
       app.on_language_change = ->(lang : String) do
         config.language = lang
+        config.save
+        nil
+      end
+      # `/sudo`: persist the app-wide sudo mode so it survives restarts and
+      # applies to every chat (main agent, subagents, ACP).
+      app.on_sudo_mode_change = ->(mode : String) do
+        config.sudo_mode = mode if mode.in?("off", "request", "always")
         config.save
         nil
       end

@@ -33,6 +33,9 @@ module Hcode
       property provider_name : String? = nil
       property thinking_effort : String = "medium"
       property permission_mode : String = "manual"
+      # App-wide sudo permission mode for Bash ("off", "request", "always").
+      # Set via `/sudo` and persisted so it applies to every chat/instance.
+      property sudo_mode : String = "off"
       property api_key : String? = nil
       property endpoint : String? = nil
       property zai_api_key : String = ""
@@ -254,6 +257,9 @@ module Hcode
 
         if perm = root["permission"]?.try(&.as_h?)
           config.permission_mode = perm["mode"]?.try(&.as_s?) || "manual"
+          if sudo = perm["sudo_mode"]?.try(&.as_s?)
+            config.sudo_mode = sudo if sudo.in?("off", "request", "always")
+          end
         end
 
         if provider = root["provider"]?.try(&.as_h?)
@@ -396,6 +402,7 @@ module Hcode
             json.field("permission") do
               json.object do
                 json.field("mode", @permission_mode)
+                json.field("sudo_mode", @sudo_mode)
               end
             end
 

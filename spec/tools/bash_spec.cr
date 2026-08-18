@@ -233,6 +233,20 @@ describe Hcode::Tools::Bash do
       child.sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Off)
     end
 
+    it "starts new instances from the app-wide default_sudo_mode" do
+      prev = Hcode::Tools::Bash.default_sudo_mode
+      begin
+        Hcode::Tools::Bash.default_sudo_mode = Hcode::Tools::Bash::SudoMode::Request
+        Hcode::Tools::Bash.new("/tmp").sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Request)
+        # Runtime changes on one instance do not leak into the default.
+        parent = Hcode::Tools::Bash.new("/tmp")
+        parent.sudo_mode = Hcode::Tools::Bash::SudoMode::Always
+        Hcode::Tools::Bash.new("/tmp").sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Request)
+      ensure
+        Hcode::Tools::Bash.default_sudo_mode = prev
+      end
+    end
+
     it "holds terminal_exec and sudo_approval per instance" do
       a = Hcode::Tools::Bash.new("/tmp")
       b = Hcode::Tools::Bash.new("/tmp")

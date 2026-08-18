@@ -486,6 +486,8 @@ module Hcode
 
       private def build_tools(work_dir : String) : Tools::Registry
         tools = Tools::Registry.new
+        # App-wide sudo mode from config (mirrors the TUI `/sudo` setting).
+        Tools::Bash.default_sudo_mode = Tools::Bash::SudoMode.parse?(@config.sudo_mode) || Tools::Bash::SudoMode::Off
         tools.register(Tools::Bash.new(work_dir))
         tools.register(Tools::Read.new(work_dir))
         tools.register(Tools::Write.new(work_dir))

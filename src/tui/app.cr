@@ -289,6 +289,9 @@ module Hcode
       # Steer: inject `text` into the running turn (Agent#steer).
       property on_steer : (String -> Nil)?
       property on_language_change : (String -> Nil)? = nil
+      # `/sudo`: persists the app-wide sudo mode ("off"/"request"/"always")
+      # to config.json so it applies to every chat and survives restarts.
+      property on_sudo_mode_change : (String -> Nil)? = nil
       property on_get_language : (-> String)? = nil
       # `/mcp`: returns the live MCP server status text, or nil when no client
       # is wired (e.g. headless path).

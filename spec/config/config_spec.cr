@@ -290,6 +290,27 @@ describe Hcode::Config::Config do
       end
     end
 
+    it "round-trips permission.sudo_mode and rejects unknown values" do
+      config = Hcode::Config::Config.new
+      config.sudo_mode.should eq("off")
+
+      config.sudo_mode = "request"
+      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      begin
+        config.save(path)
+        content = File.read(path)
+        content.should contain("\"sudo_mode\": \"request\"")
+        reloaded = Hcode::Config::Config.parse_json(content)
+        reloaded.sudo_mode.should eq("request")
+
+        # Unknown values fall back to the default instead of poisoning startup.
+        reloaded = Hcode::Config::Config.parse_json(%({"permission":{"mode":"manual","sudo_mode":"yolo"}}))
+        reloaded.sudo_mode.should eq("off")
+      ensure
+        File.delete(path) rescue nil
+      end
+    end
+
     it "round-trips services.moonshot_search" do
       ms = Hcode::Config::MoonshotServiceConfig.new(
         base_url: "https://search.example.com",

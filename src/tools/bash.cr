@@ -36,12 +36,17 @@ module Hcode
         Deny
       end
 
-      # Sudo permission state is per-instance: subagents (which build their
-      # own Bash) must not inherit the parent's mode, and multiple sessions in
-      # one process must not share it. Defaults to Off — sudo commands are
-      # disallowed until the host (TUI `/sudo`, or a programmatic caller)
-      # raises the mode.
-      @sudo_mode : SudoMode = SudoMode::Off
+      # App-wide sudo default, set once from Config at startup so every Bash
+      # instance (main agent, subagents, ACP) starts with the same mode —
+      # `/sudo` adjusts the main instance at runtime and persists the value
+      # back to config.json. Defaults to Off — sudo commands are disallowed
+      # until the user raises the mode.
+      class_property default_sudo_mode : SudoMode = SudoMode::Off
+
+      # Per-instance sudo permission state, initialized from the app-wide
+      # default. Runtime changes (TUI `/sudo`, approval dialogs) affect only
+      # the instance they are applied to.
+      @sudo_mode : SudoMode = Bash.default_sudo_mode
       @sudo_approval : (String -> SudoApprovalChoice)?
       @terminal_exec : TerminalExecService?
 

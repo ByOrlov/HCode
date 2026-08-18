@@ -1001,7 +1001,7 @@ module Hcode
                  when "always" then Tools::Bash::SudoMode::Always
                  else               Tools::Bash::SudoMode::Request
                  end
-          @bash_tool.try(&.sudo_mode=(mode))
+          apply_sudo_mode(mode)
           emit_to_log(Message.new("system", "Sudo mode: #{mode_str}"))
         when .escape?
           @sudo_list.hide

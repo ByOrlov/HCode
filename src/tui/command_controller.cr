@@ -240,17 +240,24 @@ module Hcode
         end
         case arg
         when "off"
-          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Off))
+          apply_sudo_mode(Tools::Bash::SudoMode::Off)
           emit_to_log(Message.new("system", "Sudo mode: off (sudo commands disallowed)"))
         when "request"
-          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Request))
+          apply_sudo_mode(Tools::Bash::SudoMode::Request)
           emit_to_log(Message.new("system", "Sudo mode: request (ask before each sudo command)"))
         when "always"
-          @bash_tool.try(&.sudo_mode=(Tools::Bash::SudoMode::Always))
+          apply_sudo_mode(Tools::Bash::SudoMode::Always)
           emit_to_log(Message.new("system", "Sudo mode: always (sudo commands allowed)"))
         else
           emit_to_log(Message.new("error", "Unknown sudo mode: #{args}. Use: off, request, or always."))
         end
+      end
+
+      # Applies the sudo mode to the main Bash instance and persists it
+      # app-wide (config.json) so it applies to every chat, not just this one.
+      private def apply_sudo_mode(mode : Tools::Bash::SudoMode) : Nil
+        @bash_tool.try(&.sudo_mode=(mode))
+        @on_sudo_mode_change.try(&.call(mode.to_s.downcase))
       end
 
       private def cmd_effort(args : String) : Nil
