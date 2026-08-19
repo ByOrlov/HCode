@@ -33,3 +33,10 @@ fi
 if [ -x "bin/ameba" ]; then
   bin/ameba "${staged[@]}"
 fi
+
+# Run the test suite.
+if command -v rake >/dev/null 2>&1; then
+  rake spec
+else
+  echo "pre-commit: rake not found, skipping tests" >&2
+fi
