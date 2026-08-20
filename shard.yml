@@ -13,5 +13,7 @@ targets:
     main: src/hcode.cr
 
 dependencies:
+  goban:
+    github: soya-daizu/goban
   i18n:
     github: crystal-i18n/i18n

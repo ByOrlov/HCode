@@ -54,7 +54,20 @@ module Hcode
         @status_tracker.try(&.transition!(Notify::AgentStatus::Working))
 
         cb = @run_turn_cb || raise "run_turn_cb not initialized"
-        spawn { cb.call(text, persisted) }
+        spawn do
+          begin
+            cb.call(text, persisted)
+          rescue ex : Exception
+            # The turn fiber died before emitting TurnEnd (e.g. a store
+            # append failed before the agent loop's begin/ensure). Without
+            # this net @agent_busy stays true forever and the UI locks in
+            # Busy with no way to interrupt. Report, surface the error, and
+            # run the standard turn-end cleanup so the app returns to idle.
+            ExceptionHandler.report(ex, "turn fiber")
+            emit_to_log(Message.new("error", ex.message.to_s))
+            on_event(Loop::Event.turn_end(true))
+          end
+        end
       end
 
       # Shift one queued message (FIFO) and start a fresh turn for it.
@@ -98,6 +111,12 @@ module Hcode
         else
           start_turn(text, persisted: true)
         end
+      end
+
+      # Authoritative busy flag for the remote control socket (`op: status`):
+      # a turn is running or compaction is in flight.
+      def agent_busy? : Bool
+        @agent_busy || @is_compacting
       end
 
       TOOL_PREVIEW_LINES =   10

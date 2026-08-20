@@ -2,10 +2,37 @@ require "./index"
 
 module Hcode
   module Session
+    # Raised when opening a session whose wire.jsonl no longer exists on
+    # disk (the session directory was deleted under us). Plain `Store.new`
+    # recreates the directory, which would silently resurrect the session
+    # as an empty one — and the next save would lose the whole history for
+    # good. Every "open an existing session by path" call site must use
+    # `Store.open_existing!` instead so deletion is reported, not hidden.
+    class FileDeletedError < Exception
+      getter session_dir : String
+
+      def initialize(@session_dir : String)
+        super("Session file was deleted: #{File.join(@session_dir, "wire.jsonl")}")
+      end
+    end
+
     class Store
       property session_dir : String
       property wire_path : String
       property state_path : String
+
+      # Notified whenever wire.jsonl disappeared mid-session and was
+      # rebuilt from the in-memory journal, so the UI can surface it.
+      property on_wire_recovered : (-> Nil)?
+
+      # Raw wire lines seen by this process: everything replayed at open
+      # plus every line appended since. Backs the automatic rebuild when
+      # the wire file is deleted while the session is live.
+      @journal : Array(String)?
+
+      # True once the wire file has been observed on disk; a later append
+      # that finds it missing indicates mid-session deletion.
+      @wire_seen : Bool = false
 
       def initialize(@session_dir : String)
         @wire_path = File.join(@session_dir, "wire.jsonl")
@@ -13,6 +40,17 @@ module Hcode
         # layout used meta.json. Both are supported on read.
         @state_path = File.join(@session_dir, "state.json")
         Dir.mkdir_p(@session_dir) unless Dir.exists?(@session_dir)
+        @journal = nil
+        @wire_seen = File.exists?(@wire_path)
+      end
+
+      # Open an existing session by directory, raising `FileDeletedError`
+      # when its wire.jsonl is gone. See the error class doc for why the
+      # plain constructor must not be used on "open" paths.
+      def self.open_existing!(session_dir : String) : Store
+        dir = session_dir.chomp("/")
+        raise FileDeletedError.new(dir) unless File.exists?(File.join(dir, "wire.jsonl"))
+        new(dir)
       end
 
       def self.new_session(home : String) : Store
@@ -45,13 +83,33 @@ module Hcode
       end
 
       def append(event_type : String, data : Hash(String, JSON::Any)) : Nil
-        record = {
+        line = {
           "type"      => JSON::Any.new(event_type),
           "timestamp" => JSON::Any.new(Time.utc.to_rfc3339),
           "data"      => JSON::Any.new(data),
-        }
+        }.to_json
+        begin
+          write_wire_line(line)
+        rescue File::NotFoundError
+          # The session directory can vanish between the mkdir_p check and
+          # the open (session GC, tmp cleaners). Retry once: the second pass
+          # recreates the directory and, when the wire file was already
+          # seen, rebuilds it from the in-memory journal.
+          write_wire_line(line)
+        end
+        journal << line
+        @wire_seen = true
+      end
+
+      # Self-heal after a mid-session deletion (tmp cleaners, manual
+      # `rm -rf`): without recovery every following append would land in a
+      # fresh empty file and the whole session would be lost on the next
+      # start — rebuild the wire from the journal first.
+      private def write_wire_line(line : String) : Nil
+        recover_wire if @wire_seen && !File.exists?(@wire_path)
+        Dir.mkdir_p(@session_dir) unless Dir.exists?(@session_dir)
         File.open(@wire_path, "a") do |f|
-          f.puts(record.to_json)
+          f.puts(line)
           f.fsync
         end
       end
@@ -70,10 +128,11 @@ module Hcode
       def read_events : Array(NamedTuple(type: String, data: JSON::Any))
         return [] of NamedTuple(type: String, data: JSON::Any) unless File.exists?(@wire_path)
 
+        reload_journal
+
         events = [] of NamedTuple(type: String, data: JSON::Any)
 
-        File.each_line(@wire_path) do |line|
-          next if line.strip.empty?
+        journal.each do |line|
           begin
             parsed = JSON.parse(line)
             events << {
@@ -87,15 +146,54 @@ module Hcode
         events
       end
 
+      # Rebind this store onto another session's location (TUI session
+      # switch: new / resume / fork) and reload the recovery journal from
+      # the target wire so a later mid-session deletion heals fully.
+      def adopt(other : Store) : Nil
+        @session_dir = other.session_dir
+        @wire_path = other.wire_path
+        @state_path = other.state_path
+        reload_journal
+      end
+
+      # Lazily-created append buffer; shared by `append` and `read_events`.
+      private def journal : Array(String)
+        @journal ||= [] of String
+      end
+
+      # (Re)load the raw non-empty wire lines from disk into the journal.
+      private def reload_journal : Nil
+        raw = [] of String
+        if File.exists?(@wire_path)
+          File.each_line(@wire_path) do |line|
+            raw << line unless line.strip.empty?
+          end
+        end
+        @journal = raw
+        @wire_seen = File.exists?(@wire_path)
+      end
+
+      # Rebuild wire.jsonl from the in-memory journal (everything replayed
+      # at open plus every line appended since) after the file vanished
+      # mid-session, so the append that detected the deletion keeps the
+      # full history instead of starting a fresh empty log.
+      private def recover_wire : Nil
+        content = journal.empty? ? "" : journal.join('\n') + '\n'
+        atomic_write(@wire_path, content)
+        @on_wire_recovered.try(&.call)
+      end
+
       def write_meta(meta : Hash(String, String)) : Nil
         meta_path = File.join(@session_dir, "meta.json")
         File.write(meta_path, meta.to_json)
       end
 
-      # Write the v2 state.json metadata document.
+      # Write the v2 state.json metadata document. Atomic and self-healing:
+      # recreates the session directory if it was deleted mid-run instead
+      # of crashing with FileNotFoundError.
       def write_state(meta : StateMeta) : Nil
         meta.updated_at = Time.utc.to_rfc3339
-        File.write(@state_path, meta.to_json)
+        atomic_write(@state_path, meta.to_json)
       end
 
       def read_meta : JSON::Any?

@@ -137,6 +137,26 @@ describe Hcode::TUI::App do
     app.@dirty.should be_true
   end
 
+  # Regression: an exception raised inside the run_turn fiber (e.g. a store
+  # append failing before the agent loop's begin/ensure) must not leave the
+  # app stuck in Busy — the safety net reports the error and runs the
+  # turn_end cleanup so the user can keep typing.
+  it "resets busy and surfaces the error when the turn fiber crashes" do
+    app = Hcode::TUI::App.new
+    app.run_turn_cb = ->(_text : String, _persisted : Bool) { raise "boom" }
+
+    app.deliver_external_prompt("hello")
+    app.agent_busy?.should be_true
+
+    deadline = Time.monotonic + 2.seconds
+    while app.agent_busy? && Time.monotonic < deadline
+      sleep 5.milliseconds
+    end
+
+    app.agent_busy?.should be_false
+    app.@messages.any? { |m| m.role == "error" && m.content.includes?("boom") }.should be_true
+  end
+
   # Regression: assistant_text delivered without preceding text_delta must still
   # be committed to the transcript. Otherwise a large finalized block (e.g. a
   # plan) emitted straight into the Log zone would silently disappear.

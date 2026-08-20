@@ -217,7 +217,16 @@ module Hcode
         end
 
         cwd = entry.cwd.empty? ? Dir.current : entry.cwd
-        acp_session = build_session_from_existing(session_id, entry.path, cwd)
+        # The index scan above found the entry, but the files can be gone
+        # by the time we open them; report instead of resurrecting an
+        # empty session that would lose everything on the next save.
+        acp_session = begin
+          build_session_from_existing(session_id, entry.path, cwd)
+        rescue Hcode::Session::FileDeletedError
+          @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
+            "Session files were deleted: #{session_id}") if id
+          return
+        end
 
         @sessions_lock.synchronize { @sessions[session_id] = acp_session }
 
@@ -252,7 +261,16 @@ module Hcode
         end
 
         cwd = entry.cwd.empty? ? Dir.current : entry.cwd
-        acp_session = build_session_from_existing(session_id, entry.path, cwd)
+        # The index scan above found the entry, but the files can be gone
+        # by the time we open them; report instead of resurrecting an
+        # empty session that would lose everything on the next save.
+        acp_session = begin
+          build_session_from_existing(session_id, entry.path, cwd)
+        rescue Hcode::Session::FileDeletedError
+          @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
+            "Session files were deleted: #{session_id}") if id
+          return
+        end
 
         @sessions_lock.synchronize { @sessions[session_id] = acp_session }
 
@@ -311,7 +329,10 @@ module Hcode
 
         sessions = [] of JSON::Any
         entries.each do |entry|
-          title = entry.title.empty? ? nil : entry.title
+          # state.json title is rarely set (the TUI does not write one) —
+          # fall back to the first user prompt (preview, sanitized) so
+          # remote clients (hibechat) get a meaningful session name.
+          title = entry.title.presence || entry.preview.presence
           updated_str = nil
           begin
             updated_str = entry.updated_at.to_rfc3339

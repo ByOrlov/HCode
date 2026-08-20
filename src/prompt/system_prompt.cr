@@ -173,6 +173,20 @@ module Hcode
         Template.render(SYSTEM_TEMPLATE, vars)
       end
 
+      # Appended by Loop::Agent to the base system prompt on every request.
+      # Models with a strong baked-in brand identity (e.g. kimi-for-coding
+      # answering "I am Kimi") otherwise present themselves as the vendor's
+      # assistant; naming the actual model and provider keeps the HCode
+      # identity stable across backends.
+      def self.identity_block(provider_name : String, model_name : String) : String
+        <<-TEXT
+
+        # Identity
+
+        You are HCode. This session is served by the "#{model_name}" model via the "#{provider_name}" provider. When asked who or what you are, identify as HCode — you may mention the underlying model and provider when relevant — but do not present yourself as the model vendor's own branded assistant.
+        TEXT
+      end
+
       private def self.os_name : String
         {% if flag?(:linux) %}
           "Linux"

@@ -61,6 +61,7 @@ module Hcode
         CommandInfo.new("/feedback", "Send feedback to the team", "<message>", "feedback"),
         CommandInfo.new("/reload", "Reload config.json and session state", description_key: "reload"),
         CommandInfo.new("/web", "Print session URL for the Web UI", description_key: "web"),
+        CommandInfo.new("/sync", "Cloud sync with the PWA", "[on|off|code|email <addr>]", "sync"),
         CommandInfo.new("/settings", "Show current configuration", description_key: "settings"),
         CommandInfo.new("/init", "Analyze the codebase and generate AGENTS.md", description_key: "init"),
         CommandInfo.new("/export-debug-zip", "Export session debug bundle (.tar.gz)", description_key: "export_debug_zip"),
@@ -76,6 +77,7 @@ module Hcode
         CommandInfo.new("/language", "Switch interface language", "[en|ru|es|zh|ja|pt|hi|fa|uk|be]", "language"),
         CommandInfo.new("/sounds", "Toggle sound notifications", "on|off", "sounds"),
         CommandInfo.new("/volume", "Set sound volume", "0-100", "volume"),
+        CommandInfo.new("/voicelang", "Default voice message language", "ru|en|…|auto", "voicelang"),
         CommandInfo.new("/upgrade", "Update hcode to the latest release", description_key: "upgrade"),
       ]
 

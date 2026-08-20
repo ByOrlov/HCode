@@ -502,6 +502,8 @@ module Hcode
           cmd_copy
         when "/permission"
           cmd_permission(args)
+        when "/voicelang"
+          cmd_voicelang(args)
         when "/sudo"
           cmd_sudo(args)
         when "/sounds"
@@ -526,6 +528,8 @@ module Hcode
           cmd_reload
         when "/web"
           cmd_web
+        when "/sync"
+          cmd_sync(args)
         when "/settings"
           cmd_settings
         when "/init"
@@ -1094,7 +1098,14 @@ module Hcode
           else
             if cb = @on_resume_session
               emit_to_log(Message.new("system", "Resuming session: #{entry.label}"))
-              cb.call(entry.path)
+              begin
+                cb.call(entry.path)
+              rescue ex : Session::FileDeletedError
+                # The session files vanished between listing and picking
+                # (or while the app ran). Keep the current session intact.
+                emit_to_log(Message.new("error",
+                  "Session file was deleted, cannot resume: #{entry.label} (#{ex.session_dir})"))
+              end
             else
               emit_to_log(Message.new("error", "Session resume is not wired up."))
             end

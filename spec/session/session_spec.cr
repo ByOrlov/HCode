@@ -333,4 +333,177 @@ describe Hcode::Session::Store do
       FileUtils.rm_rf(home)
     end
   end
+
+  describe "deleted session file handling" do
+    it "open_existing! raises FileDeletedError when the session dir is gone" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".hcode", "sessions", "deleted01")
+        # Neither the directory nor wire.jsonl exists.
+        expect_raises(Hcode::Session::FileDeletedError) do
+          Hcode::Session::Store.open_existing!(dir)
+        end
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "open_existing! raises FileDeletedError when only wire.jsonl is gone" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".hcode", "sessions", "deleted02")
+        Dir.mkdir_p(dir)
+        expect_raises(Hcode::Session::FileDeletedError) do
+          Hcode::Session::Store.open_existing!(dir)
+        end
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "open_existing! returns a store for an intact session" do
+      home = temp_home
+      begin
+        lc = Hcode::Session::Lifecycle.new(home)
+        created = lc.create("/repo", "ok")
+        store = Hcode::Session::Store.open_existing!(created.session_dir)
+        store.wire_path.should eq(created.wire_path)
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "append rebuilds the wire from the journal after a mid-session deletion" do
+      home = temp_home
+      begin
+        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store.append_simple("turn.prompt", "prompt", "hello")
+        store.append("assistant.text", {"content" => JSON::Any.new("world")})
+
+        recovered = false
+        store.on_wire_recovered = -> { recovered = true; nil }
+
+        File.delete(store.wire_path)
+        store.append_simple("turn.prompt", "prompt", "after deletion")
+
+        recovered.should be_true
+        lines = File.read_lines(store.wire_path)
+        lines.size.should eq(3)
+        lines[0].should contain("hello")
+        lines[1].should contain("world")
+        lines[2].should contain("after deletion")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    # Regression: the whole session directory can vanish mid-run (session GC,
+    # tmp cleaners) — including in the window between the mkdir_p check and
+    # the File.open. append must self-heal instead of raising
+    # FileNotFoundError into the turn fiber.
+    it "append recreates the session directory after it is deleted mid-session" do
+      home = temp_home
+      begin
+        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store.append_simple("turn.prompt", "prompt", "hello")
+
+        FileUtils.rm_rf(store.session_dir)
+        store.append_simple("assistant.text", "content", "world")
+
+        lines = File.read_lines(store.wire_path)
+        lines.size.should eq(2)
+        lines[0].should contain("hello")
+        lines[1].should contain("world")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "append restores the full replayed history after the wire is deleted" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".hcode", "sessions", "ws02")
+        Dir.mkdir_p(dir)
+        File.write(File.join(dir, "wire.jsonl"), [
+          %({"type":"turn.prompt","data":{"prompt":"old question"}}),
+          %({"type":"assistant.text","data":{"content":"old answer"}}),
+        ].join('\n') + "\n")
+        store = Hcode::Session::Store.new(dir)
+
+        # Resume: replay journals the prior history in memory.
+        mem = Hcode::Context::Memory.new
+        store.replay(mem)
+
+        File.delete(store.wire_path)
+        store.append_simple("turn.prompt", "prompt", "new question")
+
+        lines = File.read_lines(store.wire_path)
+        lines.size.should eq(3)
+        lines[0].should contain("old question")
+        lines[1].should contain("old answer")
+        lines[2].should contain("new question")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "append recreates a fully deleted session directory" do
+      home = temp_home
+      begin
+        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store.append_simple("turn.prompt", "prompt", "one")
+
+        FileUtils.rm_rf(store.session_dir)
+        store.append_simple("turn.prompt", "prompt", "two")
+
+        File.exists?(store.wire_path).should be_true
+        lines = File.read_lines(store.wire_path)
+        lines.size.should eq(2)
+        lines[0].should contain("one")
+        lines[1].should contain("two")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "write_state recreates a deleted session directory" do
+      home = temp_home
+      begin
+        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        meta = store.read_state || raise "read_state should not be nil"
+        FileUtils.rm_rf(store.session_dir)
+
+        store.write_state(meta)
+        File.exists?(store.state_path).should be_true
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "adopt rebinds onto another session and reloads its journal" do
+      home = temp_home
+      begin
+        lc = Hcode::Session::Lifecycle.new(home)
+        first = lc.create("/repo", "first")
+        first.append_simple("turn.prompt", "prompt", "from first")
+
+        second = lc.create("/repo", "second")
+        second.append_simple("turn.prompt", "prompt", "from second")
+
+        first.adopt(second)
+        first.wire_path.should eq(second.wire_path)
+        first.session_dir.should eq(second.session_dir)
+
+        File.delete(second.wire_path)
+        first.append_simple("turn.prompt", "prompt", "after adopt")
+
+        lines = File.read_lines(second.wire_path)
+        lines.size.should eq(2)
+        lines[0].should contain("from second")
+        lines[1].should contain("after adopt")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+  end
 end

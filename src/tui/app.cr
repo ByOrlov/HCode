@@ -58,7 +58,9 @@ module Hcode
       # the array" and "actually started its turn" so a queued-message
       # dispatcher doesn't see an empty queue + idle phase and race itself.
       @dispatch_pending : Bool = false
-      @run_turn_cb : (String, Bool -> Nil)?
+      # The turn callback normally installed by `run`; a property so tests
+      # and embedded drivers can install one without entering the event loop.
+      property run_turn_cb : (String, Bool -> Nil)? = nil
       # Plan mode mirrors TS: while on, tools that mutate state are blocked
       # and the agent only researches. Toggled via `/plan` or `EnterPlanMode`.
       property? plan_mode : Bool = false

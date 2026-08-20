@@ -292,6 +292,15 @@ module Hcode
       end
 
       private def execute_step(system_prompt : String?, on_event : Event ->) : StepResult
+        # State which model/provider actually serves this session: without it,
+        # models with a strong baked-in brand identity answer "who are you"
+        # with their vendor's name instead of HCode. Built per step so a
+        # runtime /provider or /model switch is reflected immediately.
+        sys_prompt = system_prompt
+        if sys_prompt && !sys_prompt.empty?
+          sys_prompt += Prompt::SystemPrompt.identity_block(@provider.name, @provider.model_name)
+        end
+
         retry_policy = RetryPolicy.new
         retry_count = 0
 
@@ -315,7 +324,7 @@ module Hcode
           end
 
           begin
-            return @provider.chat(messages, tool_defs, system_prompt,
+            return @provider.chat(messages, tool_defs, sys_prompt,
               aborted?: -> { @abort_controller.aborted? }) do |part|
               case part
               when LLM::TextPart

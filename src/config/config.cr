@@ -28,6 +28,51 @@ module Hcode
       end
     end
 
+    # Global cloud-sync settings (`sync` section of config.json) — the
+    # `/sync on` TUI command and `hcode sync` both flip `enabled`; the
+    # pairing code itself lives in `~/.hcode/remote/code` (see
+    # src/remote/, plans/CloudSync.md in the hibechat repo).
+    struct SyncConfig
+      include JSON::Serializable
+
+      property? enabled : Bool = false
+      # Relay the hcode-remote daemon connects to in cloud mode. Default is
+      # the LAN address of this machine (resolved at read time) so the
+      # pairing QR works from a phone — localhost would point the phone at
+      # itself. Override explicitly via config.json when a public relay
+      # exists.
+      property relay_url : String = ""
+
+      def initialize(@enabled : Bool = false,
+                     @relay_url : String = "",
+                     @email : String = "")
+      end
+    end
+
+    # Voice transcription settings (`transcription` section of config.json)
+    # — hcode-remote stores inbound APK voice clips and sends the file
+    # paths to the local soroka-server over a Unix socket. The socket path
+    # keeps its literal `~` here; callers expand it at the use site.
+    # HCODE_VOICE_SOCKET overrides it (the same env soroka-server reads).
+    struct TranscriptionConfig
+      include JSON::Serializable
+
+      property? enabled : Bool = false
+      property socket : String = "~/.hcode/voice.sock"
+      property engine : String = "auto"
+      # Default voice language ("auto" = detect on the server; detection can
+      # misfire on short/noisy clips). Set via /voicelang.
+      property language : String = "auto"
+      property max_duration_sec : Int32 = 120
+
+      def initialize(@enabled : Bool = false,
+                     @socket : String = "~/.hcode/voice.sock",
+                     @engine : String = "auto",
+                     @language : String = "auto",
+                     @max_duration_sec : Int32 = 120)
+      end
+    end
+
     class Config
       property model : String? = nil
       property provider_name : String? = nil
@@ -86,9 +131,11 @@ module Hcode
       property git_terminal_prompt : String? = nil
       property shell : String? = nil
       property notifications : Notify::Config = Notify::Config.default
+      property sync : SyncConfig = SyncConfig.new
       property hooks : Array(Hooks::HookDef) = [] of Hooks::HookDef
       property mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig
       property services : ServicesConfig = ServicesConfig.new
+      property transcription : TranscriptionConfig = TranscriptionConfig.new
 
       def initialize
       end
@@ -215,6 +262,10 @@ module Hcode
         # testing) without editing config.json.
         if ENV["HCODE_SOUND"]? == "1"
           config.notifications.sound_enabled = true
+        end
+        # Same env soroka-server reads — keeps both sides on one socket.
+        if sock = ENV["HCODE_VOICE_SOCKET"]?
+          config.transcription.socket = sock
         end
         if vol = ENV["HCODE_VOLUME"]?.try(&.to_i?)
           config.notifications.sound_volume = vol.clamp(0, 100)
@@ -349,6 +400,20 @@ module Hcode
         if ui = root["ui"]?.try(&.as_h?)
           config.language = ui["language"]?.try(&.as_s?)
           config.debug_zones = ui["debug_zones"]?.try(&.as_bool?) || false
+        end
+
+        if sync = root["sync"]?.try(&.as_h?)
+          config.sync.enabled = sync["enabled"]?.try(&.as_bool?) || false
+          config.sync.relay_url = sync["relay_url"]?.try(&.as_s?) || config.sync.relay_url
+        end
+
+        if tr = root["transcription"]?.try(&.as_h?)
+          config.transcription.socket = tr["socket"]?.try(&.as_s?) || config.transcription.socket
+          config.transcription.engine = tr["engine"]?.try(&.as_s?) || config.transcription.engine
+          config.transcription.language = tr["language"]?.try(&.as_s?) || config.transcription.language
+          config.transcription.max_duration_sec = tr["max_duration_sec"]?.try(&.as_i?) || config.transcription.max_duration_sec
+          # Explicit `false` must survive — an `if v = ...` guard would drop it.
+          config.transcription.enabled = tr["enabled"]?.try(&.as_bool?) == true
         end
 
         if notif = root["notifications"]?.try(&.as_h?)
@@ -554,6 +619,23 @@ module Hcode
                   json.field("language", lang)
                 end
                 json.field("debug_zones", @debug_zones)
+              end
+            end
+
+            json.field("sync") do
+              json.object do
+                json.field("enabled", @sync.enabled?)
+                json.field("relay_url", @sync.relay_url)
+              end
+            end
+
+            json.field("transcription") do
+              json.object do
+                json.field("enabled", @transcription.enabled?)
+                json.field("socket", @transcription.socket)
+                json.field("engine", @transcription.engine)
+                json.field("language", @transcription.language)
+                json.field("max_duration_sec", @transcription.max_duration_sec)
               end
             end
 

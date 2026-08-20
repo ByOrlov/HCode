@@ -329,6 +329,60 @@ module Hcode
         emit_to_log(Message.new("system", "Open in Web UI: #{url}"))
       end
 
+      # `/sync [on|off|code|status]` — cloud sync with the PWA. `on`
+      # enables it in config.json, starts the hcode-remote cloud daemon
+      # and prints the pairing QR; no args default to status. Auth is
+      # code-only (plans/QrAuth.md) — no email needed.
+      private def cmd_sync(args : String) : Nil
+        cfg = @app_config
+        case args.strip.downcase
+        when "on"
+          unless cfg
+            emit_to_log(Message.new("error", "Config not loaded."))
+            return
+          end
+          cfg.sync.enabled = true
+          cfg.save
+          emit_to_log(Message.new("system", sync_start_message(cfg.sync.relay_url)))
+          emit_to_log(Message.new("system", "Bridge: #{Remote::Sync.bridge_url}"))
+          emit_to_log(Message.new("system", Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, cfg.sync.relay_url)))
+        when "off"
+          cfg.try { |c| c.sync.enabled = false; c.save }
+          emit_to_log(Message.new("system", sync_stop_message))
+        when "code"
+          relay = cfg.try(&.sync.relay_url) || "ws://localhost:8791/api/v1/stream"
+          emit_to_log(Message.new("system", Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, relay)))
+        when "status", ""
+          emit_to_log(Message.new("system", sync_status_message(cfg)))
+        else
+          emit_to_log(Message.new("error", "Usage: /sync [on|off|code]"))
+        end
+      end
+
+      private def sync_start_message(relay_url : String) : String
+        case Remote::Sync.start_daemon(relay_url)
+        when :started   then "Sync enabled. hcode-remote cloud daemon started (#{relay_url})."
+        when :already   then "Sync enabled. hcode-remote cloud daemon already running (#{relay_url})."
+        when :no_binary then "Sync enabled, but hcode-remote binary not found — build it with `rake` or run it manually."
+        else                 "Sync enabled, but the cloud daemon failed to start — see ~/.hcode/remote/daemon.log"
+        end
+      end
+
+      private def sync_stop_message : String
+        case Remote::Sync.stop_daemon
+        when :stopped     then "Sync disabled. hcode-remote cloud daemon stopped."
+        when :not_running then "Sync disabled."
+        else                   "Sync disabled (daemon stop failed — check ~/.hcode/remote/daemon.pid)."
+        end
+      end
+
+      private def sync_status_message(cfg) : String
+        sync = cfg.try(&.sync) || Config::SyncConfig.new
+        state = sync.enabled? ? "on" : "off"
+        daemon = Remote::Sync.daemon_running? ? "running (#{Remote::Sync.bridge_url})" : "stopped"
+        "Cloud sync: #{state}\nDaemon: #{daemon}\nRelay: #{sync.relay_url}"
+      end
+
       private def cmd_settings : Nil
         settings = String.build do |s|
           s << "#{Hcode.t("info.provider_label", name: @provider_name)}\n"
@@ -509,6 +563,33 @@ module Hcode
           emit_to_log(Message.new("system", Hcode.t("ui.telemetry_status", state: state, counters: counters)))
         else
           emit_to_log(Message.new("error", Hcode.t("ui.telemetry_usage")))
+        end
+      end
+
+      # Sets the default voice-message language ("auto" = server-side
+      # detection, which can misfire on short/noisy clips). Sent to
+      # soroka-server with every transcription request.
+      private def cmd_voicelang(args : String) : Nil
+        lang = args.strip.downcase
+        case lang
+        when ""
+          current = @app_config.try(&.transcription.language) || "auto"
+          emit_to_log(Message.new("system",
+            "Voice language: #{current}\nUsage: /voicelang <code|auto>  (e.g. ru, en, uk)"))
+        when "auto"
+          if cfg = @app_config
+            cfg.transcription.language = "auto"
+            cfg.save
+          end
+          emit_to_log(Message.new("system", "Voice language: auto (server-side detection)"))
+        when /^[a-z]{2}(-[a-z]{2})?$/
+          if cfg = @app_config
+            cfg.transcription.language = lang
+            cfg.save
+          end
+          emit_to_log(Message.new("system", "Voice language: #{lang}"))
+        else
+          emit_to_log(Message.new("error", "Usage: /voicelang <code|auto>  (e.g. ru, en, auto)"))
         end
       end
 

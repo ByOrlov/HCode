@@ -103,4 +103,14 @@ describe Hcode::Prompt::SystemPrompt do
     prompt.should contain("## Additional Directories")
     prompt.should contain(tmp)
   end
+
+  it ".identity_block names the model and provider while keeping the HCode identity" do
+    block = Hcode::Prompt::SystemPrompt.identity_block("moonshot", "kimi-for-coding")
+
+    block.should contain("# Identity")
+    block.should contain("kimi-for-coding")
+    block.should contain("moonshot")
+    block.should contain("identify as HCode")
+    block.should_not contain("{{")
+  end
 end

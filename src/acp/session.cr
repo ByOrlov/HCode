@@ -32,6 +32,14 @@ module Hcode
       # Run a prompt turn. Streams `session/update` notifications and returns
       # a `PromptResponse`-shaped JSON::Any when done.
       def prompt(text : String) : JSON::Any
+        # Blank prompts are rejected by the chat API (400) — answer locally
+        # instead of starting a turn that can only fail.
+        if text.strip.empty?
+          update = EventTranslator.assistant_delta(@id, "Silence — nothing recognized; message ignored.")
+          emit_update(update)
+          return build_prompt_response("end_turn")
+        end
+
         # Check for slash commands
         if text.starts_with?('/')
           return handle_slash_command(text)

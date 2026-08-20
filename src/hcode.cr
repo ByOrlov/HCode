@@ -58,6 +58,9 @@ require "./tools/skill"
 require "./tools/plan_mode"
 require "./tools/goal"
 require "./tools/task"
+require "./remote/control_socket"
+require "./remote/qr"
+require "./remote/sync"
 require "./tools/cron"
 require "./tools/read_media"
 require "./tools/select_tools"
@@ -193,6 +196,17 @@ module Hcode
         return run_acp(argv[1..])
       end
 
+      # `hcode sync` — cloud-sync management (see Remote::Sync).
+      if argv.size > 0 && argv[0] == "sync"
+        return run_sync(argv[1..])
+      end
+
+      # `hcode resync [url]` — shortcut for `hcode sync resync`: fresh
+      # pairing code + QR, optionally pointing at a new relay.
+      if argv.size > 0 && argv[0] == "resync"
+        return run_sync(["resync"] + argv[1..])
+      end
+
       prompt = nil
       tui_prompt = nil
       work_dir = Dir.current
@@ -262,6 +276,12 @@ module Hcode
         config.permission_mode = pm
       end
       config.ensure_hcode_home
+
+      # Cloud-sync autostart: when sync is enabled, make sure the
+      # hcode-remote cloud daemon is up (idempotent — skips if running).
+      if config.sync.enabled? && !Remote::Sync.daemon_running?
+        Remote::Sync.start_daemon(config.sync.relay_url)
+      end
 
       home = ENV["HOME"]? || "/tmp"
 
@@ -363,12 +383,15 @@ module Hcode
       store = if sid = session_id
                 # Resolve across every workspace + legacy flat layout.
                 entry = lifecycle.index.get(sid)
-                if entry
-                  Hcode::Session::Store.new(entry.path)
-                else
-                  # Fall back to the literal flat-layout path for ids the
-                  # Index has not indexed yet (e.g. created mid-session).
-                  Hcode::Session::Store.new(File.join(home, ".hcode", "sessions", sid))
+                dir = entry ? entry.path : File.join(home, ".hcode", "sessions", sid)
+                # open_existing! refuses to silently resurrect a deleted
+                # session as an empty one (which would lose everything on
+                # the next save) and raises FileDeletedError instead.
+                begin
+                  Hcode::Session::Store.open_existing!(dir)
+                rescue Hcode::Session::FileDeletedError
+                  STDERR.puts Hcode.t("errors.session_deleted", id: sid)
+                  exit(1)
                 end
               elsif continue_session
                 ws_id = Hcode::Session::Index.workspace_id(work_dir)
@@ -689,6 +712,87 @@ module Hcode
       end
     end
 
+    # `hcode sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
+    # command. Flips `sync.enabled` in config.json and manages the
+    # hcode-remote cloud daemon (see Remote::Sync). `resync [url]` issues a
+    # fresh pairing code + QR, optionally for a new relay (`hcode resync` is
+    # the shortcut). Auth is code-only (plans/QrAuth.md) — no email needed.
+    private def self.run_sync(rest_argv : Array(String)) : Nil
+      config = Config::Config.load
+      config.ensure_hcode_home
+      cmd = rest_argv[0]? || "status"
+      case cmd
+      when "on"
+        # Без явного relay в конфиге подставляем LAN-адрес этого компьютера:
+        # QR с localhost на телефоне указывал бы на сам телефон.
+        if config.sync.relay_url.empty?
+          config.sync.relay_url = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+          config.save
+        end
+        config.sync.enabled = true
+        config.save
+        puts sync_daemon_start_message(config.sync.relay_url)
+        puts "bridge: #{Remote::Sync.bridge_url}"
+        puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
+      when "off"
+        config.sync.enabled = false
+        config.save
+        puts sync_daemon_stop_message
+      when "code"
+        if config.sync.relay_url.empty?
+          config.sync.relay_url = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+          config.save
+        end
+        puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
+      when "resync"
+        # Fresh pairing code + QR, optionally for a new relay URL. The old
+        # code dies with the old relay — the daemon restart (if running)
+        # picks up the regenerated code.
+        relay = rest_argv[1]?
+        relay = config.sync.relay_url if relay.nil? || relay.empty?
+        if relay.nil? || relay.empty?
+          relay = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+        end
+        config.sync.relay_url = relay
+        config.save
+        code = Remote::Sync.regenerate_code
+        was_running = Remote::Sync.daemon_running?
+        Remote::Sync.stop_daemon if was_running
+        if was_running || config.sync.enabled?
+          puts sync_daemon_start_message(relay)
+          puts "bridge: #{Remote::Sync.bridge_url}"
+        end
+        puts Remote::Sync.qr_banner(code, relay)
+      when "status"
+        daemon = Remote::Sync.daemon_running? ? "running" : "stopped"
+        puts "cloud sync: #{config.sync.enabled? ? "on" : "off"}"
+        puts "daemon: #{daemon}"
+        puts "relay: #{config.sync.relay_url}"
+        puts "bridge: #{Remote::Sync.bridge_url}" if Remote::Sync.daemon_running?
+      else
+        STDERR.puts "usage: hcode sync [on|off|code|resync [relay-url]|status]"
+        STDERR.puts "       hcode resync [relay-url]   # same as `hcode sync resync`"
+        exit 2
+      end
+    end
+
+    private def self.sync_daemon_start_message(relay_url : String) : String
+      case Remote::Sync.start_daemon(relay_url)
+      when :started   then "hcode-remote cloud daemon started (#{relay_url})"
+      when :already   then "hcode-remote cloud daemon already running (#{relay_url})"
+      when :no_binary then "hcode-remote binary not found — build it with `rake` or start it manually"
+      else                 "cloud daemon failed to start — see ~/.hcode/remote/daemon.log"
+      end
+    end
+
+    private def self.sync_daemon_stop_message : String
+      case Remote::Sync.stop_daemon
+      when :stopped     then "hcode-remote cloud daemon stopped"
+      when :not_running then "hcode-remote cloud daemon was not running"
+      else                   "daemon stop failed — check ~/.hcode/remote/daemon.pid"
+      end
+    end
+
     # Start the ACP (Agent Client Protocol) server for IDE integration.
     # Communicates with ACP clients (Zed, JetBrains, Neovim, etc.) over
     # JSON-RPC on stdin/stdout. See `src/acp/` and `ACP-Plan.md`.
@@ -889,9 +993,18 @@ module Hcode
       cron_service.start
 
       # Flush cron state + kill background processes on clean exit.
+      # Control socket for hcode-remote: lets the remote daemon inject
+      # prompts/interrupts into this live TUI session (external input path).
+      control_socket = Remote::ControlSocket.new(
+        ->(text : String) { app.deliver_external_prompt(text) },
+        -> { agent.cancel },
+        -> { app.agent_busy? }
+      )
+      control_socket.rebind(store.session_dir)
       app.on_exit = -> {
         cron_service.stop
         ts.stop_all_on_exit("process exited")
+        control_socket.close
         mcp_manager.shutdown
         nil
       }
@@ -941,12 +1054,19 @@ module Hcode
           end
         end
       end
+      # Surface automatic wire recovery in the transcript so the user knows
+      # the session file vanished externally and was rebuilt from the
+      # in-memory journal (otherwise the fix is invisible).
+      store.on_wire_recovered = -> {
+        app.add_message("system",
+          "Session file was deleted externally; restored the full history from the in-memory journal.")
+        nil
+      }
+
       app.on_new_session = -> {
         agent.context.clear
         new_store = lifecycle.create(work_dir)
-        store.session_dir = new_store.session_dir
-        store.wire_path = new_store.wire_path
-        store.state_path = new_store.state_path
+        store.adopt(new_store)
         store.ensure_wire
         app.session_id = store.read_state.try(&.id) || ""
         Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
@@ -961,15 +1081,19 @@ module Hcode
         )
         Hcode::Tools::Cron.service = new_cron
         new_cron.start
+        control_socket.rebind(store.session_dir)
         nil
       }
       app.on_resume_session = ->(path : String) do
-        resumed = Session::Store.new(path)
+        # open_existing! raises FileDeletedError when the picked session's
+        # files are gone — resuming a deleted session would silently create
+        # an empty wire log and lose everything on the next save. The error
+        # propagates to the TUI, which reports it; the current session and
+        # its context stay untouched.
+        resumed = Session::Store.open_existing!(path)
         agent.context.clear
         resumed.replay(agent.context)
-        store.session_dir = resumed.session_dir
-        store.wire_path = resumed.wire_path
-        store.state_path = resumed.state_path
+        store.adopt(resumed)
         app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
         app.load_transcript_from(agent.context)
         Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
@@ -986,14 +1110,14 @@ module Hcode
         Hcode::Tools::Cron.service = new_cron
         new_cron.start
         ts.mark_lost_on_resume
+        control_socket.rebind(store.session_dir)
         nil
       end
       app.on_fork = -> {
         forked = lifecycle.fork(store, work_dir)
-        store.session_dir = forked.session_dir
-        store.wire_path = forked.wire_path
-        store.state_path = forked.state_path
+        store.adopt(forked)
         app.session_id = forked.read_state.try(&.id) || ""
+        control_socket.rebind(store.session_dir)
         nil
       }
       app.on_archive = -> {
@@ -1689,6 +1813,16 @@ module Hcode
 
           (no -p flag)            Interactive TUI mode
                                   Type / for slash commands
+
+        Commands:
+          hcode sync [on|off|code|resync|status]   Cloud sync management
+              sync on                  Enable sync, start daemon, show pairing QR
+              sync off                 Stop daemon and disable sync
+              sync code                Show current pairing QR
+              sync resync [relay-url]  New pairing code + QR (e.g. for a new relay)
+              sync status              Show sync status
+          hcode resync [relay-url]                Shortcut for `hcode sync resync`
+          hcode acp                                ACP server for IDE integration
 
         Environment:
           MOONSHOT_API_KEY        API key for Moonshot

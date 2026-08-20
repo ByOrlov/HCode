@@ -1,4 +1,6 @@
 /hcode
+/hcode-remote
+/node_modules
 /lib
 /bin
 /.shard.lock
@@ -8,6 +10,7 @@ kimi-code/
 *.swp
 
 tmp/
+VOICE-INTEGRATION.md
 
 *.deb
 

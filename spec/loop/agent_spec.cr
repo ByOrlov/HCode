@@ -123,6 +123,49 @@ describe Hcode::Loop::Agent do
     memory.messages.last.text.should eq("second")
   end
 
+  it "appends the model/provider identity block to the system prompt sent to the provider" do
+    provider = PromptCaptureProvider.new(Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("ok")] of Hcode::LLM::MessagePart,
+        stop_reason: "end_turn",
+        text: "ok",
+      ),
+    ]))
+    memory = Hcode::Context::Memory.new
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+
+    agent.run_turn("who are you?", "You are HCode, an agent.") { }
+
+    provider.captured_system_prompts.size.should eq(1)
+    sent = provider.captured_system_prompts.first
+    sent.should_not be_nil
+    sent = sent || raise "system prompt capture failed"
+    sent.should start_with("You are HCode, an agent.")
+    sent.should contain("# Identity")
+    sent.should contain("identity-capture")
+    sent.should contain("test-model")
+  end
+
+  it "sends no identity block when no system prompt is set" do
+    provider = PromptCaptureProvider.new(Hcode::LLM::MockProvider.new([
+      Hcode::LLM::MockStep.new(
+        parts: [Hcode::LLM::TextPart.new("ok")] of Hcode::LLM::MessagePart,
+        stop_reason: "end_turn",
+        text: "ok",
+      ),
+    ]))
+    memory = Hcode::Context::Memory.new
+    tools = Hcode::Tools::Registry.new
+    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
+    agent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+
+    agent.run_turn("hi", nil) { }
+
+    provider.captured_system_prompts.first.should be_nil
+  end
+
   it "emits ThinkingDelta events when the provider streams ThinkParts" do
     provider = Hcode::LLM::MockProvider.new([
       Hcode::LLM::MockStep.new(
@@ -448,5 +491,33 @@ private class BoomTool < Hcode::Tools::Tool
 
   def execute(input : JSON::Any) : Hcode::Tools::ToolResult
     raise Exception.new("kaboom from BoomTool")
+  end
+end
+
+# Wraps the offline MockProvider and records the exact system_prompt each
+# chat call received, so specs can assert on prompt augmentation.
+private class PromptCaptureProvider < Hcode::LLM::Provider
+  property captured_system_prompts = [] of String?
+
+  def initialize(@inner : Hcode::LLM::MockProvider)
+  end
+
+  def name : String
+    "identity-capture"
+  end
+
+  def model_name : String
+    "test-model"
+  end
+
+  def fetch_models : Array(String)
+    [] of String
+  end
+
+  def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
+           system_prompt : String? = nil, aborted? : -> Bool = -> { false },
+           &block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+    @captured_system_prompts << system_prompt
+    @inner.chat(messages, tools, system_prompt, aborted?) { |p| block.call(p) }
   end
 end

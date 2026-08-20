@@ -311,6 +311,53 @@ describe Hcode::Config::Config do
       end
     end
 
+    it "round-trips the transcription section" do
+      json = %({"transcription":{"enabled":true,"socket":"/tmp/voice.sock","engine":"gigaam","language":"ru","max_duration_sec":60}})
+      config = Hcode::Config::Config.parse_json(json)
+      config.transcription.enabled?.should be_true
+      config.transcription.socket.should eq("/tmp/voice.sock")
+      config.transcription.engine.should eq("gigaam")
+      config.transcription.language.should eq("ru")
+      config.transcription.max_duration_sec.should eq(60)
+
+      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      begin
+        config.save(path)
+        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        reloaded.transcription.enabled?.should be_true
+        reloaded.transcription.socket.should eq("/tmp/voice.sock")
+        reloaded.transcription.engine.should eq("gigaam")
+        reloaded.transcription.language.should eq("ru")
+        reloaded.transcription.max_duration_sec.should eq(60)
+      ensure
+        File.delete(path) rescue nil
+      end
+    end
+
+    it "defaults the transcription section" do
+      config = Hcode::Config::Config.parse_json(%({}))
+      config.transcription.enabled?.should be_false
+      config.transcription.socket.should eq("~/.hcode/voice.sock")
+      config.transcription.engine.should eq("auto")
+      config.transcription.max_duration_sec.should eq(120)
+    end
+
+    it "maps HCODE_VOICE_SOCKET to the transcription socket" do
+      prev = ENV["HCODE_VOICE_SOCKET"]?
+      begin
+        ENV["HCODE_VOICE_SOCKET"] = "/tmp/other-voice.sock"
+        config = Hcode::Config::Config.load(
+          "/tmp/hcode-spec-nonexistent-#{Random::Secure.hex(4)}.json")
+        config.transcription.socket.should eq("/tmp/other-voice.sock")
+      ensure
+        if prev
+          ENV["HCODE_VOICE_SOCKET"] = prev
+        else
+          ENV.delete("HCODE_VOICE_SOCKET")
+        end
+      end
+    end
+
     it "round-trips services.moonshot_search" do
       ms = Hcode::Config::MoonshotServiceConfig.new(
         base_url: "https://search.example.com",
