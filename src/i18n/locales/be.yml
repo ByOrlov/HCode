@@ -25,6 +25,7 @@ be:
     fatal: "Крытычная памылка: %{message}"
     no_previous_session: "Няма папярэдняга сеансу для працягу."
     session_deleted: "Файл сеансу выдалены: %{id}"
+    session_busy: "Сесія ўжо адкрыта ў іншым працэсе hcode: %{id}"
     provider_switch_failed: "Не ўдалося змяніць пастаўшчыка: %{message}"
     model_switch_failed: "Не ўдалося змяніць мадэль: %{message}"
     login_failed: "Уваход не ўдаўся: %{message}"

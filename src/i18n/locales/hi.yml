@@ -25,6 +25,7 @@ hi:
     fatal: "घातक: %{message}"
     no_previous_session: "जारी रखने के लिए कोई पिछली सत्र नहीं मिला।"
     session_deleted: "सत्र फ़ाइल हटा दी गई है: %{id}"
+    session_busy: "यह सत्र hcode की दूसरी प्रक्रिया में पहले से खुला है: %{id}"
     provider_switch_failed: "प्रदाता बदलने में विफल: %{message}"
     model_switch_failed: "मॉडल बदलने में विफल: %{message}"
     login_failed: "लॉगिन विफल: %{message}"

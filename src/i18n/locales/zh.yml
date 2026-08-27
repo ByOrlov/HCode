@@ -25,6 +25,7 @@ zh:
     fatal: "致命错误：%{message}"
     no_previous_session: "没有可继续的上一会话。"
     session_deleted: "会话文件已被删除：%{id}"
+    session_busy: "该会话已在另一个 hcode 进程中打开：%{id}"
     provider_switch_failed: "切换提供商失败：%{message}"
     model_switch_failed: "切换模型失败：%{message}"
     login_failed: "登录失败：%{message}"

@@ -25,6 +25,7 @@ es:
     fatal: "Fatal: %{message}"
     no_previous_session: "No se encontró una sesión previa para continuar."
     session_deleted: "El archivo de sesión fue eliminado: %{id}"
+    session_busy: "La sesión ya está abierta en otro proceso de hcode: %{id}"
     provider_switch_failed: "No se pudo cambiar el proveedor: %{message}"
     model_switch_failed: "No se pudo cambiar el modelo: %{message}"
     login_failed: "Inicio de sesión fallido: %{message}"

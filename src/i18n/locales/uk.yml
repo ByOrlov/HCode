@@ -25,6 +25,7 @@ uk:
     fatal: "Критична помилка: %{message}"
     no_previous_session: "Немає попередньої сесії для продовження."
     session_deleted: "Файл сесії видалено: %{id}"
+    session_busy: "Сесія вже відкрита в іншому процесі hcode: %{id}"
     provider_switch_failed: "Не вдалося змінити постачальника: %{message}"
     model_switch_failed: "Не вдалося змінити модель: %{message}"
     login_failed: "Вхід не вдався: %{message}"

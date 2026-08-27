@@ -380,31 +380,44 @@ module Hcode
 
       home = ENV["HOME"]? || "/tmp"
       lifecycle = Hcode::Session::Lifecycle.new(home)
-      store = if sid = session_id
-                # Resolve across every workspace + legacy flat layout.
-                entry = lifecycle.index.get(sid)
-                dir = entry ? entry.path : File.join(home, ".hcode", "sessions", sid)
-                # open_existing! refuses to silently resurrect a deleted
-                # session as an empty one (which would lose everything on
-                # the next save) and raises FileDeletedError instead.
-                begin
-                  Hcode::Session::Store.open_existing!(dir)
-                rescue Hcode::Session::FileDeletedError
-                  STDERR.puts Hcode.t("errors.session_deleted", id: sid)
-                  exit(1)
-                end
-              elsif continue_session
-                ws_id = Hcode::Session::Index.workspace_id(work_dir)
-                entry = lifecycle.index.find_most_recent(ws_id) ||
-                        lifecycle.index.find_most_recent
-                unless entry
-                  STDERR.puts Hcode.t("errors.no_previous_session")
-                  exit(1)
-                end
-                Hcode::Session::Store.new(entry.path)
-              else
-                lifecycle.create(work_dir)
-              end
+      store = begin
+        if sid = session_id
+          # Resolve across every workspace + legacy flat layout.
+          entry = lifecycle.index.get(sid)
+          dir = entry ? entry.path : File.join(home, ".hcode", "sessions", sid)
+          # open_existing! refuses to silently resurrect a deleted
+          # session as an empty one (which would lose everything on
+          # the next save) and raises FileDeletedError instead.
+          begin
+            Hcode::Session::Store.open_existing!(dir)
+          rescue Hcode::Session::FileDeletedError
+            STDERR.puts Hcode.t("errors.session_deleted", id: sid)
+            exit(1)
+          end
+        elsif continue_session
+          ws_id = Hcode::Session::Index.workspace_id(work_dir)
+          entry = lifecycle.index.find_most_recent(ws_id) ||
+                  lifecycle.index.find_most_recent
+          unless entry
+            STDERR.puts Hcode.t("errors.no_previous_session")
+            exit(1)
+          end
+          begin
+            Hcode::Session::Store.open_existing!(entry.path)
+          rescue Hcode::Session::FileDeletedError
+            STDERR.puts Hcode.t("errors.session_deleted", id: entry.id)
+            exit(1)
+          end
+        else
+          lifecycle.create(work_dir)
+        end
+      rescue e : Hcode::Session::SessionBusyError
+        # Another live hcode process owns the session; two writers on one
+        # wire.jsonl corrupt it, so refuse instead of interleaving.
+        STDERR.puts Hcode.t("errors.session_busy", id: session_id || File.basename(e.session_dir))
+        STDERR.puts e.message
+        exit(1)
+      end
 
       if continue_session || session_id
         store.replay(memory)
@@ -747,8 +760,12 @@ module Hcode
       when "resync"
         # Fresh pairing code + QR, optionally for a new relay URL. The old
         # code dies with the old relay — the daemon restart (if running)
-        # picks up the regenerated code.
+        # picks up the regenerated code. Without an explicit URL the relay
+        # comes from the running hcode-remote daemon (it publishes the
+        # external form of its `--cloud` uplink on startup), so the config
+        # self-heals stale LAN addresses on every resync.
         relay = rest_argv[1]?
+        relay = Remote::Sync.stored_relay_url if relay.nil? || relay.empty?
         relay = config.sync.relay_url if relay.nil? || relay.empty?
         if relay.nil? || relay.empty?
           relay = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
@@ -1085,32 +1102,40 @@ module Hcode
         nil
       }
       app.on_resume_session = ->(path : String) do
-        # open_existing! raises FileDeletedError when the picked session's
-        # files are gone — resuming a deleted session would silently create
-        # an empty wire log and lose everything on the next save. The error
-        # propagates to the TUI, which reports it; the current session and
-        # its context stay untouched.
-        resumed = Session::Store.open_existing!(path)
-        agent.context.clear
-        resumed.replay(agent.context)
-        store.adopt(resumed)
-        app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
-        app.load_transcript_from(agent.context)
-        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
-        # Restart the cron scheduler against the resumed session store and
-        # reconcile persisted task records (mark non-terminal as Lost).
-        cron_service.stop
-        new_cron = Hcode::Tools::LiveCronService.new(
-          store: store,
-          agent: agent,
-          delivery: delivery,
-          enabled: config.cron_enabled?,
-          no_stale: config.cron_no_stale?,
-        )
-        Hcode::Tools::Cron.service = new_cron
-        new_cron.start
-        ts.mark_lost_on_resume
-        control_socket.rebind(store.session_dir)
+        # Resuming the session this hcode already owns would trip the
+        # session lock (held by this very process) — treat as a no-op.
+        if path.chomp("/") == store.session_dir.chomp("/")
+          app.add_message("system", "This session is already open in this hcode.")
+        else
+          # open_existing! raises FileDeletedError when the picked
+          # session's files are gone, and SessionBusyError when another
+          # live process owns it — resuming a deleted session would
+          # silently create an empty wire log and a second writer would
+          # interleave two conversations into one wire. Both errors
+          # propagate to the TUI, which reports them; the current session
+          # and its context stay untouched.
+          resumed = Session::Store.open_existing!(path)
+          agent.context.clear
+          resumed.replay(agent.context)
+          store.adopt(resumed)
+          app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
+          app.load_transcript_from(agent.context)
+          Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+          # Restart the cron scheduler against the resumed session store and
+          # reconcile persisted task records (mark non-terminal as Lost).
+          cron_service.stop
+          new_cron = Hcode::Tools::LiveCronService.new(
+            store: store,
+            agent: agent,
+            delivery: delivery,
+            enabled: config.cron_enabled?,
+            no_stale: config.cron_no_stale?,
+          )
+          Hcode::Tools::Cron.service = new_cron
+          new_cron.start
+          ts.mark_lost_on_resume
+          control_socket.rebind(store.session_dir)
+        end
         nil
       end
       app.on_fork = -> {

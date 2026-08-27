@@ -10,6 +10,10 @@ require "../session/store"
 require "../session/index"
 require "../session/lifecycle"
 require "../loop/agent"
+require "../loop/subagent_registry"
+require "../loop/subagent_agent_runner"
+require "../loop/subagent_swarm_runner"
+require "../tools/task"
 require "../hooks/engine"
 require "../prompt/system_prompt"
 require "../mcp/manager"
@@ -17,6 +21,7 @@ require "../mcp/config"
 require "./json_rpc"
 require "./session"
 require "./approval"
+require "./plan_review"
 require "./event_translator"
 
 module Hcode
@@ -217,6 +222,17 @@ module Hcode
         end
 
         cwd = entry.cwd.empty? ? Dir.current : entry.cwd
+        # Already loaded in this child: reuse it. Rebuilding would try to
+        # take a session lock this process already holds (SessionBusyError
+        # — flock conflicts even within one process) and would leak the
+        # previous session's runtime.
+        if existing = lookup_session(session_id)
+          config_options = build_config_options(existing)
+          response = {"configOptions" => config_options} of String => JSON::Any
+          @rpc.send_response(id, response) if id
+          push_available_commands(session_id)
+          return
+        end
         # The index scan above found the entry, but the files can be gone
         # by the time we open them; report instead of resurrecting an
         # empty session that would lose everything on the next save.
@@ -226,8 +242,12 @@ module Hcode
           @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
             "Session files were deleted: #{session_id}") if id
           return
+        rescue ex : Hcode::Session::SessionBusyError
+          # Session owned by another live process (e.g. a TUI) — a second
+          # writer would interleave two conversations into one wire log.
+          @rpc.send_error(id, ErrorCodes::SESSION_BUSY, ex.message.to_s) if id
+          return
         end
-
         @sessions_lock.synchronize { @sessions[session_id] = acp_session }
 
         # Replay history
@@ -261,6 +281,16 @@ module Hcode
         end
 
         cwd = entry.cwd.empty? ? Dir.current : entry.cwd
+        # Already loaded in this child: reuse it (rebuilding would try to
+        # take a session lock this process already holds — see
+        # handle_session_load).
+        if existing = lookup_session(session_id)
+          config_options = build_config_options(existing)
+          response = {"configOptions" => config_options} of String => JSON::Any
+          @rpc.send_response(id, response) if id
+          push_available_commands(session_id)
+          return
+        end
         # The index scan above found the entry, but the files can be gone
         # by the time we open them; report instead of resurrecting an
         # empty session that would lose everything on the next save.
@@ -269,6 +299,11 @@ module Hcode
         rescue Hcode::Session::FileDeletedError
           @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
             "Session files were deleted: #{session_id}") if id
+          return
+        rescue ex : Hcode::Session::SessionBusyError
+          # Session owned by another live process (e.g. a TUI) — a second
+          # writer would interleave two conversations into one wire log.
+          @rpc.send_error(id, ErrorCodes::SESSION_BUSY, ex.message.to_s) if id
           return
         end
 
@@ -321,11 +356,13 @@ module Hcode
       # --- session/list ---
 
       private def handle_session_list(id : Int32?, params : JSON::Any) : Nil
-        cwd = params["cwd"]?.try(&.to_s) || Dir.current
+        # `cwd` is an optional filter per the ACP spec: without it every
+        # workspace is listed (remote clients use this to populate their
+        # workspace/folder picker from the full session history).
+        cwd = params["cwd"]?.try(&.to_s).presence
         lifecycle = Hcode::Session::Lifecycle.new(@home)
-        ws_id = Hcode::Session::Index.workspace_id(cwd)
 
-        entries = lifecycle.index.list(ws_id)
+        entries = cwd ? lifecycle.index.list(Hcode::Session::Index.workspace_id(cwd)) : lifecycle.index.list
 
         sessions = [] of JSON::Any
         entries.each do |entry|
@@ -455,7 +492,10 @@ module Hcode
                                               session_dir : String,
                                               cwd : String,
                                               mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig) : Acp::Session
-        store = Hcode::Session::Store.new(session_dir)
+        # open_existing! takes the session lock: a session owned by
+        # another live process (e.g. an interactive TUI) must not be
+        # resumed here — two writers on one wire.jsonl corrupt it.
+        store = Hcode::Session::Store.open_existing!(session_dir)
         build_session_common(session_id, store, cwd, mcp_servers)
       end
 
@@ -498,9 +538,48 @@ module Hcode
         # Create the ACP session wrapper
         acp_session = Acp::Session.new(session_id, agent, store, @rpc, system_prompt)
 
+        # Wire subagent runtimes (mirrors wire_subagent_runners in hcode.cr):
+        # without this Agent/AgentSwarm fail with "no subagent runtime is
+        # registered" and TaskList/TaskOutput/TaskStop have no backing
+        # service. Same globals caveat as PlanMode above: with several
+        # concurrent ACP sessions the last one created wins.
+        task_service = Tools::InMemoryTaskService.new(store)
+        Tools::Task.service = task_service
+        registry = Loop::SubagentRegistry.new
+        permission_mode = Permission::Mode.parse(@config.permission_mode)
+        Tools::Agent.runner = Loop::SubagentAgentRunner.new(
+          registry: registry,
+          parent_agent: agent,
+          task_service: task_service,
+          system_prompt: system_prompt,
+          work_dir: cwd,
+          permission_mode: permission_mode,
+          subagent_timeout_ms: @config.subagent_timeout_ms,
+        )
+        Tools::AgentSwarm.runner = Loop::SubagentSwarmRunner.new(
+          registry: registry,
+          parent_agent: agent,
+          system_prompt: system_prompt,
+          work_dir: cwd,
+          permission_mode: permission_mode,
+          subagent_timeout_ms: @config.subagent_timeout_ms,
+        )
+        Tools::Agent.background_enabled = true
+
         # Wire the permission callback to use reverse-RPC
         handler = ApprovalHandler.new(@rpc, session_id)
         permission.approval_callback = handler.callback
+
+        # Plan-mode wiring (mirrors the TUI path in hcode.cr): per-session
+        # plan service + interactive review over reverse-RPC to the client.
+        # NOTE: Tools::PlanMode holds GLOBAL class properties — with several
+        # concurrent ACP sessions the last one created wins. Acceptable for
+        # the daemon's one-chat-at-a-time usage; same simplification as the
+        # TUI's AskUserQuestion.service.
+        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+        Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(
+          auto: permission.mode.auto?)
+        Hcode::Tools::PlanMode.plan_review_service = PlanReviewHandler.new(@rpc, session_id)
 
         acp_session
       end

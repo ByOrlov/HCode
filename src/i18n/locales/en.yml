@@ -25,6 +25,7 @@ en:
     fatal: "Fatal: %{message}"
     no_previous_session: "No previous session found to continue."
     session_deleted: "Session file was deleted: %{id}"
+    session_busy: "Session is already open in another hcode process: %{id}"
     provider_switch_failed: "Failed to switch provider: %{message}"
     model_switch_failed: "Failed to switch model: %{message}"
     login_failed: "Login failed: %{message}"

@@ -10,6 +10,9 @@ module Hcode
       INVALID_PARAMS   = -32602
       INTERNAL_ERROR   = -32603
       AUTH_REQUIRED    = -32000
+      # Session directory is exclusively locked by another live process
+      # (see Session::Lock / SessionBusyError).
+      SESSION_BUSY = -32001
     end
 
     # A structured JSON-RPC error response payload.

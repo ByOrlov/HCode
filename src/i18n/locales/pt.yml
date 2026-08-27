@@ -25,6 +25,7 @@ pt:
     fatal: "Fatal: %{message}"
     no_previous_session: "Nenhuma sessão anterior encontrada para continuar."
     session_deleted: "O arquivo da sessão foi excluído: %{id}"
+    session_busy: "A sessão já está aberta em outro processo do hcode: %{id}"
     provider_switch_failed: "Falha ao trocar de provedor: %{message}"
     model_switch_failed: "Falha ao trocar de modelo: %{message}"
     login_failed: "Login falhou: %{message}"

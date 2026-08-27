@@ -366,8 +366,13 @@ describe Hcode::Session::Store do
       begin
         lc = Hcode::Session::Lifecycle.new(home)
         created = lc.create("/repo", "ok")
+        # Release the creator's lock first: a session has exactly one
+        # owner, so open_existing! would otherwise (correctly) report it
+        # as busy.
+        created.unlock
         store = Hcode::Session::Store.open_existing!(created.session_dir)
         store.wire_path.should eq(created.wire_path)
+        store.unlock
       ensure
         FileUtils.rm_rf(home)
       end

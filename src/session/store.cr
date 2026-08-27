@@ -1,4 +1,5 @@
 require "./index"
+require "./lock"
 
 module Hcode
   module Session
@@ -30,6 +31,11 @@ module Hcode
       # the wire file is deleted while the session is live.
       @journal : Array(String)?
 
+      # Exclusive ownership lock over the session directory, held for the
+      # store's (process's) lifetime. Nil for lock-free stores built via
+      # the plain constructor (metadata-only use: rename, archive).
+      @lock : Lock?
+
       # True once the wire file has been observed on disk; a later append
       # that finds it missing indicates mid-session deletion.
       @wire_seen : Bool = false
@@ -45,12 +51,16 @@ module Hcode
       end
 
       # Open an existing session by directory, raising `FileDeletedError`
-      # when its wire.jsonl is gone. See the error class doc for why the
-      # plain constructor must not be used on "open" paths.
+      # when its wire.jsonl is gone and `SessionBusyError` when another
+      # live process already owns the session (see `Lock`). See the error
+      # class doc for why the plain constructor must not be used on
+      # "open" paths.
       def self.open_existing!(session_dir : String) : Store
         dir = session_dir.chomp("/")
         raise FileDeletedError.new(dir) unless File.exists?(File.join(dir, "wire.jsonl"))
-        new(dir)
+        store = new(dir)
+        store.lock!
+        store
       end
 
       def self.new_session(home : String) : Store
@@ -149,11 +159,30 @@ module Hcode
       # Rebind this store onto another session's location (TUI session
       # switch: new / resume / fork) and reload the recovery journal from
       # the target wire so a later mid-session deletion heals fully.
+      # Lock ownership follows the switch: the previous session's lock is
+      # released and the target's lock (acquired by its construction path,
+      # e.g. `open_existing!` / `Lifecycle.create`) transfers to us.
       def adopt(other : Store) : Nil
         @session_dir = other.session_dir
         @wire_path = other.wire_path
         @state_path = other.state_path
         reload_journal
+        unlock
+        @lock = other.@lock
+      end
+
+      # Acquire this session's exclusive lock (see `Lock`). No-op when
+      # already held by this store. Raises `SessionBusyError` when another
+      # live process owns the session.
+      def lock! : Nil
+        @lock ||= Lock.acquire!(@session_dir)
+      end
+
+      # Release the session lock. The OS also releases it when the process
+      # exits; this makes the handover explicit for in-process switches.
+      def unlock : Nil
+        @lock.try(&.release)
+        @lock = nil
       end
 
       # Lazily-created append buffer; shared by `append` and `read_events`.

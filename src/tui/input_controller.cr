@@ -1105,6 +1105,12 @@ module Hcode
                 # (or while the app ran). Keep the current session intact.
                 emit_to_log(Message.new("error",
                   "Session file was deleted, cannot resume: #{entry.label} (#{ex.session_dir})"))
+              rescue ex : Session::SessionBusyError
+                # Another live hcode process owns the session — a second
+                # writer would interleave two conversations into one wire
+                # log. Keep the current session intact.
+                emit_to_log(Message.new("error",
+                  "Session is open in another hcode process, cannot resume: #{entry.label} (#{ex.message})"))
               end
             else
               emit_to_log(Message.new("error", "Session resume is not wired up."))

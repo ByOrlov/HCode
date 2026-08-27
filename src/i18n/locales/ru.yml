@@ -25,6 +25,7 @@ ru:
     fatal: "Критическая ошибка: %{message}"
     no_previous_session: "Нет предыдущей сессии для продолжения."
     session_deleted: "Файл сессии удалён: %{id}"
+    session_busy: "Сессия уже открыта в другом процессе hcode: %{id}"
     provider_switch_failed: "Не удалось сменить провайдера: %{message}"
     model_switch_failed: "Не удалось сменить модель: %{message}"
     login_failed: "Вход не удался: %{message}"

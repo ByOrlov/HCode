@@ -25,6 +25,7 @@ ja:
     fatal: "致命的: %{message}"
     no_previous_session: "継続する前回のセッションが見つかりません。"
     session_deleted: "セッションファイルが削除されました: %{id}"
+    session_busy: "このセッションは別のhcodeプロセスで開いています: %{id}"
     provider_switch_failed: "プロバイダーの切替に失敗しました: %{message}"
     model_switch_failed: "モデルの切替に失敗しました: %{message}"
     login_failed: "ログインに失敗しました: %{message}"

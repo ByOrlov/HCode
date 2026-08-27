@@ -25,6 +25,7 @@ fa:
     fatal: "خطای مهلک: %{message}"
     no_previous_session: "هیچ نشست قبلی برای ادامه یافت نشد."
     session_deleted: "فایل نشست حذف شده است: %{id}"
+    session_busy: "این نشست در فرآیند دیگری از hcode باز است: %{id}"
     provider_switch_failed: "تغییر تأمین‌کننده ناموفق بود: %{message}"
     model_switch_failed: "تغییر مدل ناموفق بود: %{message}"
     login_failed: "ورود ناموفق بود: %{message}"

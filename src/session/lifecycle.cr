@@ -25,6 +25,9 @@ module Hcode
         dir = @index.session_dir(ws_id, session_id)
         Dir.mkdir_p(dir)
         store = Store.new(dir)
+        # Own the fresh session (random new dir — the lock is always
+        # free). Held until the process exits or the store is adopted.
+        store.lock!
         meta = StateMeta.new(session_id)
         meta.cwd = cwd
         meta.title = title
@@ -54,6 +57,7 @@ module Hcode
         end
 
         store = Store.new(dir)
+        store.lock! # own the fresh fork (random new dir — always free)
         meta = StateMeta.new(session_id)
         meta.cwd = new_cwd
         base_title = title.empty? ? fork_title(src) : title
