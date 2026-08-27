@@ -619,7 +619,11 @@ module Hcode
           on_event.call(Event.compaction_cancelled)
         in Context::CompactionStatus::Completed
           on_event.call(Event.compaction_completed(result.tokens_before, result.tokens_after, result.summary))
-          on_event.call(Event.info("Context compacted (#{result.messages_before} → #{result.messages_after} messages)"))
+          info = "Context compacted (#{result.messages_before} → #{result.messages_after} messages)"
+          if result.dropped_count > 0
+            info += " — #{result.dropped_count} oldest messages not covered by the summary"
+          end
+          on_event.call(Event.info(info))
         in Context::CompactionStatus::Failed
           on_event.call(Event.compaction_cancelled)
           on_event.call(Event.info("Compaction failed — keeping full history"))
