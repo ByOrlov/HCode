@@ -674,8 +674,10 @@ module Hcode
           end
 
           dom_match = parsed.dom.includes?(cursor.day)
-          # Crystal: day_of_week.value — Sunday=0, Monday=1, ..., Saturday=6.
-          dow_match = parsed.dow.includes?(cursor.day_of_week.value)
+          # DayOfWeek#value follows ISO 8601 (Mon=1..Sun=7) in current
+          # Crystal, Sunday=0 in older ones. Normalize with % 7 into the
+          # parser's 0..6 convention (0 and 7 both mean Sunday).
+          dow_match = parsed.dow.includes?(cursor.day_of_week.value % 7)
           day_match =
             if parsed.dom_dow_or?
               dom_match || dow_match
