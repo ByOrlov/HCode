@@ -5,6 +5,10 @@ module H2code
       # when there are more matches, keeping the selection always visible.
       COMMAND_HINT_MAX = 10
 
+      # Maximum gap between two Space presses for the double-Space voice
+      # trigger (mirrors common double-tap cutoffs).
+      DOUBLE_SPACE_MS = 500
+
       private def handle_key(key : KeyEvent) : Nil
         if @exit_confirm
           case key.key
@@ -161,6 +165,15 @@ module H2code
           return
         end
 
+        # Double-Space voice trigger (see handle_space_tap): the first tap
+        # falls through to normal editing, the second toggles recording. Any
+        # other key resets the sequence.
+        if key.key.char? && key.char == ' ' && !key.ctrl? && !key.alt?
+          return if handle_space_tap(key)
+        else
+          @last_space_at = nil
+        end
+
         case key.key
         when .ctrl_c?
           if @agent_busy
@@ -252,6 +265,30 @@ module H2code
         end
 
         @dirty = true
+      end
+
+      # Double-Space voice trigger: two plain Space presses within
+      # DOUBLE_SPACE_MS toggle voice recording (same as Ctrl+R). The first
+      # press was already inserted into the editor by normal editing, so it
+      # is removed when the second one fires. Returns true when the key was
+      # consumed; returns false (recording nothing, not toggling) when the
+      # transcription config is missing or disabled so spaces keep typing
+      # normally. Public so specs can drive the same path as handle_key.
+      def handle_space_tap(key : KeyEvent) : Bool
+        return false if !key.key.char? || key.char != ' ' || key.ctrl? || key.alt?
+        return false unless cfg = voice_config
+        return false unless cfg.enabled?
+        now = Time.monotonic
+        if (last = @last_space_at) && (now - last).total_milliseconds <= DOUBLE_SPACE_MS
+          @last_space_at = nil
+          @editor.handle_input(KeyEvent.new(Key::Backspace))
+          toggle_voice_recording
+          @dirty = true
+          true
+        else
+          @last_space_at = now
+          false
+        end
       end
 
       private def handle_approval_key(key : KeyEvent) : Nil

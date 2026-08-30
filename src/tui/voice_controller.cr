@@ -1,11 +1,11 @@
 module H2code
   module TUI
     # Voice-message recording driven by the local h2voice server (see
-    # VOICE_PROTOCOL.md). Ctrl+R starts a recording session: the TUI shows a
-    # pending "RECORDING" tool entry (active zone, animated), while a detached
-    # fiber consumes the server's SSE stream. Ctrl+R, Escape or Space stops
-    # the capture; the server transcribes and the final text is delivered as a
-    # normal user
+    # VOICE_PROTOCOL.md). Ctrl+R or a double-Space press starts a recording
+    # session: the TUI shows a pending "RECORDING" tool entry (active zone,
+    # animated), while a detached fiber consumes the server's SSE stream.
+    # Ctrl+R, Escape or Space stops the capture; the server transcribes and
+    # the final text is delivered as a normal user
     # message (queued when the agent is busy, sent immediately when idle).
     module VoiceController
       # Tool name shown in the transcript for a voice recording.

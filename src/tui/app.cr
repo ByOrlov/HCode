@@ -114,14 +114,17 @@ module H2code
       @current_step : Int32 = 0
       @step_tool_count : Int32 = 0
       @pending_read_group : Message? = nil
-      # Voice recording (Ctrl+R): index of the in-flight RECORDING tool
-      # message in @messages, plus live session state for the active-zone
-      # renderer (timer, level meter, engine). See VoiceController.
+      # Voice recording (Ctrl+R or double-Space): index of the in-flight
+      # RECORDING tool message in @messages, plus live session state for the
+      # active-zone renderer (timer, level meter, engine). See VoiceController.
       @voice_msg_idx : Int32? = nil
       @voice_recording : Bool = false
       @voice_level : Float64 = 0.0
       @voice_started_at : Time::Span? = nil
       @voice_engine : String = ""
+      # Monotonic timestamp of the last plain Space press, used by the
+      # double-Space voice trigger (see InputController#handle_key).
+      @last_space_at : Time::Span? = nil
 
       # Command state
       @show_command_hints : Bool = false

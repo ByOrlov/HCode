@@ -173,4 +173,40 @@ describe H2code::TUI::App do
     app.voice_active?.should be_false
     app.@messages.last.role.should eq("error")
   end
+
+  it "starts a recording on a double-Space tap (alternative to Ctrl+R)" do
+    mock = VoiceSessionMock.new
+    begin
+      app = H2code::TUI::App.new
+      config = H2code::Config::Config.new
+      config.transcription = H2code::Config::TranscriptionConfig.new(
+        enabled: true, socket: mock.socket_path, engine: "auto", language: "ru")
+      app.app_config = config
+
+      # First tap: not consumed (the space is typed normally), but armed.
+      app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
+      app.@last_space_at.should_not be_nil
+
+      # Second tap within DOUBLE_SPACE_MS: consumed → recording starts and
+      # the armed state resets.
+      app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_true
+      app.@last_space_at.should be_nil
+      voice_wait_until { app.voice_recording? }.should be_true
+
+      # Stop so the mock's SSE fiber finishes cleanly.
+      app.toggle_voice_recording
+      voice_wait_until { !app.voice_active? }.should be_true
+    ensure
+      mock.close
+    end
+  end
+
+  it "keeps spaces normal when transcription is disabled" do
+    app = H2code::TUI::App.new
+    app.app_config = H2code::Config::Config.new
+    app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
+    app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
+    app.voice_active?.should be_false
+    app.@last_space_at.should be_nil
+  end
 end
