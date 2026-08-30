@@ -133,6 +133,21 @@ describe H2code::Tools::Read do
     result.content.should contain("3 lines read from file starting from line 4.")
   end
 
+  it "returns an empty result instead of raising when line_offset is past EOF" do
+    path = "/tmp/h2code-test-read-past-eof.txt"
+    File.write(path, (1..10).join('\n') + '\n')
+
+    read = H2code::Tools::Read.new("/tmp")
+    result = read.execute(JSON.parse(%({"path":"h2code-test-read-past-eof.txt","line_offset":500})))
+    result.is_error?.should be_false
+    result.content.should contain("No lines read from file.")
+    result.content.should contain("Total lines in file: 10.")
+
+    result = read.execute(JSON.parse(%({"path":"h2code-test-read-past-eof.txt","line_offset":11})))
+    result.is_error?.should be_false
+    result.content.should contain("No lines read from file.")
+  end
+
   it "reads from the end of file with a negative line_offset" do
     path = "/tmp/h2code-test-read-tail.txt"
     File.write(path, (1..10).join('\n') + '\n')

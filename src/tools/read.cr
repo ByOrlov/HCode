@@ -96,7 +96,9 @@ module H2code
             start_idx = {line_offset - 1, 0}.max
             available = total > start_idx ? total - start_idx : 0
             take = {effective, available}.min
-            sel = all_lines[start_idx, take]
+            # `Array#[](start, count)` raises IndexError when start > size,
+            # so guard the slice for line_offset values past EOF.
+            sel = available > 0 ? all_lines[start_idx, take] : [] of String
             ml = effective >= MAX_LINES && start_idx + MAX_LINES <= total
             {sel, sel.empty? ? 0 : start_idx + 1, ml}
           end
