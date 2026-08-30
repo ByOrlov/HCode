@@ -31,8 +31,8 @@ CHUNK   =  9
 
 describe "Chunked log rendering (overflow)" do
   it "splits a large log block across frames of ≤ chunk" do
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
 
     # Frame 1: small log baseline (flushed=2).
     app.render_zones(mock, [l(1), l(2)] of String, [a(1)] of String)
@@ -56,8 +56,8 @@ describe "Chunked log rendering (overflow)" do
   end
 
   it "buffer is duplicate-free and blank-free after draining a big block" do
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
     full = (1..25).map { |n| l(n) }
 
     10.times do
@@ -77,8 +77,8 @@ describe "Chunked log rendering (overflow)" do
   end
 
   it "log exactly fits one chunk (no split, no pending)" do
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
 
     app.render_zones(mock, [] of String, [a(1)] of String)
     app.render_zones(mock, (1..CHUNK).map { |n| l(n) }, [a(1)] of String)
@@ -87,8 +87,8 @@ describe "Chunked log rendering (overflow)" do
   end
 
   it "buffer stays continuous with small pushes after a big block" do
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
     full = (1..25).map { |n| l(n) }
 
     10.times do
@@ -107,8 +107,8 @@ describe "Chunked log rendering (overflow)" do
   # Continuous streaming: many frames each pushing a few new log lines, like a
   # tool emitting output progressively. The buffer must stay correct throughout.
   it "progressive streaming keeps buffer continuous at every step" do
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: LR_ROWS, cols: 80)
     app.render_zones(mock, [] of String, [a(1)] of String)
 
     (1..40).each do |n|

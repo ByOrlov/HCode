@@ -1,6 +1,6 @@
 {% skip_file unless flag?(:win32) %}
 
-module Hcode
+module H2code
   # Windows adapter: force-kill via `Process#terminate(graceful: false)`, which
   # the Crystal stdlib maps to `TerminateProcess`.
   #

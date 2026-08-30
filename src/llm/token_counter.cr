@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     module TokenCounter
       CHARS_PER_TOKEN = 4

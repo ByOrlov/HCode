@@ -1,4 +1,4 @@
-# HCode — Vibe-code even on a potato
+# H2Code — Vibe-code even on a potato
 
 **English** · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
@@ -8,13 +8,13 @@
 Linux & MacOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.sh | bash
 ```
 
 Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex 
+irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex 
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · Native Binary · No Runtime**
@@ -27,7 +27,7 @@ From featherweight to heavyweight.
 
 | # | Agent       | Lang       | Idle RAM         | License             | Source |
 |---|-------------|------------|------------------|---------------------|--------|
-| 1 | **HCode**   | **Crystal**| **~3 MB**        | **GPL-2.0-or-later**| [1]    |
+| 1 | **H2Code**   | **Crystal**| **~3 MB**        | **GPL-2.0-or-later**| [1]    |
 | 2 | grok-build  | Rust       | ~20 MB           | Apache-2.0          | [3]    |
 | 3 | Codex CLI   | Rust       | ~30 MB           | Apache-2.0          | [2]    |
 | 4 | Goose       | Rust + TS  | ~50–100 MB (est) | Apache-2.0          | [4]    |
@@ -36,7 +36,7 @@ From featherweight to heavyweight.
 | 7 | kimi-code   | TS / Node  | ~250 MB+         | MIT                 | [5]    |
 | 8 | opencode    | TS / Bun   | ~400 MB          | MIT                 | [8]    |
 
-**The gap.** HCode sits ~7× under the nearest Rust agent (grok-build), ~40× under the lightest Node agent (Claude Code), ~80× under kimi-code, and **~130× under opencode.** The Node family spans an enormous range — from ~120 MB up to ~400 MB — because each one ships a V8 runtime per process and grows with use. The Rust agents (Codex, grok-build, Goose) are native and lean; HCode keeps pace with them on RAM and beats them on readability and license (see [Why Crystal?](#why-crystal)).
+**The gap.** H2Code sits ~7× under the nearest Rust agent (grok-build), ~40× under the lightest Node agent (Claude Code), ~80× under kimi-code, and **~130× under opencode.** The Node family spans an enormous range — from ~120 MB up to ~400 MB — because each one ships a V8 runtime per process and grows with use. The Rust agents (Codex, grok-build, Goose) are native and lean; H2Code keeps pace with them on RAM and beats them on readability and license (see [Why Crystal?](#why-crystal)).
 
 > Aider (est. ~150–250 MB) and kimi-code (~250 MB+) sit on the border of the same weight class — their relative order is within the margin.
 
@@ -51,19 +51,19 @@ I remembered 2007. My mother bought me **512 MB of RAM** so I could play *S.T.A.
 
 Worse — these "chats" are hard to call **real software**. They're software prototypes with features bolted on. Real software cannot be this horrifying on performance. And the scariest part: they are **eternal prototypes**. Eternal temporary solutions, shipped as finished products.
 
-Then other developers reach for Rust to build agents. Rust is a language where you fight the compiler instead of building things — the opposite extreme. And the punchline: the Rust competitors sit at **~10× HCode's memory while idle**.
+Then other developers reach for Rust to build agents. Rust is a language where you fight the compiler instead of building things — the opposite extreme. And the punchline: the Rust competitors sit at **~10× H2Code's memory while idle**.
 
 So I took Moonshot-AI's TypeScript agent as a baseline and rewrote its logic in Crystal, with help from Kimi 2.6 and GLM 5. First results: **~3 MB idle** versus kimi-code's ~200 MB. The core loop already worked. Peak consumption did climb afterward — up to ~130 MB — which is horrifying for a chat-notepad, but still less than kimi-code at idle.
 
-**That gap is what HCode exists to close.**
+**That gap is what H2Code exists to close.**
 
 ---
 
 ## Why it exists
 
-Spin up five coding agents in parallel. Watch your RAM. Every agent that ships a Node.js runtime pays for it — per process, forever. Each HCode process sits around **3 MB resident** while it waits for the next prompt — not 120, not 250, not 400 MB. Your editor keeps its memory budget. Your laptop stays cool. The OS stops swapping. You can finally run a swarm of agents on the machine you already own.
+Spin up five coding agents in parallel. Watch your RAM. Every agent that ships a Node.js runtime pays for it — per process, forever. Each H2Code process sits around **3 MB resident** while it waits for the next prompt — not 120, not 250, not 400 MB. Your editor keeps its memory budget. Your laptop stays cool. The OS stops swapping. You can finally run a swarm of agents on the machine you already own.
 
-> The Rust agents — Codex, grok-build, Goose — are native and lean too. Against them HCode's edge isn't RAM, it's **readability and license**. See [The Landscape](#the-landscape) below.
+> The Rust agents — Codex, grok-build, Goose — are native and lean too. Against them H2Code's edge isn't RAM, it's **readability and license**. See [The Landscape](#the-landscape) below.
 
 ---
 
@@ -81,7 +81,7 @@ We looked hard at Rust, Go, and TypeScript. Each forced a trade-off we did not w
 
 ## Build from source
 
-If you prefer to build HCode yourself, you need Crystal ≥ 1.14 and ripgrep (`rg`):
+If you prefer to build H2Code yourself, you need Crystal ≥ 1.14 and ripgrep (`rg`):
 
 ```sh
 # Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
@@ -95,19 +95,19 @@ brew install ripgrep          # macOS
 # sudo pacman -S ripgrep        # Arch
 
 # Build
-git clone https://github.com/ByOrlov/HCode
-cd HCode
+git clone https://github.com/ByOrlov/H2Code
+cd H2Code
 shards install
-rake build            # → ./hcode (release flags)
+rake build            # → ./h2code (release flags)
 
 # Smoke-test your credentials
-./hcode --hi
+./h2code --hi
 
 # Headless — one-shot prompt, streams to stdout
-./hcode -p "explain this repo's entry point"
+./h2code -p "explain this repo's entry point"
 
 # Interactive TUI
-./hcode
+./h2code
 ```
 
 ---
@@ -125,19 +125,19 @@ Memory is half the story. The other half: who owns the code, where you're allowe
 | Aider       | Apache-2.0          | no              | no              | yes          |
 | opencode    | MIT                 | no              | no              | yes          |
 | kimi-code   | MIT                 | no              | Moonshot        | yes          |
-| **HCode**   | **GPL-2.0-or-later**| **no**          | **no**          | **yes**      |
+| **H2Code**   | **GPL-2.0-or-later**| **no**          | **no**          | **yes**      |
 
 
 ## License
 
-HCode is released under the **GPL-2.0-or-later**.
+H2Code is released under the **GPL-2.0-or-later**.
 
 Copyright © 2026 **Oleg Orlov** <orelcokolov@gmail.com> · byorlov.com.
 All rights reserved. See [LICENSE](./LICENSE) for the full text.
 
-> **Why GPL-2.0, not MIT?** opencode and kimi-code are both MIT — anyone can absorb them into a closed-source product and never give back. HCode is copyleft: every derivative must ship its source under the same terms. The community always has a free, usable version that cannot be re-closed.
+> **Why GPL-2.0, not MIT?** opencode and kimi-code are both MIT — anyone can absorb them into a closed-source product and never give back. H2Code is copyleft: every derivative must ship its source under the same terms. The community always has a free, usable version that cannot be re-closed.
 >
-> **Dual licensing.** The copyright is held solely by the author so the project can additionally offer a separate commercial license to parties that need to avoid GPL copyleft (e.g. embedding HCode inside a closed-source product). To keep that option viable, outside contributions require a CLA that grants the author a license to relicense. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+> **Dual licensing.** The copyright is held solely by the author so the project can additionally offer a separate commercial license to parties that need to avoid GPL copyleft (e.g. embedding H2Code inside a closed-source product). To keep that option viable, outside contributions require a CLA that grants the author a license to relicense. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 

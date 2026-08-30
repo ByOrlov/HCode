@@ -15,7 +15,7 @@
 # highlighting); `Fuzzy.filter` keeps only matching items and ranks them by
 # score, breaking ties by original order.
 
-module Hcode
+module H2code
   module TUI
     module Fuzzy
       # Base score awarded for every matched character.

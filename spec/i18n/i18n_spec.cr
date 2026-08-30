@@ -14,7 +14,7 @@ def collect_keys(hash, prefix = "") : Array(String)
   keys
 end
 
-describe Hcode::I18n do
+describe H2code::I18n do
   describe "locale files" do
     locale_dir = File.join(__DIR__, "..", "..", "src", "i18n", "locales")
 
@@ -40,36 +40,36 @@ describe Hcode::I18n do
 
   describe ".resolve_locale" do
     it "returns config language when supported" do
-      Hcode::I18n.resolve_locale("ru").should eq("ru")
-      Hcode::I18n.resolve_locale("en").should eq("en")
+      H2code::I18n.resolve_locale("ru").should eq("ru")
+      H2code::I18n.resolve_locale("en").should eq("en")
     end
 
     it "falls back when config language is unsupported" do
-      Hcode::I18n.resolve_locale("fr", {"LANG" => "en_US"}).should eq("en")
+      H2code::I18n.resolve_locale("fr", {"LANG" => "en_US"}).should eq("en")
     end
 
-    it "reads HCODE_LANG env" do
-      env = {"HCODE_LANG" => "ru"}
-      Hcode::I18n.resolve_locale(nil, env).should eq("ru")
+    it "reads H2CODE_LANG env" do
+      env = {"H2CODE_LANG" => "ru"}
+      H2code::I18n.resolve_locale(nil, env).should eq("ru")
     end
 
     it "parses LANG with region and encoding" do
-      Hcode::I18n.resolve_locale(nil, {"LANG" => "ru_RU.UTF-8"}).should eq("ru")
-      Hcode::I18n.resolve_locale(nil, {"LANG" => "en_US.UTF-8"}).should eq("en")
+      H2code::I18n.resolve_locale(nil, {"LANG" => "ru_RU.UTF-8"}).should eq("ru")
+      H2code::I18n.resolve_locale(nil, {"LANG" => "en_US.UTF-8"}).should eq("en")
     end
 
     it "defaults to en for unsupported system locale" do
-      Hcode::I18n.resolve_locale(nil, {"LANG" => "fr_FR.UTF-8"}).should eq("en")
+      H2code::I18n.resolve_locale(nil, {"LANG" => "fr_FR.UTF-8"}).should eq("en")
     end
 
     it "defaults to en with no env" do
-      Hcode::I18n.resolve_locale(nil, {} of String => String).should eq("en")
+      H2code::I18n.resolve_locale(nil, {} of String => String).should eq("en")
     end
   end
 
   describe ".available_locales" do
     it "includes en and ru" do
-      locales = Hcode::I18n.available_locales
+      locales = H2code::I18n.available_locales
       locales.should contain("en")
       locales.should contain("ru")
     end
@@ -77,21 +77,21 @@ describe Hcode::I18n do
 
   describe ".t" do
     it "translates keys after init" do
-      Hcode::I18n.init("en")
-      Hcode.t("status.turn_complete").should eq("Turn complete")
+      H2code::I18n.init("en")
+      H2code.t("status.turn_complete").should eq("Turn complete")
 
-      Hcode::I18n.activate("ru")
-      Hcode.t("status.turn_complete").should eq("Ход завершён")
+      H2code::I18n.activate("ru")
+      H2code.t("status.turn_complete").should eq("Ход завершён")
     end
 
     it "returns the key for missing translations" do
-      Hcode::I18n.init("en")
-      Hcode.t("nonexistent.key").should eq("nonexistent.key")
+      H2code::I18n.init("en")
+      H2code.t("nonexistent.key").should eq("nonexistent.key")
     end
 
     it "interpolates params" do
-      Hcode::I18n.init("en")
-      Hcode.t("errors.generic", message: "boom").should eq("Error: boom")
+      H2code::I18n.init("en")
+      H2code.t("errors.generic", message: "boom").should eq("Error: boom")
     end
   end
 end

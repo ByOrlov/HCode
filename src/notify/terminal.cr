@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Notify
     # OSC 9 payload length cap — mirrors MAX_TERMINAL_NOTIFICATION_MESSAGE_LENGTH
     # in apps/kimi-code/src/tui/constant/terminal.ts.

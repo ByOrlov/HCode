@@ -10,7 +10,7 @@ require "./http_transport"
 require "./oauth"
 require "./auth_tool"
 
-module Hcode
+module H2code
   module Mcp
     enum ServerStatus
       Pending

@@ -2,7 +2,7 @@ require "../spec_helper"
 require "file_utils"
 include FileUtils
 
-module Hcode
+module H2code
   module Mcp
     # In-process loopback transport: when a request (with id + method) is
     # written, it enqueues a canned response built by the registered handler.
@@ -70,7 +70,7 @@ module Hcode
         end
 
         it "split rejects non-mcp names" do
-          ToolNaming.split(Hcode::Tools::Names::BASH).should be_nil
+          ToolNaming.split(H2code::Tools::Names::BASH).should be_nil
         end
 
         it "preserves distinctness for different long tools" do
@@ -97,7 +97,7 @@ module Hcode
       # --------------------------------------------------------------------
       describe ConfigLoader do
         it "parses mcp.json with args + env" do
-          home = File.join(Dir.tempdir, "hcode-mcp-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -126,7 +126,7 @@ module Hcode
         end
 
         it "parses mcp.json (mcpServers object)" do
-          home = File.join(Dir.tempdir, "hcode-mcp-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -153,11 +153,11 @@ module Hcode
         end
 
         it "merges user + project mcp.json by name (project wins)" do
-          home = File.join(Dir.tempdir, "hcode-mcp-#{Random::Secure.hex(8)}")
-          hcode_home = File.join(home, ".hcode")
-          Dir.mkdir_p(hcode_home)
+          home = File.join(Dir.tempdir, "h2code-mcp-#{Random::Secure.hex(8)}")
+          h2code_home = File.join(home, ".h2code")
+          Dir.mkdir_p(h2code_home)
           begin
-            File.write(File.join(hcode_home, "mcp.json"), <<-JSON)
+            File.write(File.join(h2code_home, "mcp.json"), <<-JSON)
               {
                 "mcpServers": {
                   "github": { "command": "node", "args": [] },
@@ -176,7 +176,7 @@ module Hcode
         end
 
         it "tolerates a missing mcp.json" do
-          home = File.join(Dir.tempdir, "hcode-mcp-none-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-none-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             servers = ConfigLoader.load(home, cwd: home)
@@ -187,7 +187,7 @@ module Hcode
         end
 
         it "parses providers (array) and provider (single string) from mcp.json" do
-          home = File.join(Dir.tempdir, "hcode-mcp-prov2-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-prov2-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -215,7 +215,7 @@ module Hcode
         end
 
         it "parses toolAliases from mcp.json" do
-          home = File.join(Dir.tempdir, "hcode-mcp-aliases-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-aliases-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -224,7 +224,7 @@ module Hcode
                   "zai-web-search": {
                     "type": "http",
                     "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
-                    "toolAliases": { "web_search_prime": #{Hcode::Tools::Names::WEB_SEARCH.inspect} }
+                    "toolAliases": { "web_search_prime": #{H2code::Tools::Names::WEB_SEARCH.inspect} }
                   }
                 }
               }
@@ -232,8 +232,8 @@ module Hcode
             servers = ConfigLoader.parse_mcp_json(home)
             servers.size.should eq(1)
             server = servers.first
-            server.tool_aliases.should eq({"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
-            server.aliased_tool_name("web_search_prime").should eq(Hcode::Tools::Names::WEB_SEARCH)
+            server.tool_aliases.should eq({"web_search_prime" => H2code::Tools::Names::WEB_SEARCH})
+            server.aliased_tool_name("web_search_prime").should eq(H2code::Tools::Names::WEB_SEARCH)
             server.aliased_tool_name("other").should eq("other")
           ensure
             FileUtils.rm_r(home) rescue nil
@@ -241,7 +241,7 @@ module Hcode
         end
 
         it "parses providers from mcp.json" do
-          home = File.join(Dir.tempdir, "hcode-mcp-prov-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-prov-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -269,7 +269,7 @@ module Hcode
         end
 
         it "resolves relative stdio cwd against the file directory" do
-          home = File.join(Dir.tempdir, "hcode-mcp-cwd-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-cwd-#{Random::Secure.hex(8)}")
           subdir = File.join(home, "subproject")
           Dir.mkdir_p(subdir)
           begin
@@ -293,7 +293,7 @@ module Hcode
         end
 
         it "keeps absolute stdio cwd as-is" do
-          home = File.join(Dir.tempdir, "hcode-mcp-abs-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-mcp-abs-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           abs = File.join(home, "absdir")
           begin
@@ -568,8 +568,8 @@ module Hcode
         end
 
         it "uses toolAliases when registering cached proxy tools" do
-          home = File.join(Dir.tempdir, "hcode-mcp-alias-#{Random::Secure.hex(8)}")
-          ENV["HCODE_HOME"] = home
+          home = File.join(Dir.tempdir, "h2code-mcp-alias-#{Random::Secure.hex(8)}")
+          ENV["H2CODE_HOME"] = home
           Dir.mkdir_p(home)
           begin
             defs = [
@@ -582,7 +582,7 @@ module Hcode
             cfg = McpServerConfig.new("zai-web-search", type: "http",
               url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
               providers: ["zai-coding-plan"],
-              tool_aliases: {"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
+              tool_aliases: {"web_search_prime" => H2code::Tools::Names::WEB_SEARCH})
             reg = Tools::Registry.new
             m.register_from_cache([cfg], reg,
               active_provider: "zai-coding-plan", blocking: true)
@@ -590,7 +590,7 @@ module Hcode
             reg.get("mcp__zai_web_search__WebSearch").should_not be_nil
             reg.get("mcp__zai_web_search__web_search_prime").should be_nil
           ensure
-            ENV.delete("HCODE_HOME")
+            ENV.delete("H2CODE_HOME")
             rm_r(home) rescue nil
           end
         end
@@ -626,7 +626,7 @@ module Hcode
       # --------------------------------------------------------------------
       describe ConfigLoader do
         it "parses OAuth fields from mcp.json" do
-          home = File.join(Dir.tempdir, "hcode-oauth-cfg-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-oauth-cfg-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             File.write(File.join(home, "mcp.json"), <<-JSON)
@@ -661,7 +661,7 @@ module Hcode
       # --------------------------------------------------------------------
       describe OAuth do
         it "saves and loads tokens" do
-          home = File.join(Dir.tempdir, "hcode-oauth-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-oauth-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             tokens = OAuthTokens.new("access-123", "refresh-456", "Bearer",
@@ -685,7 +685,7 @@ module Hcode
         end
 
         it "clears tokens" do
-          home = File.join(Dir.tempdir, "hcode-oauth-#{Random::Secure.hex(8)}")
+          home = File.join(Dir.tempdir, "h2code-oauth-#{Random::Secure.hex(8)}")
           Dir.mkdir_p(home)
           begin
             tokens = OAuthTokens.new("tok")
@@ -874,8 +874,8 @@ module Hcode
     # --------------------------------------------------------------------
     describe ToolCache do
       it "saves and loads tool definitions" do
-        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
-        ENV["HCODE_HOME"] = home
+        home = File.join(Dir.tempdir, "h2code-tc-#{Random::Secure.hex(8)}")
+        ENV["H2CODE_HOME"] = home
         Dir.mkdir_p(home)
         begin
           defs = [
@@ -893,26 +893,26 @@ module Hcode
             l[1].name.should eq("read")
           end
         ensure
-          ENV.delete("HCODE_HOME")
+          ENV.delete("H2CODE_HOME")
           rm_r(home) rescue nil
         end
       end
 
       it "returns nil for unknown provider/server" do
-        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
-        ENV["HCODE_HOME"] = home
+        home = File.join(Dir.tempdir, "h2code-tc-#{Random::Secure.hex(8)}")
+        ENV["H2CODE_HOME"] = home
         Dir.mkdir_p(home)
         begin
           ToolCache.load?("unknown", "nope").should be_nil
         ensure
-          ENV.delete("HCODE_HOME")
+          ENV.delete("H2CODE_HOME")
           rm_r(home) rescue nil
         end
       end
 
       it "clears one server or all servers for a provider" do
-        home = File.join(Dir.tempdir, "hcode-tc-#{Random::Secure.hex(8)}")
-        ENV["HCODE_HOME"] = home
+        home = File.join(Dir.tempdir, "h2code-tc-#{Random::Secure.hex(8)}")
+        ENV["H2CODE_HOME"] = home
         Dir.mkdir_p(home)
         begin
           defs = [ToolDefinition.new("t1", "d1", JSON.parse("{}"))]
@@ -926,7 +926,7 @@ module Hcode
           ToolCache.clear("prov")
           ToolCache.load?("prov", "srv2").should be_nil
         ensure
-          ENV.delete("HCODE_HOME")
+          ENV.delete("H2CODE_HOME")
           rm_r(home) rescue nil
         end
       end

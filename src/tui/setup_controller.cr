@@ -2,7 +2,7 @@
 # configuration flow: a small finite-state machine driven by `Setup::Wizard`
 # that steps through provider → credentials → endpoint → model, renders its
 # state into the transcript, and invokes `on_setup_complete` when done.
-module Hcode
+module H2code
   module TUI
     module SetupController
       # Enter setup mode: show the wizard transcript and open the provider
@@ -14,8 +14,8 @@ module Hcode
         # same branded box as a normal launch, instead of a bare transcript.
         @show_welcome = true
         emit_to_log(Message.new("system",
-          Hcode.t("ui.setup_welcome")))
-        @status = Hcode.t("ui.setup_status")
+          H2code.t("ui.setup_welcome")))
+        @status = H2code.t("ui.setup_status")
         open_setup_provider_selector
         invalidate_log_cache!
         @dirty = true
@@ -23,7 +23,7 @@ module Hcode
 
       private def open_setup_provider_selector : Nil
         items = Setup::Wizard.choices.map(&.label)
-        @provider_list.show(Hcode.t("ui.select_provider"), items)
+        @provider_list.show(H2code.t("ui.select_provider"), items)
         @provider_list.selected = 0
         @input.drain_pending_enters
         @dirty = true
@@ -108,7 +108,7 @@ module Hcode
               emit_to_log(Message.new("system", "Models unavailable."))
               restart_setup
             else
-              @model_list.show(Hcode.t("ui.select_model", name: name), models)
+              @model_list.show(H2code.t("ui.select_model", name: name), models)
               default = wizard.model || wizard.current_choice.try(&.default_model) || models.first?
               @model_list.selected = models.index(default) || 0
             end
@@ -209,7 +209,7 @@ module Hcode
         config_msg = "Provider: #{wizard.provider_name}"
         config_msg += " | Model: #{wizard.model}" if wizard.model
         emit_to_log(Message.new("system", "Configuration saved. #{config_msg}"))
-        emit_to_log(Message.new("system", "Starting HCode..."))
+        emit_to_log(Message.new("system", "Starting H2Code..."))
         @status = ""
         @setup_mode = false
         @dirty = true

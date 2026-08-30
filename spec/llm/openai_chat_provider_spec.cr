@@ -2,7 +2,7 @@ require "../spec_helper"
 require "../support/mock_http_transport"
 
 # Minimal concrete subclass so we can instantiate the abstract provider.
-private class TestProvider < Hcode::LLM::OpenAIChatProvider
+private class TestProvider < H2code::LLM::OpenAIChatProvider
   def token : String
     "test-key"
   end
@@ -46,11 +46,11 @@ private def sse_usage_chunk : String
   end
 end
 
-describe Hcode::LLM::OpenAIChatProvider do
+describe H2code::LLM::OpenAIChatProvider do
   describe "with MockHttpTransport" do
     it "streams response chunks and aggregates text" do
-      transport = Hcode::MockHttpTransport.new
-      transport.mode = Hcode::MockHttpTransport::Mode::NormalStream
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::NormalStream
       transport.stream_lines = [
         sse_text_chunk("Hello"),
         sse_text_chunk(" world"),
@@ -60,58 +60,58 @@ describe Hcode::LLM::OpenAIChatProvider do
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
-      parts = [] of Hcode::LLM::MessagePart
-      result = provider.chat([Hcode::LLM::Message.user("hi")], nil) { |p| parts << p }
+      parts = [] of H2code::LLM::MessagePart
+      result = provider.chat([H2code::LLM::Message.user("hi")], nil) { |p| parts << p }
 
-      texts = parts.select(Hcode::LLM::TextPart).map(&.text).join
+      texts = parts.select(H2code::LLM::TextPart).map(&.text).join
       texts.should eq("Hello world")
       result.text.should eq("Hello world")
       result.stop_reason.should eq("end_turn")
     end
 
     it "raises ApiError on non-200 status" do
-      transport = Hcode::MockHttpTransport.new
-      transport.mode = Hcode::MockHttpTransport::Mode::ErrorStatus
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::ErrorStatus
       transport.error_status = 429
       transport.error_body = %({"error":{"message":"rate limited"}})
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
-      expect_raises(Hcode::LLM::ApiError) do
-        provider.chat([Hcode::LLM::Message.user("hi")], nil) { }
+      expect_raises(H2code::LLM::ApiError) do
+        provider.chat([H2code::LLM::Message.user("hi")], nil) { }
       end
     end
 
     it "surfaces network drop (IO::Error) from mid-stream as provider error" do
-      transport = Hcode::MockHttpTransport.new
-      transport.mode = Hcode::MockHttpTransport::Mode::DropMidStream
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::DropMidStream
       transport.stream_lines = [sse_text_chunk("partial")]
       transport.stream_error = IO::Error.new("Broken pipe")
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
       error = expect_raises(IO::Error) do
-        provider.chat([Hcode::LLM::Message.user("hi")], nil) { }
+        provider.chat([H2code::LLM::Message.user("hi")], nil) { }
       end
       (error.message || "").should contain("Broken pipe")
     end
 
     it "aborts an in-flight stream without unhandled spawn exceptions" do
-      transport = Hcode::MockHttpTransport.new
-      transport.mode = Hcode::MockHttpTransport::Mode::Blocking
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::Blocking
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
       abort_flag = -> { true }
 
-      expect_raises(Hcode::LLM::AbortedError) do
-        provider.chat([Hcode::LLM::Message.user("hi")], nil, aborted?: abort_flag) { }
+      expect_raises(H2code::LLM::AbortedError) do
+        provider.chat([H2code::LLM::Message.user("hi")], nil, aborted?: abort_flag) { }
       end
     end
 
     it "aborts during active streaming (chunks arriving faster than timeout)" do
-      transport = Hcode::MockHttpTransport.new
-      transport.mode = Hcode::MockHttpTransport::Mode::NormalStream
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::NormalStream
       transport.stream_lines = Array.new(20) { |i| sse_text_chunk("chunk#{i}") }
 
       provider = TestProvider.new("m", "http://localhost", transport: transport)
@@ -122,15 +122,15 @@ describe Hcode::LLM::OpenAIChatProvider do
       chunk_count = 0
       abort_flag = -> { chunk_count >= 1 }
 
-      expect_raises(Hcode::LLM::AbortedError) do
-        provider.chat([Hcode::LLM::Message.user("hi")], nil, aborted?: abort_flag) do
+      expect_raises(H2code::LLM::AbortedError) do
+        provider.chat([H2code::LLM::Message.user("hi")], nil, aborted?: abort_flag) do
           chunk_count += 1
         end
       end
     end
 
     it "uses transport for fetch_models (single-shot request)" do
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       provider = TestProvider.new("m", "http://localhost", transport: transport)
 
       models = provider.fetch_models

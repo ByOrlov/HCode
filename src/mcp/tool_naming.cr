@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Mcp
     # Builds the proxy tool name exposed to the agent (`mcp__<server>__<tool>`)
     # and the inverse parse back to the remote tool name. Names are sanitized

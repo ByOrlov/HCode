@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Glob — file pattern matching via ripgrep.
     #

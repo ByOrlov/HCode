@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Thread-safe tool registry. MCP servers connect in the background and
     # register their proxy tools from a fibre while the agent loop reads

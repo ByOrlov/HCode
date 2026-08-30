@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Line-level diff via LCS (longest common subsequence), plus intra-line
     # word highlighting: when a deleted line is immediately followed by an

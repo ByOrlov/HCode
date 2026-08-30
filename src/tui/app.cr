@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     class App
       include Zones
@@ -168,7 +168,7 @@ module Hcode
       # toggle the sound player at runtime without rebuilding the tracker.
       property notify_dispatcher : Notify::Dispatcher? = nil
       # Full config for persisting sound/volume changes via /sounds and /volume.
-      property app_config : Hcode::Config::Config? = nil
+      property app_config : H2code::Config::Config? = nil
       @markdown : Markdown
       @provider_list : SelectList
       @model_list : SelectList
@@ -300,7 +300,7 @@ module Hcode
       property on_mcp_status : (-> String)? = nil
       property on_mcp_update : ((String?) -> Nil)? = nil
       # Plugin slash commands loaded from installed plugins.
-      property plugin_commands : Array(Hcode::Plugin::PluginCommandDef) = [] of Hcode::Plugin::PluginCommandDef
+      property plugin_commands : Array(H2code::Plugin::PluginCommandDef) = [] of H2code::Plugin::PluginCommandDef
       # `/plugins` subcommand handler: receives the raw args string, returns
       # text to display in the transcript.
       property on_plugins_command : (String -> String)? = nil

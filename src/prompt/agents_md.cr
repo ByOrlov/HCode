@@ -1,13 +1,13 @@
-module Hcode
+module H2code
   module Prompt
     class AgentsMd
       def self.discover(cwd : String) : String
         home = ENV["HOME"]? || "/tmp"
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
 
         paths = [] of String
 
-        user_agents = File.join(hcode_home, "AGENTS.md")
+        user_agents = File.join(h2code_home, "AGENTS.md")
         paths << user_agents if File.exists?(user_agents)
 
         user_agents2 = File.join(home, ".agents", "AGENTS.md")
@@ -30,7 +30,7 @@ module Hcode
         dirs.reverse! # root → leaf
 
         dirs.each do |dir|
-          brand = File.join(dir, ".hcode", "AGENTS.md")
+          brand = File.join(dir, ".h2code", "AGENTS.md")
           paths << brand if File.exists?(brand) && !paths.includes?(brand)
           generic = File.join(dir, "AGENTS.md")
           paths << generic if File.exists?(generic) && !paths.includes?(generic)

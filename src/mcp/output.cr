@@ -1,7 +1,7 @@
 require "base64"
 require "../tools/read_media"
 
-module Hcode
+module H2code
   module Mcp
     # MCP tool-call result → ToolResult output pipeline.
     #

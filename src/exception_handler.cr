@@ -5,22 +5,22 @@ require "random/secure"
 
 require "./version"
 
-module Hcode
+module H2code
   # Crash-report collector: writes unhandled exceptions raised during agent
-  # operation into `~/.hcode/exceptions/` so a developer can inspect them
+  # operation into `~/.h2code/exceptions/` so a developer can inspect them
   # after the fact. Every method is best-effort — the handler must never
   # raise itself and crash the process it was supposed to report on.
   module ExceptionHandler
     @@home : String?
 
     # Override the home base (mainly for tests). When unset the handler
-    # resolves `HCODE_HOME` → `~/.hcode`, matching Config.
+    # resolves `H2CODE_HOME` → `~/.h2code`, matching Config.
     def self.home=(path : String?) : Nil
       @@home = path
     end
 
     def self.exceptions_dir : String
-      base = @@home || ENV["HCODE_HOME"]? || File.join(ENV["HOME"]? || "/tmp", ".hcode")
+      base = @@home || ENV["H2CODE_HOME"]? || File.join(ENV["HOME"]? || "/tmp", ".h2code")
       File.join(base, "exceptions")
     end
 
@@ -68,7 +68,7 @@ module Hcode
     private def self.build_report(ex : Exception, context : String) : String
       ts = Time.utc
       String.build do |s|
-        s << "=== Hcode Exception Report ===\n"
+        s << "=== H2code Exception Report ===\n"
         s << "Time:    #{ts.to_rfc3339}\n"
         s << "Context: #{context}\n"
         s << "Version: #{VERSION}\n"

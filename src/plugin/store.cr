@@ -3,7 +3,7 @@ require "file"
 require "file_utils"
 require "./types"
 
-module Hcode
+module H2code
   module Plugin
     module Store
       struct InstalledFile
@@ -34,8 +34,8 @@ module Hcode
       end
 
       def self.installed_path(home : String) : String
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        File.join(hcode_home, "plugins", "installed.json")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
+        File.join(h2code_home, "plugins", "installed.json")
       end
 
       def self.read(home : String) : Array(InstalledRecord)

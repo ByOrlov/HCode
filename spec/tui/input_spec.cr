@@ -1,15 +1,15 @@
 require "../spec_helper"
 require "../../src/tui/input"
 
-describe Hcode::TUI::Input do
-  input = Hcode::TUI::Input.new
+describe H2code::TUI::Input do
+  input = H2code::TUI::Input.new
 
   it "parses a standalone ESC followed by DEL as Alt+Backspace" do
     key, consumed = input.parse_one([27_u8, 127_u8])
     consumed.should eq(2)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Backspace)
+    key.key.should eq(H2code::TUI::Key::Backspace)
     key.alt?.should be_true
   end
 
@@ -18,7 +18,7 @@ describe Hcode::TUI::Input do
     consumed.should eq(2)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Backspace)
+    key.key.should eq(H2code::TUI::Key::Backspace)
     key.alt?.should be_true
   end
 
@@ -27,7 +27,7 @@ describe Hcode::TUI::Input do
     consumed.should eq(2)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Enter)
+    key.key.should eq(H2code::TUI::Key::Enter)
     key.alt?.should be_true
   end
 
@@ -36,7 +36,7 @@ describe Hcode::TUI::Input do
     consumed.should eq(1)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Backspace)
+    key.key.should eq(H2code::TUI::Key::Backspace)
     key.alt?.should be_false
   end
 
@@ -45,7 +45,7 @@ describe Hcode::TUI::Input do
     consumed.should eq(1)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Char)
+    key.key.should eq(H2code::TUI::Key::Char)
     key.char.should eq('a')
   end
 
@@ -54,7 +54,7 @@ describe Hcode::TUI::Input do
     consumed.should eq(2)
     key.should_not be_nil
     key = key || raise "key should not be nil"
-    key.key.should eq(Hcode::TUI::Key::Char)
+    key.key.should eq(H2code::TUI::Key::Char)
     key.char.should eq('b')
     key.alt?.should be_true
   end

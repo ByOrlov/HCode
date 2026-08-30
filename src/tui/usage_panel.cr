@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Modal `/usage` overlay. Replaces the editor while visible, mirroring the
     # `HelpPanel` pattern: the host renders `render(cols)` in the editor slot

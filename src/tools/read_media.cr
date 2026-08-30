@@ -1,6 +1,6 @@
 require "base64"
 
-module Hcode
+module H2code
   module Tools
     # ReadMediaFile — чтение image/video файла как base64 data URL.
     #

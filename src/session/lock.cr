@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Session
     # Raised when opening a session whose exclusive lock is held by another
     # live process. Two conversation writers on one wire.jsonl interleave
@@ -12,7 +12,7 @@ module Hcode
 
       def initialize(@session_dir : String, @holder_pid : Int32?)
         pid = @holder_pid ? " (pid #{@holder_pid})" : ""
-        super("Session is already open in another hcode process#{pid}: #{@session_dir}")
+        super("Session is already open in another h2code process#{pid}: #{@session_dir}")
       end
     end
 

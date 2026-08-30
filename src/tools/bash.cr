@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     class Bash < Tool
       DEFAULT_TIMEOUT_S =  60
@@ -262,7 +262,7 @@ For long-running commands, pass run_in_background: true. The tool returns immedi
           ToolResult.error("#{result}\n[killed by signal]")
         elsif status.exit_code != 0
           # Keep the `[exit code: N]` trailer format: the TUI
-          # (hcode.cr render_tool_block) parses it to render a red footer.
+          # (h2code.cr render_tool_block) parses it to render a red footer.
           ToolResult.error("#{result}\n[exit code: #{status.exit_code}]")
         else
           ToolResult.success(result.strip)

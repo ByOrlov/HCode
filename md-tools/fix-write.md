@@ -1,7 +1,7 @@
 # Fix Write — план доработки до паритета с JS
 
 > Источник: `packages/agent-core-v2/src/os/backends/node-local/tools/write.ts` + `write.md`.
-> Текущий Crystal: `hcode.cr/src/tools/write.cr`.
+> Текущий Crystal: `h2code.cr/src/tools/write.cr`.
 
 ## Текущее состояние
 

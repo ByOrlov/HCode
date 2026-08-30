@@ -12,7 +12,7 @@ source of unbounded memory growth.
 - `Ctrl+O` is rarely used and currently expands tool output only from 10 to 200
   lines, which is not enough for real tool results anyway.
 - The full conversation is already persisted in
-  `~/.hcode/sessions/<id>/wire.jsonl` by `Session::Store`.
+  `~/.h2code/sessions/<id>/wire.jsonl` by `Session::Store`.
 - Storing every full `tool_result` in `TUI::App.@messages` is what makes RSS
   grow linearly with chat length.
 
@@ -38,7 +38,7 @@ source of unbounded memory growth.
 - It is intentionally simple: dump to stdout, no TUI event loop.
 - It can be used headless:
   ```sh
-  ./hcode --session <id> /debug
+  ./h2code --session <id> /debug
   ```
   or from the TUI by typing `/debug`.
 
@@ -58,7 +58,7 @@ source of unbounded memory growth.
    - Register `/debug` in the slash command registry.
    - Add handler that calls `app.on_debug.try(&.call)`.
 
-3. `src/hcode.cr`
+3. `src/h2code.cr`
    - Wire `app.on_debug` to a function that:
      - reads the current session's `wire.jsonl` via `Session::Store`,
      - prints a full human-readable transcript to stdout,
@@ -77,7 +77,7 @@ The exact numbers (10 lines, 1000 chars) are tunable.
 
 ### Debug renderer
 
-A simple renderer in `src/hcode.cr` or a new `src/tui/debug_renderer.cr`:
+A simple renderer in `src/h2code.cr` or a new `src/tui/debug_renderer.cr`:
 
 ```crystal
 def render_debug_transcript(store : Session::Store)

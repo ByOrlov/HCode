@@ -2,37 +2,37 @@ require "../spec_helper"
 require "file_utils"
 
 def temp_home : String
-  File.join(Dir.tempdir, "hcode-test-#{Random::Secure.hex(8)}")
+  File.join(Dir.tempdir, "h2code-test-#{Random::Secure.hex(8)}")
 end
 
-describe Hcode::Session::Index do
+describe H2code::Session::Index do
   it ".workspace_id is stable for the same path" do
-    a = Hcode::Session::Index.workspace_id("/home/oleg/hcode-code")
-    b = Hcode::Session::Index.workspace_id("/home/oleg/hcode-code")
+    a = H2code::Session::Index.workspace_id("/home/oleg/h2code-code")
+    b = H2code::Session::Index.workspace_id("/home/oleg/h2code-code")
     a.should eq(b)
     a.size.should eq(12)
   end
 
   it ".workspace_id differs for different paths" do
-    a = Hcode::Session::Index.workspace_id("/home/oleg/hcode-code")
-    b = Hcode::Session::Index.workspace_id("/home/oleg/other")
+    a = H2code::Session::Index.workspace_id("/home/oleg/h2code-code")
+    b = H2code::Session::Index.workspace_id("/home/oleg/other")
     a.should_not eq(b)
   end
 
   it "lists workspace-aware v2 sessions" do
     home = temp_home
     begin
-      ws = Hcode::Session::Index.workspace_id("/repo")
-      dir = File.join(home, ".hcode", "sessions", ws, "abc123def456")
+      ws = H2code::Session::Index.workspace_id("/repo")
+      dir = File.join(home, ".h2code", "sessions", ws, "abc123def456")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"hello there"}}))
-      meta = Hcode::Session::StateMeta.new("abc123def456")
+      meta = H2code::Session::StateMeta.new("abc123def456")
       meta.cwd = "/repo"
       meta.title = "my session"
       meta.workspace_id = ws
       File.write(File.join(dir, "state.json"), meta.to_json)
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       entries = idx.list
       entries.size.should eq(1)
       entries[0].id.should eq("abc123def456")
@@ -48,12 +48,12 @@ describe Hcode::Session::Index do
   it "lists legacy flat-layout sessions" do
     home = temp_home
     begin
-      dir = File.join(home, ".hcode", "sessions", "legacy001")
+      dir = File.join(home, ".h2code", "sessions", "legacy001")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"old session"}}))
       File.write(File.join(dir, "meta.json"), %({"id":"legacy001","created_at":"2026-01-01T00:00:00Z"}))
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       entries = idx.list
       entries.size.should eq(1)
       entries[0].id.should eq("legacy001")
@@ -67,20 +67,20 @@ describe Hcode::Session::Index do
   it "hides archived sessions by default" do
     home = temp_home
     begin
-      ws = Hcode::Session::Index.workspace_id("/repo")
-      active = File.join(home, ".hcode", "sessions", ws, "a1" * 6)
-      archived = File.join(home, ".hcode", "sessions", ws, "b2" * 6)
+      ws = H2code::Session::Index.workspace_id("/repo")
+      active = File.join(home, ".h2code", "sessions", ws, "a1" * 6)
+      archived = File.join(home, ".h2code", "sessions", ws, "b2" * 6)
       [active, archived].each { |d| Dir.mkdir_p(d) }
       [active, archived].each do |d|
         File.write(File.join(d, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"x"}}))
       end
-      am = Hcode::Session::StateMeta.new("a1" * 6)
+      am = H2code::Session::StateMeta.new("a1" * 6)
       File.write(File.join(active, "state.json"), am.to_json)
-      bm = Hcode::Session::StateMeta.new("b2" * 6)
+      bm = H2code::Session::StateMeta.new("b2" * 6)
       bm.archived = true
       File.write(File.join(archived, "state.json"), bm.to_json)
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       idx.list.size.should eq(1)
       idx.list(include_archived: true).size.should eq(2)
     ensure
@@ -91,21 +91,21 @@ describe Hcode::Session::Index do
   it "list(ws_id) isolates sessions by workspace, never mixing folders" do
     home = temp_home
     begin
-      ws_a = Hcode::Session::Index.workspace_id("/repo-a")
-      ws_b = Hcode::Session::Index.workspace_id("/repo-b")
+      ws_a = H2code::Session::Index.workspace_id("/repo-a")
+      ws_b = H2code::Session::Index.workspace_id("/repo-b")
 
       ["a" * 12, "b" * 12].each do |sid|
-        dir = File.join(home, ".hcode", "sessions", ws_a, sid)
+        dir = File.join(home, ".h2code", "sessions", ws_a, sid)
         Dir.mkdir_p(dir)
         File.write(File.join(dir, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"in A"}}))
-        File.write(File.join(dir, "state.json"), Hcode::Session::StateMeta.new(sid).to_json)
+        File.write(File.join(dir, "state.json"), H2code::Session::StateMeta.new(sid).to_json)
       end
-      dir_b = File.join(home, ".hcode", "sessions", ws_b, "c" * 12)
+      dir_b = File.join(home, ".h2code", "sessions", ws_b, "c" * 12)
       Dir.mkdir_p(dir_b)
       File.write(File.join(dir_b, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"in B"}}))
-      File.write(File.join(dir_b, "state.json"), Hcode::Session::StateMeta.new("c" * 12).to_json)
+      File.write(File.join(dir_b, "state.json"), H2code::Session::StateMeta.new("c" * 12).to_json)
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       # Scoped to A: only A sessions, B is excluded.
       idx.list(ws_a).size.should eq(2)
       idx.list(ws_a).map(&.id).should_not contain("c" * 12)
@@ -122,32 +122,32 @@ describe Hcode::Session::Index do
   it "hides empty sessions (no messages) by default" do
     home = temp_home
     begin
-      ws = Hcode::Session::Index.workspace_id("/repo")
+      ws = H2code::Session::Index.workspace_id("/repo")
       # A session with a real prompt.
-      full = File.join(home, ".hcode", "sessions", ws, "full0001dead")
+      full = File.join(home, ".h2code", "sessions", ws, "full0001dead")
       Dir.mkdir_p(full)
       File.write(File.join(full, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"hello"}}))
-      File.write(File.join(full, "state.json"), Hcode::Session::StateMeta.new("full0001dead").to_json)
+      File.write(File.join(full, "state.json"), H2code::Session::StateMeta.new("full0001dead").to_json)
 
       # A session with only an assistant message.
-      replied = File.join(home, ".hcode", "sessions", ws, "reply002beef")
+      replied = File.join(home, ".h2code", "sessions", ws, "reply002beef")
       Dir.mkdir_p(replied)
       File.write(File.join(replied, "wire.jsonl"), %({"type":"assistant.text","data":{"content":"hi"}}))
-      File.write(File.join(replied, "state.json"), Hcode::Session::StateMeta.new("reply002beef").to_json)
+      File.write(File.join(replied, "state.json"), H2code::Session::StateMeta.new("reply002beef").to_json)
 
       # An empty wire.jsonl (created but never used).
-      empty1 = File.join(home, ".hcode", "sessions", ws, "empty003cafe")
+      empty1 = File.join(home, ".h2code", "sessions", ws, "empty003cafe")
       Dir.mkdir_p(empty1)
       File.write(File.join(empty1, "wire.jsonl"), "")
-      File.write(File.join(empty1, "state.json"), Hcode::Session::StateMeta.new("empty003cafe").to_json)
+      File.write(File.join(empty1, "state.json"), H2code::Session::StateMeta.new("empty003cafe").to_json)
 
       # A wire.jsonl with only bookkeeping (no real conversation event).
-      empty2 = File.join(home, ".hcode", "sessions", ws, "empty004babe")
+      empty2 = File.join(home, ".h2code", "sessions", ws, "empty004babe")
       Dir.mkdir_p(empty2)
       File.write(File.join(empty2, "wire.jsonl"), %({"type":"context.apply_compaction","data":{"summary":"x"}}))
-      File.write(File.join(empty2, "state.json"), Hcode::Session::StateMeta.new("empty004babe").to_json)
+      File.write(File.join(empty2, "state.json"), H2code::Session::StateMeta.new("empty004babe").to_json)
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       ids = idx.list.map(&.id)
       ids.should contain("full0001dead")
       ids.should contain("reply002beef")
@@ -167,13 +167,13 @@ describe Hcode::Session::Index do
   it "finds a session by id across layouts" do
     home = temp_home
     begin
-      ws = Hcode::Session::Index.workspace_id("/repo")
-      dir = File.join(home, ".hcode", "sessions", ws, "deadbeefdead")
+      ws = H2code::Session::Index.workspace_id("/repo")
+      dir = File.join(home, ".h2code", "sessions", ws, "deadbeefdead")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"x"}}))
-      File.write(File.join(dir, "state.json"), Hcode::Session::StateMeta.new("deadbeefdead").to_json)
+      File.write(File.join(dir, "state.json"), H2code::Session::StateMeta.new("deadbeefdead").to_json)
 
-      idx = Hcode::Session::Index.new(home)
+      idx = H2code::Session::Index.new(home)
       idx.get("deadbeefdead").should_not be_nil
       idx.get("nonexistent").should be_nil
     ensure
@@ -182,11 +182,11 @@ describe Hcode::Session::Index do
   end
 end
 
-describe Hcode::Session::Lifecycle do
+describe H2code::Session::Lifecycle do
   it "creates a workspace-aware session with state.json" do
     home = temp_home
     begin
-      lc = Hcode::Session::Lifecycle.new(home)
+      lc = H2code::Session::Lifecycle.new(home)
       store = lc.create("/my/repo", "test title")
 
       File.exists?(File.join(store.session_dir, "state.json")).should be_true
@@ -194,7 +194,7 @@ describe Hcode::Session::Lifecycle do
       meta.id.should_not be_empty
       meta.cwd.should eq("/my/repo")
       meta.title.should eq("test title")
-      meta.workspace_id.should eq(Hcode::Session::Index.workspace_id("/my/repo"))
+      meta.workspace_id.should eq(H2code::Session::Index.workspace_id("/my/repo"))
     ensure
       FileUtils.rm_rf(home)
     end
@@ -203,7 +203,7 @@ describe Hcode::Session::Lifecycle do
   it "fork copies the wire log into a new session" do
     home = temp_home
     begin
-      lc = Hcode::Session::Lifecycle.new(home)
+      lc = H2code::Session::Lifecycle.new(home)
       src = lc.create("/repo", "original")
       src.append("turn.prompt", {"prompt" => JSON::Any.new("hello")})
 
@@ -213,7 +213,7 @@ describe Hcode::Session::Lifecycle do
       forked.read_state.try(&.title).should eq("Fork of original")
 
       # Replaying the fork reconstructs the original prompt.
-      mem = Hcode::Context::Memory.new
+      mem = H2code::Context::Memory.new
       forked.replay(mem)
       mem.messages.first?.try(&.text).should eq("hello")
     ensure
@@ -224,7 +224,7 @@ describe Hcode::Session::Lifecycle do
   it "archive hides a session, restore brings it back" do
     home = temp_home
     begin
-      lc = Hcode::Session::Lifecycle.new(home)
+      lc = H2code::Session::Lifecycle.new(home)
       store = lc.create("/repo")
       id = store.read_state.try(&.id) || raise "read_state should not be nil"
 
@@ -242,7 +242,7 @@ describe Hcode::Session::Lifecycle do
   it "rename updates the title" do
     home = temp_home
     begin
-      lc = Hcode::Session::Lifecycle.new(home)
+      lc = H2code::Session::Lifecycle.new(home)
       store = lc.create("/repo", "old")
       id = store.read_state.try(&.id) || raise "read_state should not be nil"
 
@@ -255,15 +255,15 @@ describe Hcode::Session::Lifecycle do
   end
 end
 
-describe Hcode::Session::Store do
+describe H2code::Session::Store do
   it ".new_workspace_session writes the v2 layout" do
     home = temp_home
     begin
-      store = Hcode::Session::Store.new_workspace_session(home, "/repo", "ws")
+      store = H2code::Session::Store.new_workspace_session(home, "/repo", "ws")
       File.exists?(File.join(store.session_dir, "state.json")).should be_true
       meta = store.read_state || raise "read_state should not be nil"
       meta.cwd.should eq("/repo")
-      meta.workspace_id.should eq(Hcode::Session::Index.workspace_id("/repo"))
+      meta.workspace_id.should eq(H2code::Session::Index.workspace_id("/repo"))
     ensure
       FileUtils.rm_rf(home)
     end
@@ -272,10 +272,10 @@ describe Hcode::Session::Store do
   it "read_state falls back to legacy meta.json" do
     home = temp_home
     begin
-      dir = File.join(home, ".hcode", "sessions", "legacy01")
+      dir = File.join(home, ".h2code", "sessions", "legacy01")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "meta.json"), %({"id":"legacy01","created_at":"2026-01-01T00:00:00Z"}))
-      store = Hcode::Session::Store.new(dir)
+      store = H2code::Session::Store.new(dir)
       meta = store.read_state || raise "read_state should not be nil"
       meta.id.should eq("legacy01")
     ensure
@@ -286,15 +286,15 @@ describe Hcode::Session::Store do
   it "replay restores assistant text and thinking from a new-format wire" do
     home = temp_home
     begin
-      dir = File.join(home, ".hcode", "sessions", "ws01")
+      dir = File.join(home, ".h2code", "sessions", "ws01")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "wire.jsonl"), [
         %({"type":"turn.prompt","data":{"prompt":"hello"}}),
         %({"type":"assistant.text","data":{"content":"world","thinking":"let me think"}}),
       ].join('\n'))
-      store = Hcode::Session::Store.new(dir)
+      store = H2code::Session::Store.new(dir)
 
-      mem = Hcode::Context::Memory.new
+      mem = H2code::Context::Memory.new
       store.replay(mem)
 
       msgs = mem.messages
@@ -312,16 +312,16 @@ describe Hcode::Session::Store do
   it "replay reads legacy assistant.text without thinking (backwards compat)" do
     home = temp_home
     begin
-      dir = File.join(home, ".hcode", "sessions", "legacy02")
+      dir = File.join(home, ".h2code", "sessions", "legacy02")
       Dir.mkdir_p(dir)
       # Old format: content is a string, no thinking field.
       File.write(File.join(dir, "wire.jsonl"), [
         %({"type":"turn.prompt","data":{"prompt":"hi"}}),
         %({"type":"assistant.text","data":{"content":"old reply"}}),
       ].join('\n'))
-      store = Hcode::Session::Store.new(dir)
+      store = H2code::Session::Store.new(dir)
 
-      mem = Hcode::Context::Memory.new
+      mem = H2code::Context::Memory.new
       store.replay(mem)
 
       msgs = mem.messages
@@ -338,10 +338,10 @@ describe Hcode::Session::Store do
     it "open_existing! raises FileDeletedError when the session dir is gone" do
       home = temp_home
       begin
-        dir = File.join(home, ".hcode", "sessions", "deleted01")
+        dir = File.join(home, ".h2code", "sessions", "deleted01")
         # Neither the directory nor wire.jsonl exists.
-        expect_raises(Hcode::Session::FileDeletedError) do
-          Hcode::Session::Store.open_existing!(dir)
+        expect_raises(H2code::Session::FileDeletedError) do
+          H2code::Session::Store.open_existing!(dir)
         end
       ensure
         FileUtils.rm_rf(home)
@@ -351,10 +351,10 @@ describe Hcode::Session::Store do
     it "open_existing! raises FileDeletedError when only wire.jsonl is gone" do
       home = temp_home
       begin
-        dir = File.join(home, ".hcode", "sessions", "deleted02")
+        dir = File.join(home, ".h2code", "sessions", "deleted02")
         Dir.mkdir_p(dir)
-        expect_raises(Hcode::Session::FileDeletedError) do
-          Hcode::Session::Store.open_existing!(dir)
+        expect_raises(H2code::Session::FileDeletedError) do
+          H2code::Session::Store.open_existing!(dir)
         end
       ensure
         FileUtils.rm_rf(home)
@@ -364,13 +364,13 @@ describe Hcode::Session::Store do
     it "open_existing! returns a store for an intact session" do
       home = temp_home
       begin
-        lc = Hcode::Session::Lifecycle.new(home)
+        lc = H2code::Session::Lifecycle.new(home)
         created = lc.create("/repo", "ok")
         # Release the creator's lock first: a session has exactly one
         # owner, so open_existing! would otherwise (correctly) report it
         # as busy.
         created.unlock
-        store = Hcode::Session::Store.open_existing!(created.session_dir)
+        store = H2code::Session::Store.open_existing!(created.session_dir)
         store.wire_path.should eq(created.wire_path)
         store.unlock
       ensure
@@ -381,7 +381,7 @@ describe Hcode::Session::Store do
     it "append rebuilds the wire from the journal after a mid-session deletion" do
       home = temp_home
       begin
-        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store = H2code::Session::Store.new_workspace_session(home, "/repo", "t")
         store.append_simple("turn.prompt", "prompt", "hello")
         store.append("assistant.text", {"content" => JSON::Any.new("world")})
 
@@ -409,7 +409,7 @@ describe Hcode::Session::Store do
     it "append recreates the session directory after it is deleted mid-session" do
       home = temp_home
       begin
-        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store = H2code::Session::Store.new_workspace_session(home, "/repo", "t")
         store.append_simple("turn.prompt", "prompt", "hello")
 
         FileUtils.rm_rf(store.session_dir)
@@ -427,16 +427,16 @@ describe Hcode::Session::Store do
     it "append restores the full replayed history after the wire is deleted" do
       home = temp_home
       begin
-        dir = File.join(home, ".hcode", "sessions", "ws02")
+        dir = File.join(home, ".h2code", "sessions", "ws02")
         Dir.mkdir_p(dir)
         File.write(File.join(dir, "wire.jsonl"), [
           %({"type":"turn.prompt","data":{"prompt":"old question"}}),
           %({"type":"assistant.text","data":{"content":"old answer"}}),
         ].join('\n') + "\n")
-        store = Hcode::Session::Store.new(dir)
+        store = H2code::Session::Store.new(dir)
 
         # Resume: replay journals the prior history in memory.
-        mem = Hcode::Context::Memory.new
+        mem = H2code::Context::Memory.new
         store.replay(mem)
 
         File.delete(store.wire_path)
@@ -455,7 +455,7 @@ describe Hcode::Session::Store do
     it "append recreates a fully deleted session directory" do
       home = temp_home
       begin
-        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store = H2code::Session::Store.new_workspace_session(home, "/repo", "t")
         store.append_simple("turn.prompt", "prompt", "one")
 
         FileUtils.rm_rf(store.session_dir)
@@ -474,7 +474,7 @@ describe Hcode::Session::Store do
     it "write_state recreates a deleted session directory" do
       home = temp_home
       begin
-        store = Hcode::Session::Store.new_workspace_session(home, "/repo", "t")
+        store = H2code::Session::Store.new_workspace_session(home, "/repo", "t")
         meta = store.read_state || raise "read_state should not be nil"
         FileUtils.rm_rf(store.session_dir)
 
@@ -488,7 +488,7 @@ describe Hcode::Session::Store do
     it "adopt rebinds onto another session and reloads its journal" do
       home = temp_home
       begin
-        lc = Hcode::Session::Lifecycle.new(home)
+        lc = H2code::Session::Lifecycle.new(home)
         first = lc.create("/repo", "first")
         first.append_simple("turn.prompt", "prompt", "from first")
 

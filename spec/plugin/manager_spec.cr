@@ -1,9 +1,9 @@
 require "../spec_helper"
 
-describe Hcode::Plugin::Manager do
+describe H2code::Plugin::Manager do
   it "loads with no plugins" do
     with_tmpdir do |home|
-      mgr = Hcode::Plugin::Manager.new(home)
+      mgr = H2code::Plugin::Manager.new(home)
       mgr.load
       mgr.list.should be_empty
     end
@@ -17,7 +17,7 @@ describe Hcode::Plugin::Manager do
         Dir.mkdir(File.join(source, "skills", "my-skill"))
         File.write(File.join(source, "skills", "my-skill", "SKILL.md"), "# My Skill\n\nDo stuff")
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         record = mgr.install(source)
         record.id.should eq("test-plugin")
@@ -35,12 +35,12 @@ describe Hcode::Plugin::Manager do
       with_tmpdir do |source|
         File.write(File.join(source, "kimi.plugin.json"), %({"name":"persist-test"}))
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 
         # New manager instance reads from disk
-        mgr2 = Hcode::Plugin::Manager.new(home)
+        mgr2 = H2code::Plugin::Manager.new(home)
         mgr2.load
         mgr2.list.size.should eq(1)
         mgr2.list[0].id.should eq("persist-test")
@@ -53,7 +53,7 @@ describe Hcode::Plugin::Manager do
       with_tmpdir do |source|
         File.write(File.join(source, "kimi.plugin.json"), %({"name":"toggle-test"}))
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         record = mgr.install(source)
         record.enabled?.should be_true
@@ -72,7 +72,7 @@ describe Hcode::Plugin::Manager do
       with_tmpdir do |source|
         File.write(File.join(source, "kimi.plugin.json"), %({"name":"remove-test"}))
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
         mgr.list.size.should eq(1)
@@ -91,7 +91,7 @@ describe Hcode::Plugin::Manager do
         Dir.mkdir(File.join(source, "skills", "work"))
         File.write(File.join(source, "skills", "work", "SKILL.md"), "# Work\n\nDo work")
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 
@@ -110,7 +110,7 @@ describe Hcode::Plugin::Manager do
         Dir.mkdir(File.join(source, "skills", "work"))
         File.write(File.join(source, "skills", "work", "SKILL.md"), "# Work")
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
         mgr.set_enabled("disabled-plugin", false)
@@ -129,7 +129,7 @@ describe Hcode::Plugin::Manager do
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 
@@ -152,7 +152,7 @@ describe Hcode::Plugin::Manager do
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 
@@ -173,7 +173,7 @@ describe Hcode::Plugin::Manager do
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         record = mgr.install(source)
 
@@ -194,7 +194,7 @@ describe Hcode::Plugin::Manager do
         manifest = {"name" => "cmd-plugin", "commands" => "./commands/"}
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 
@@ -217,7 +217,7 @@ describe Hcode::Plugin::Manager do
         }
         File.write(File.join(source, "kimi.plugin.json"), manifest.to_json)
 
-        mgr = Hcode::Plugin::Manager.new(home)
+        mgr = H2code::Plugin::Manager.new(home)
         mgr.load
         mgr.install(source)
 

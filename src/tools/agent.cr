@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Agent — запуск одного дочернего субагента (foreground или background).
     #
@@ -60,7 +60,7 @@ module Hcode
       PROFILES = [
         Profile.new(
           name: "agent",
-          description: "Default HCode agent",
+          description: "Default H2Code agent",
           when_to_use: nil,
           tools: "Read, Write, Edit, Grep, Glob, Bash, TaskList, TaskOutput, TaskStop, CronCreate, CronList, CronDelete, ReadMediaFile, TodoList, Skill, WebSearch, Agent, AgentSwarm, FetchURL, AskUserQuestion, EnterPlanMode, ExitPlanMode, CreateGoal, GetGoal, SetGoalBudget, UpdateGoal, mcp__*",
         ),

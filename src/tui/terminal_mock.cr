@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Screen-model `TerminalPort` for tests. Models the behaviour of a real
     # terminal screen buffer: a fixed grid of `@rows` × `@cols`, a physical

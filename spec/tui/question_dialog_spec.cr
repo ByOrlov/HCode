@@ -1,15 +1,15 @@
 require "../spec_helper"
 
-private def build_question(text : String, options : Array(String), multi = false) : Hcode::Tools::QuestionItem
-  Hcode::Tools::QuestionItem.new(
+private def build_question(text : String, options : Array(String), multi = false) : H2code::Tools::QuestionItem
+  H2code::Tools::QuestionItem.new(
     text,
-    options.map { |o| Hcode::Tools::QuestionOption.new(o) },
+    options.map { |o| H2code::Tools::QuestionOption.new(o) },
     multi_select: multi,
   )
 end
 
-private def key_event(key : Hcode::TUI::Key) : Hcode::TUI::KeyEvent
-  Hcode::TUI::KeyEvent.new(key)
+private def key_event(key : H2code::TUI::Key) : H2code::TUI::KeyEvent
+  H2code::TUI::KeyEvent.new(key)
 end
 
 private def make_receiver
@@ -29,47 +29,47 @@ private def expect_answers(ch) : Hash(String, String)
   received.as(Hash(String, String))
 end
 
-describe Hcode::TUI::QuestionDialog do
+describe H2code::TUI::QuestionDialog do
   it "dismisses (empty answers) on Esc" do
-    dialog = Hcode::TUI::QuestionDialog.new(Hcode::TUI::Theme.dark)
+    dialog = H2code::TUI::QuestionDialog.new(H2code::TUI::Theme.dark)
     ch, handler = make_receiver
     dialog.show([build_question("Pick one", ["A", "B"])], handler)
-    dialog.handle_input(key_event(Hcode::TUI::Key::Escape))
+    dialog.handle_input(key_event(H2code::TUI::Key::Escape))
     answers = ch.receive
     answers.should eq({} of String => String)
     dialog.visible?.should be_false
   end
 
   it "records a single-select answer and auto-advances to submit" do
-    dialog = Hcode::TUI::QuestionDialog.new(Hcode::TUI::Theme.dark)
+    dialog = H2code::TUI::QuestionDialog.new(H2code::TUI::Theme.dark)
     ch, handler = make_receiver
     dialog.show([build_question("Pick one", ["A", "B"])], handler)
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
     dialog.render(80).any?(&.includes?("Review your answer")).should be_true
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
     answers = expect_answers(ch)
     answers.should eq({"Pick one" => "A"})
   end
 
   it "toggles multiple options in multi-select mode" do
-    dialog = Hcode::TUI::QuestionDialog.new(Hcode::TUI::Theme.dark)
+    dialog = H2code::TUI::QuestionDialog.new(H2code::TUI::Theme.dark)
     ch, handler = make_receiver
     dialog.show([build_question("Pick many", ["A", "B"], multi: true)], handler)
     # Enter on option 0 toggles it (multi-select).
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
-    dialog.handle_input(key_event(Hcode::TUI::Key::Down))
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
-    dialog.handle_input(key_event(Hcode::TUI::Key::Tab))
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Down))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Tab))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
     answers = expect_answers(ch)
     answers["Pick many"].split(", ").sort!.should eq(["A", "B"])
   end
 
   it "renders question tabs with answered markers" do
-    dialog = Hcode::TUI::QuestionDialog.new(Hcode::TUI::Theme.dark)
+    dialog = H2code::TUI::QuestionDialog.new(H2code::TUI::Theme.dark)
     handler = Proc(Hash(String, String), Nil).new { |_| }
     dialog.show([build_question("Q1", ["A", "B"]), build_question("Q2", ["X", "Y"])], handler)
-    dialog.handle_input(key_event(Hcode::TUI::Key::Enter))
+    dialog.handle_input(key_event(H2code::TUI::Key::Enter))
     lines = dialog.render(80).join("\n")
     lines.should contain("(✓) Q1")
   end

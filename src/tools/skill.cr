@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Skill — вызов зарегистрированного skill с аргументами и встраивание
     # его промпта в текущий ход через `Context::Memory#add_injection`.
@@ -13,7 +13,7 @@ module Hcode
       MAX_SKILL_QUERY_DEPTH = 3
 
       DESCRIPTION = <<-TEXT
-        Invoke a registered skill from the current skill listing. BLOCKING REQUIREMENT: when a skill from the listing matches the user's request, you MUST call this tool (not free-form text). Do not re-invoke a skill to repeat work already done: if a `<hcode-skill-loaded>` block for it with the same `args` is already present in the conversation, follow those instructions directly instead of calling the tool again. Do call the tool again when you need the skill with different arguments — the loaded block was expanded with the earlier `args` and will not reflect new inputs.
+        Invoke a registered skill from the current skill listing. BLOCKING REQUIREMENT: when a skill from the listing matches the user's request, you MUST call this tool (not free-form text). Do not re-invoke a skill to repeat work already done: if a `<h2code-skill-loaded>` block for it with the same `args` is already present in the conversation, follow those instructions directly instead of calling the tool again. Do call the tool again when you need the skill with different arguments — the loaded block was expanded with the earlier `args` and will not reflect new inputs.
       TEXT
 
       # Глобальный инжекченный каталог skill'ов. nil → тул возвращает ошибку.
@@ -152,9 +152,9 @@ module Hcode
 
         String.build do |io|
           io << "Skill tool loaded instructions for this request. Follow them.\n"
-          io << "<hcode-skill-loaded#{attrs}>\n"
+          io << "<h2code-skill-loaded#{attrs}>\n"
           io << skill_content
-          io << "\n</hcode-skill-loaded>"
+          io << "\n</h2code-skill-loaded>"
         end
       end
 
@@ -271,15 +271,15 @@ module Hcode
           while i < body.size
             c = body[i]
 
-            # ${HCODE_SKILL_DIR}
-            if body[i, 19]? == "${HCODE_SKILL_DIR}"
+            # ${H2CODE_SKILL_DIR}
+            if body[i, 19]? == "${H2CODE_SKILL_DIR}"
               io << (skill_dir || "")
               i += 19
               next
             end
 
-            # ${HCODE_SESSION_ID}
-            if body[i, 20]? == "${HCODE_SESSION_ID}"
+            # ${H2CODE_SESSION_ID}
+            if body[i, 20]? == "${H2CODE_SESSION_ID}"
               io << (session_id || "")
               i += 20
               next
@@ -500,7 +500,7 @@ module Hcode
     module SkillDiscovery
       USER_BRAND_DIRS      = ["skills"]
       USER_GENERIC_DIRS    = [".agents/skills"]
-      PROJECT_BRAND_DIRS   = [".hcode/skills"]
+      PROJECT_BRAND_DIRS   = [".h2code/skills"]
       PROJECT_GENERIC_DIRS = [".agents/skills"]
 
       # Scan a single directory for SKILL.md files (used by the plugin system
@@ -607,7 +607,7 @@ module Hcode
     end
 
     # SKILL.md parser: frontmatter (simple YAML) + body. Mirrors TS `parser.ts`
-    # for the subset of fields hcode uses (name, description, type, when-to-use,
+    # for the subset of fields h2code uses (name, description, type, when-to-use,
     # arguments, disable-model-invocation).
     module Parser
       FENCE = "---"

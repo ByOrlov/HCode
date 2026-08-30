@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     class Write < Tool
       @work_dir : String

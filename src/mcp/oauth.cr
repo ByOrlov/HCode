@@ -7,13 +7,13 @@ require "random/secure"
 require "digest/sha256"
 require "file_utils"
 
-module Hcode
+module H2code
   module Mcp
     class OAuthError < Exception
     end
 
     # Persisted OAuth token set for one MCP server. Stored as JSON at
-    # `~/.hcode/mcp-tokens/<server>.json` so reconnections reuse the same
+    # `~/.h2code/mcp-tokens/<server>.json` so reconnections reuse the same
     # access token until it expires (then refresh).
     struct OAuthTokens
       include JSON::Serializable
@@ -74,7 +74,7 @@ module Hcode
       STATE_LEN         = 32
 
       # Try to load persisted tokens for `server_name` + `server_url` from the
-      # hcode credentials dir. Mirrors JS `JsonFileStore.read`.
+      # h2code credentials dir. Mirrors JS `JsonFileStore.read`.
       def self.load_tokens(server_name : String, server_url : String, home_dir : String) : OAuthTokens?
         path = tokens_path(server_name, server_url, home_dir)
         return nil unless File.exists?(path)
@@ -84,7 +84,7 @@ module Hcode
       end
 
       # Persist tokens via atomic write (temp → fsync → rename) at mode 0600,
-      # under `<hcode_home>/credentials/mcp/` at mode 0700. Mirrors JS
+      # under `<h2code_home>/credentials/mcp/` at mode 0700. Mirrors JS
       # `JsonFileStore.write`.
       def self.save_tokens(server_name : String, server_url : String,
                            home_dir : String, tokens : OAuthTokens) : Nil
@@ -115,8 +115,8 @@ module Hcode
       end
 
       private def self.credentials_dir(home_dir : String) : String
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home_dir, ".hcode")
-        File.join(hcode_home, "credentials", "mcp")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home_dir, ".h2code")
+        File.join(h2code_home, "credentials", "mcp")
       end
 
       private def self.ensure_credentials_dir(dir : String) : Nil

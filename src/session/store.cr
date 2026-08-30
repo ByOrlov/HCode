@@ -1,7 +1,7 @@
 require "./index"
 require "./lock"
 
-module Hcode
+module H2code
   module Session
     # Raised when opening a session whose wire.jsonl no longer exists on
     # disk (the session directory was deleted under us). Plain `Store.new`
@@ -65,7 +65,7 @@ module Hcode
 
       def self.new_session(home : String) : Store
         session_id = Random::Secure.hex(12)
-        dir = File.join(home, ".hcode", "sessions", session_id)
+        dir = File.join(home, ".h2code", "sessions", session_id)
         store = new(dir)
         store.write_meta({"id" => session_id, "created_at" => Time.utc.to_rfc3339})
         store
@@ -78,7 +78,7 @@ module Hcode
                                      title : String = "") : Store
         ws_id = Index.workspace_id(cwd)
         session_id = Random::Secure.hex(12)
-        dir = File.join(home, ".hcode", "sessions", ws_id, session_id)
+        dir = File.join(home, ".h2code", "sessions", ws_id, session_id)
         store = new(dir)
         meta = StateMeta.new(session_id)
         meta.cwd = cwd
@@ -404,7 +404,7 @@ module Hcode
       end
 
       def self.list_sessions(home : String) : Array(SessionInfo)
-        sessions_dir = File.join(home, ".hcode", "sessions")
+        sessions_dir = File.join(home, ".h2code", "sessions")
         return [] of SessionInfo unless Dir.exists?(sessions_dir)
 
         sessions = [] of SessionInfo

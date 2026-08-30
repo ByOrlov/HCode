@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Lightweight counter-delta telemetry. Tracks named render-quality counters
     # and, when a counter increases between two tool-result samples, produces a

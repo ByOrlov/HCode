@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   # Central registry for memory profiling of long-lived growing collections.
   #
   # Instead of wrapping every Array/Hash in a profiling container, each

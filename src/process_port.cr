@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   # Port: forcibly terminate a running process.
   #
   # Forceful termination is inherently OS-specific (SIGKILL on POSIX,

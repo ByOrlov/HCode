@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Full port of the TS `TasksBrowserApp`
     # (`apps/kimi-code/src/tui/components/dialogs/tasks-browser.ts`).

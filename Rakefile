@@ -1,9 +1,9 @@
 require "colorize"
 
-# Resolve the build version: explicit HCODE_VERSION wins, then the most
+# Resolve the build version: explicit H2CODE_VERSION wins, then the most
 # recent git tag (`git describe --tags --abbrev=0`), then "0.0.0-dev".
-def hcode_build_version
-  return ENV["HCODE_VERSION"] if ENV.key?("HCODE_VERSION")
+def h2code_build_version
+  return ENV["H2CODE_VERSION"] if ENV.key?("H2CODE_VERSION")
   tag = `git describe --tags --abbrev=0 2>/dev/null`.strip
   tag.empty? ? "0.0.0-dev" : tag
 end
@@ -109,34 +109,34 @@ def building(name)
   puts "▶ Building #{name}".colorize(:blue)
 end
 
-def build_hcode(output = "hcode", release: false)
+def build_h2code(output = "h2code", release: false)
   build_miniaudio_bridge(release: release)
   link_flags = miniaudio_link_flags
   flags = ["--warnings none", "--no-color"]
   flags << "--release" if release
   flags << "--link-flags \"#{link_flags}\""
-  ENV["HCODE_VERSION"] = hcode_build_version
-  sh "crystal build src/hcode.cr -o #{output} #{flags.join(' ')}"
+  ENV["H2CODE_VERSION"] = h2code_build_version
+  sh "crystal build src/h2code.cr -o #{output} #{flags.join(' ')}"
 end
 
-desc "Build the hcode binary"
+desc "Build the h2code binary"
 task :build do
-  build_hcode
+  build_h2code
 end
 
-desc "Build the hcode binary with --release"
+desc "Build the h2code binary with --release"
 task :build_release do
-  build_hcode(release: true)
+  build_h2code(release: true)
 end
 
 namespace :build do
-  desc "Build every binary: hcode, ameba, lines_demo, mock_hcode, mockfast_hcode, mockshort_hcode"
-  task :all => [:hcode, :ameba, :lines_demo, :mock_hcode, :mockfast_hcode, :mockshort_hcode]
+  desc "Build every binary: h2code, ameba, lines_demo, mock_h2code, mockfast_h2code, mockshort_h2code"
+  task :all => [:h2code, :ameba, :lines_demo, :mock_h2code, :mockfast_h2code, :mockshort_h2code]
 
-  desc "Build the hcode binary (debug)"
-  task :hcode do
-    building "hcode"
-    build_hcode
+  desc "Build the h2code binary (debug)"
+  task :h2code do
+    building "h2code"
+    build_h2code
   end
 
   desc "Build bin/ameba"
@@ -151,34 +151,34 @@ namespace :build do
     sh "crystal build bin/lines_demo.cr -o bin/lines_demo --warnings none --no-color"
   end
 
-  desc "Build bin/mock_hcode (simulated 100-tool LLM output)"
-  task :mock_hcode do
-    building "bin/mock_hcode"
-    sh "crystal build bin/mock_hcode.cr -o bin/mock_hcode --warnings none --no-color"
+  desc "Build bin/mock_h2code (simulated 100-tool LLM output)"
+  task :mock_h2code do
+    building "bin/mock_h2code"
+    sh "crystal build bin/mock_h2code.cr -o bin/mock_h2code --warnings none --no-color"
   end
 
-  desc "Build bin/mockfast_hcode (quick render check)"
-  task :mockfast_hcode do
-    building "bin/mockfast_hcode"
-    sh "crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --warnings none --no-color"
+  desc "Build bin/mockfast_h2code (quick render check)"
+  task :mockfast_h2code do
+    building "bin/mockfast_h2code"
+    sh "crystal build bin/mockfast_h2code.cr -o bin/mockfast_h2code --warnings none --no-color"
   end
 
-  desc "Build bin/mockshort_hcode (short 10-line streamed answer + couple of tools)"
-  task :mockshort_hcode do
-    building "bin/mockshort_hcode"
-    sh "crystal build bin/mockshort_hcode.cr -o bin/mockshort_hcode --warnings none --no-color"
+  desc "Build bin/mockshort_h2code (short 10-line streamed answer + couple of tools)"
+  task :mockshort_h2code do
+    building "bin/mockshort_h2code"
+    sh "crystal build bin/mockshort_h2code.cr -o bin/mockshort_h2code --warnings none --no-color"
   end
 end
 
 namespace :run do
   desc "Build (debug) and run the TUI"
   task :default => :build do
-    sh "./hcode --yolo"
+    sh "./h2code --yolo"
   end
 
   desc "Build with --release and run the TUI"
   task :release => :build_release do
-    sh "./hcode --yolo"
+    sh "./h2code --yolo"
   end
 end
 
@@ -196,78 +196,78 @@ end
 namespace :mock do
   desc "Run TUI with mock provider — default self-test script (parallel tools)"
   task :default => :build do
-    sh "HCODE_PROVIDER=mock ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — thinking streaming demo (~5s)"
   task :thinking => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=thinking ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — thinking + tool call demo"
   task :thinking_tools => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking-tools ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=thinking-tools ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — markdown rendering demo"
   task :markdown => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=markdown ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — broken-token markdown list streaming bug repro"
   task :markdown_tokens => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown_tokens ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=markdown_tokens ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — sound notification on turn completion"
   task :sound => :build do
-    sh "HCODE_PROVIDER=mock HCODE_SOUND=1 ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_SOUND=1 ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — sudo terminal exec demo (requires bin/mocksudo on PATH)"
   task :mocksudo => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=sudo PATH=#{File.dirname(__FILE__)}/bin:$PATH ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=sudo PATH=#{File.dirname(__FILE__)}/bin:$PATH ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — TodoList completion → log migration demo"
   task :todos => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=todos ./h2code --tui-prompt 'mock' --yolo"
   end
 
   desc "Run TUI with mock provider — long-plan review (EnterPlanMode → Write → ExitPlanMode)"
   task :plan => :build do
-    sh "HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=plan ./hcode --tui-prompt 'mock' --yolo"
+    sh "H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=plan ./h2code --tui-prompt 'mock' --yolo"
   end
 
-  # --- standalone mock binaries (built by build:mock_hcode / build:mockfast_hcode) ---
+  # --- standalone mock binaries (built by build:mock_h2code / build:mockfast_h2code) ---
 
-  desc "Build and run bin/mock_hcode (simulated 100-tool LLM output for render testing)"
-  task :run => "build:mock_hcode" do
-    sh "./bin/mock_hcode"
+  desc "Build and run bin/mock_h2code (simulated 100-tool LLM output for render testing)"
+  task :run => "build:mock_h2code" do
+    sh "./bin/mock_h2code"
   end
 
-  desc "Build and run bin/mockfast_hcode (big plan + couple of tools for quick render check)"
-  task :fast => "build:mockfast_hcode" do
-    sh "./bin/mockfast_hcode"
+  desc "Build and run bin/mockfast_h2code (big plan + couple of tools for quick render check)"
+  task :fast => "build:mockfast_h2code" do
+    sh "./bin/mockfast_h2code"
   end
 
-  desc "Build and run bin/mockshort_hcode (short 10-line streamed answer + couple of tools)"
-  task :short => "build:mockshort_hcode" do
-    sh "./bin/mockshort_hcode"
+  desc "Build and run bin/mockshort_h2code (short 10-line streamed answer + couple of tools)"
+  task :short => "build:mockshort_h2code" do
+    sh "./bin/mockshort_h2code"
   end
 
-  # Simulate a first run with no config so the setup wizard launches. HCODE_HOME
+  # Simulate a first run with no config so the setup wizard launches. H2CODE_HOME
   # is pointed at a throwaway dir inside the project and config.json is wiped
   # first, so the wizard sees an unconfigured state. Writes go to that throwaway
-  # dir only — the real ~/.hcode is never touched. HCODE_PROVIDER is NOT set:
+  # dir only — the real ~/.h2code is never touched. H2CODE_PROVIDER is NOT set:
   # setting it to "mock" would mark the provider as configured and skip the
   # wizard entirely.
   desc "Simulate a first run (no config) to exercise the setup wizard"
   task :welcome => :build do
-    welcome_home = File.expand_path("tmp/hcode_welcome_home", __dir__)
+    welcome_home = File.expand_path("tmp/h2code_welcome_home", __dir__)
     rm_rf welcome_home
     mkdir_p welcome_home
-    sh "HCODE_HOME=#{welcome_home} ./hcode"
+    sh "H2CODE_HOME=#{welcome_home} ./h2code"
   end
 end
 
@@ -282,6 +282,6 @@ end
 
 desc "Remove build artifacts"
 task :clean do
-  rm_f "hcode"
+  rm_f "h2code"
   rm_f Dir.glob("#{MINIAUDIO_DIR}/miniaudio_bridge.{o,a,obj,lib}")
 end

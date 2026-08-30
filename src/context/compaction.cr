@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Context
     # Context summarization when the conversation nears the context window.
     #

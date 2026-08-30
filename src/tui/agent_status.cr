@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Lifecycle status of the agent, shown as a permanent one-line indicator
     # in the Active zone (always next to the editor, never disappears).

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Auth
     # OAuth device-code flow for Moonshot (Kimi Code).
     #

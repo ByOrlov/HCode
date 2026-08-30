@@ -3,7 +3,7 @@ require "../tools/tool"
 require "./oauth"
 require "./tool_naming"
 
-module Hcode
+module H2code
   module Mcp
     # Synthetic `mcp__<server>__authenticate` tool. When a remote MCP server
     # lands in the `needs-auth` state (401 without a static bearer token), the

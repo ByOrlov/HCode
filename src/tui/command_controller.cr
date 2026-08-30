@@ -2,7 +2,7 @@
 # that was previously a single ~400-line `case` inside `handle_slash_command`.
 # The dispatcher stays in `App#handle_slash_command`; each branch delegates
 # here. Methods keep direct ivar access, matching `SetupController`.
-module Hcode
+module H2code
   module TUI
     module CommandController
       private def cmd_exit : Nil
@@ -18,7 +18,7 @@ module Hcode
           @on_new_session.try(&.call)
           @messages.clear
           @show_welcome = true
-          emit_to_log(Message.new("system", Hcode.t("ui.new_session_started")))
+          emit_to_log(Message.new("system", H2code.t("ui.new_session_started")))
         end
       end
 
@@ -54,7 +54,7 @@ module Hcode
           emit_to_log(Message.new("error", "Cannot archive while a turn is running."))
         elsif cb = @on_archive
           cb.call
-          emit_to_log(Message.new("system", Hcode.t("ui.session_archived")))
+          emit_to_log(Message.new("system", H2code.t("ui.session_archived")))
         else
           emit_to_log(Message.new("error", "Session archive is not wired up."))
         end
@@ -62,7 +62,7 @@ module Hcode
 
       private def cmd_rename(args : String) : Nil
         if args.empty?
-          emit_to_log(Message.new("system", Hcode.t("ui.usage_rename")))
+          emit_to_log(Message.new("system", H2code.t("ui.usage_rename")))
         elsif cb = @on_rename
           cb.call(args)
           emit_to_log(Message.new("system", "Session title set to: #{args}"))
@@ -78,7 +78,7 @@ module Hcode
           @on_clear.try(&.call)
           @messages.clear
           @show_welcome = true
-          emit_to_log(Message.new("system", Hcode.t("ui.conversation_cleared")))
+          emit_to_log(Message.new("system", H2code.t("ui.conversation_cleared")))
         end
       end
 
@@ -97,22 +97,22 @@ module Hcode
 
       private def cmd_status : Nil
         stats = String.build do |s|
-          s << "#{Hcode.t("ui.status_model")}: #{@model}\n"
-          s << "#{Hcode.t("ui.permission_label")}: #{@permission_mode}\n"
+          s << "#{H2code.t("ui.status_model")}: #{@model}\n"
+          s << "#{H2code.t("ui.permission_label")}: #{@permission_mode}\n"
           if @max_context_tokens > 0
-            s << "#{Hcode.t("ui.context_label")}: #{build_context_status.split(": ", 2)[1]? || ""}\n"
+            s << "#{H2code.t("ui.context_label")}: #{build_context_status.split(": ", 2)[1]? || ""}\n"
           else
-            s << "#{Hcode.t("ui.context_label")}: #{@context_percent.round(1)}%\n"
+            s << "#{H2code.t("ui.context_label")}: #{@context_percent.round(1)}%\n"
           end
-          s << "#{Hcode.t("ui.messages_label")}: #{@messages.size}\n"
-          s << "#{Hcode.t("ui.queue_label")}: #{@queue.size}\n"
+          s << "#{H2code.t("ui.messages_label")}: #{@messages.size}\n"
+          s << "#{H2code.t("ui.queue_label")}: #{@queue.size}\n"
         end
         emit_to_log(Message.new("system", stats.strip))
       end
 
       private def cmd_undo(args : String) : Nil
         if @agent_busy
-          emit_to_log(Message.new("error", Hcode.t("ui.cannot_undo_busy")))
+          emit_to_log(Message.new("error", H2code.t("ui.cannot_undo_busy")))
         elsif args.strip.empty?
           open_undo_selector
         else
@@ -125,9 +125,9 @@ module Hcode
       private def cmd_queue(args : String) : Nil
         if args.strip == "clear"
           @queue.clear
-          emit_to_log(Message.new("system", Hcode.t("ui.queue_cleared")))
+          emit_to_log(Message.new("system", H2code.t("ui.queue_cleared")))
         elsif @queue.empty?
-          emit_to_log(Message.new("system", Hcode.t("ui.queue_empty")))
+          emit_to_log(Message.new("system", H2code.t("ui.queue_empty")))
         else
           preview = @queue.map_with_index { |qm, i| "  #{i + 1}. #{truncate_preview(qm.text)}" }.join("\n")
           emit_to_log(Message.new("system", "Queue (#{@queue.size}):\n#{preview}\n— #{queue_hint}"))
@@ -152,12 +152,12 @@ module Hcode
       private def cmd_export_md(args : String) : Nil
         path = args.empty? ? "session-#{Time.utc.to_unix}.md" : args
         @on_export.try(&.call(path))
-        emit_to_log(Message.new("system", Hcode.t("ui.exported_to", path: path)))
+        emit_to_log(Message.new("system", H2code.t("ui.exported_to", path: path)))
       end
 
       private def cmd_add_dir(args : String) : Nil
         if args.empty?
-          emit_to_log(Message.new("system", Hcode.t("ui.usage_add_dir")))
+          emit_to_log(Message.new("system", H2code.t("ui.usage_add_dir")))
         else
           path = File.expand_path(args.strip, @work_dir)
           if Dir.exists?(path)
@@ -167,7 +167,7 @@ module Hcode
               @additional_dirs << path
               on_additional_dirs_change.try(&.call(@additional_dirs.dup))
               emit_to_log(Message.new("system",
-                Hcode.t("ui.added_directory", path: path, count: @additional_dirs.size)))
+                H2code.t("ui.added_directory", path: path, count: @additional_dirs.size)))
             end
           else
             emit_to_log(Message.new("error", "Directory does not exist: #{path}"))
@@ -180,27 +180,27 @@ module Hcode
           open_theme_selector
         elsif args == "dark"
           @theme = Theme.dark
-          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: "dark")))
+          emit_to_log(Message.new("system", H2code.t("ui.theme_set", name: "dark")))
         elsif args == "light"
           @theme = Theme.light
-          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: "light")))
+          emit_to_log(Message.new("system", H2code.t("ui.theme_set", name: "light")))
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.theme_unknown", name: args)))
+          emit_to_log(Message.new("error", H2code.t("ui.theme_unknown", name: args)))
         end
       end
 
       private def cmd_version : Nil
-        version = Hcode::VERSION
-        build = Hcode.build_date || "dev"
-        emit_to_log(Message.new("system", "hcode #{version} (#{build})\nCrystal #{Crystal::VERSION}"))
+        version = H2code::VERSION
+        build = H2code.build_date || "dev"
+        emit_to_log(Message.new("system", "h2code #{version} (#{build})\nCrystal #{Crystal::VERSION}"))
       end
 
       private def cmd_upgrade : Nil
-        emit_to_log(Message.new("system", Hcode.t("ui.upgrade_checking")))
+        emit_to_log(Message.new("system", H2code.t("ui.upgrade_checking")))
         @dirty = true
         render
-        ok, msg = Hcode::Upgrader.run
-        Hcode::Upgrader.record_check(nil)
+        ok, msg = H2code::Upgrader.run
+        H2code::Upgrader.record_check(nil)
         emit_to_log(Message.new(ok ? "system" : "error", msg))
       end
 
@@ -215,9 +215,9 @@ module Hcode
         last_assistant = @messages.reverse.find { |m| m.role == "assistant" }
         if last_assistant
           copy_to_clipboard(last_assistant.content)
-          emit_to_log(Message.new("system", Hcode.t("ui.copied")))
+          emit_to_log(Message.new("system", H2code.t("ui.copied")))
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.no_assistant_to_copy")))
+          emit_to_log(Message.new("error", H2code.t("ui.no_assistant_to_copy")))
         end
       end
 
@@ -228,7 +228,7 @@ module Hcode
         when ""
           open_permission_selector
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.mode_unknown", name: args)))
+          emit_to_log(Message.new("error", H2code.t("ui.mode_unknown", name: args)))
         end
       end
 
@@ -266,19 +266,19 @@ module Hcode
         elsif cb = @on_set_effort
           normalized = args.strip.downcase
           cb.call(normalized)
-          emit_to_log(Message.new("system", Hcode.t("ui.effort_set", name: normalized)))
+          emit_to_log(Message.new("system", H2code.t("ui.effort_set", name: normalized)))
         else
-          emit_to_log(Message.new("system", Hcode.t("ui.effort_not_wired")))
+          emit_to_log(Message.new("system", H2code.t("ui.effort_not_wired")))
         end
       end
 
       private def cmd_todos(args : String) : Nil
         todos = current_todos
         if todos.nil? || todos.empty?
-          emit_to_log(Message.new("system", Hcode.t("ui.no_todos")))
+          emit_to_log(Message.new("system", H2code.t("ui.no_todos")))
         elsif args.strip.downcase == "clear"
           @on_clear_todos.try(&.call)
-          emit_to_log(Message.new("system", Hcode.t("ui.todos_cleared")))
+          emit_to_log(Message.new("system", H2code.t("ui.todos_cleared")))
         else
           body = todos.map_with_index do |(title, status), i|
             marker = case status
@@ -302,13 +302,13 @@ module Hcode
 
       private def cmd_feedback(args : String) : Nil
         if args.strip.empty?
-          emit_to_log(Message.new("system", Hcode.t("ui.usage_feedback")))
+          emit_to_log(Message.new("system", H2code.t("ui.usage_feedback")))
         elsif cb = @on_feedback
           cb.call(args.strip)
           emit_to_log(Message.new("system", "Feedback sent. Thank you!"))
         else
           # Local fallback: stash the feedback so it can be retrieved later.
-          feedback_path = File.join(@home, ".hcode", "feedback.log")
+          feedback_path = File.join(@home, ".h2code", "feedback.log")
           Dir.mkdir_p(File.dirname(feedback_path)) rescue nil
           File.write(feedback_path, "[#{Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")}] #{args.strip}\n", mode: "a")
           emit_to_log(Message.new("system", "Feedback saved to #{feedback_path}."))
@@ -330,7 +330,7 @@ module Hcode
       end
 
       # `/sync [on|off|code|status]` — cloud sync with the PWA. `on`
-      # enables it in config.json, starts the hcode-remote cloud daemon
+      # enables it in config.json, starts the h2code-remote cloud daemon
       # and prints the pairing QR; no args default to status. Auth is
       # code-only (plans/QrAuth.md) — no email needed.
       private def cmd_sync(args : String) : Nil
@@ -361,18 +361,18 @@ module Hcode
 
       private def sync_start_message(relay_url : String) : String
         case Remote::Sync.start_daemon(relay_url)
-        when :started   then "Sync enabled. hcode-remote cloud daemon started (#{relay_url})."
-        when :already   then "Sync enabled. hcode-remote cloud daemon already running (#{relay_url})."
-        when :no_binary then "Sync enabled, but hcode-remote binary not found — build it with `rake` or run it manually."
-        else                 "Sync enabled, but the cloud daemon failed to start — see ~/.hcode/remote/daemon.log"
+        when :started   then "Sync enabled. h2code-remote cloud daemon started (#{relay_url})."
+        when :already   then "Sync enabled. h2code-remote cloud daemon already running (#{relay_url})."
+        when :no_binary then "Sync enabled, but h2code-remote binary not found — build it with `rake` or run it manually."
+        else                 "Sync enabled, but the cloud daemon failed to start — see ~/.h2code/remote/daemon.log"
         end
       end
 
       private def sync_stop_message : String
         case Remote::Sync.stop_daemon
-        when :stopped     then "Sync disabled. hcode-remote cloud daemon stopped."
+        when :stopped     then "Sync disabled. h2code-remote cloud daemon stopped."
         when :not_running then "Sync disabled."
-        else                   "Sync disabled (daemon stop failed — check ~/.hcode/remote/daemon.pid)."
+        else                   "Sync disabled (daemon stop failed — check ~/.h2code/remote/daemon.pid)."
         end
       end
 
@@ -385,12 +385,12 @@ module Hcode
 
       private def cmd_settings : Nil
         settings = String.build do |s|
-          s << "#{Hcode.t("info.provider_label", name: @provider_name)}\n"
-          s << "#{Hcode.t("ui.status_model")}: #{@model}\n"
-          s << "#{Hcode.t("ui.permission_label")}: #{@permission_mode}\n"
-          s << "#{Hcode.t("ui.settings_theme")}: #{@theme.name}\n"
+          s << "#{H2code.t("info.provider_label", name: @provider_name)}\n"
+          s << "#{H2code.t("ui.status_model")}: #{@model}\n"
+          s << "#{H2code.t("ui.permission_label")}: #{@permission_mode}\n"
+          s << "#{H2code.t("ui.settings_theme")}: #{@theme.name}\n"
           effort = @on_get_effort.try(&.call) || "off"
-          s << "#{Hcode.t("ui.settings_effort")}: #{effort}\n"
+          s << "#{H2code.t("ui.settings_effort")}: #{effort}\n"
           s << "Home: #{@home}\n"
           s << "Work dir: #{@work_dir}\n"
           s << "Git branch: #{@git_branch.empty? ? "(none)" : @git_branch}\n"
@@ -434,17 +434,17 @@ module Hcode
       end
 
       # Mirrors TS `showExperimentsPanel`: enumerate experimental flags and
-      # their current state. hcode has no registry yet — flags are env-driven
-      # (HCODE_EXPERIMENTAL_<NAME>) plus the master switch
-      # HCODE_EXPERIMENTAL_FLAG=1. Surface the env so the user knows what is
+      # their current state. h2code has no registry yet — flags are env-driven
+      # (H2CODE_EXPERIMENTAL_<NAME>) plus the master switch
+      # H2CODE_EXPERIMENTAL_FLAG=1. Surface the env so the user knows what is
       # on.
       private def cmd_experiments : Nil
         master = @app_config.try(&.experimental_flag)
         env_flags = ENV.keys.select { |k|
-          k.starts_with?("HCODE_EXPERIMENTAL_") && k != "HCODE_EXPERIMENTAL_FLAG"
+          k.starts_with?("H2CODE_EXPERIMENTAL_") && k != "H2CODE_EXPERIMENTAL_FLAG"
         }.sort!
         body = String.build do |s|
-          s << "Master switch (HCODE_EXPERIMENTAL_FLAG): #{master || "off"}\n"
+          s << "Master switch (H2CODE_EXPERIMENTAL_FLAG): #{master || "off"}\n"
           if env_flags.empty?
             s << "No individual experimental flags set.\n"
           else
@@ -453,7 +453,7 @@ module Hcode
               s << "  #{k} = #{ENV[k]}\n"
             end
           end
-          s << "\nFlags are read at startup; restart hcode after changing them."
+          s << "\nFlags are read at startup; restart h2code after changing them."
         end
         emit_to_log(Message.new("system", body.strip))
       end
@@ -473,7 +473,7 @@ module Hcode
             emit_to_log(Message.new("error", "MCP update not available in this run."))
           end
         when "configure"
-          emit_to_log(Message.new("system", "MCP configuration: edit ~/.hcode/mcp.json directly, then run /mcp update to refresh the cache."))
+          emit_to_log(Message.new("system", "MCP configuration: edit ~/.h2code/mcp.json directly, then run /mcp update to refresh the cache."))
         when "help"
           emit_to_log(Message.new("system", MCP_HELP_TEXT))
         else
@@ -489,7 +489,7 @@ module Hcode
           emit_to_log(Message.new("system", "Starting OAuth device-code login..."))
           cb.call
         else
-          cfg_path = File.join(@home, ".hcode", "config.json")
+          cfg_path = File.join(@home, ".h2code", "config.json")
           cred_path = File.join(@home, ".kimi-code", "credentials", "kimi-code.json")
           body = String.build do |s|
             s << "Interactive login is not available in this build.\n\n"
@@ -550,19 +550,19 @@ module Hcode
         case args.strip.downcase
         when "on"
           @telemetry.enabled = true
-          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_on")))
+          emit_to_log(Message.new("system", H2code.t("ui.telemetry_on")))
         when "off"
           @telemetry.enabled = false
-          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_off")))
+          emit_to_log(Message.new("system", H2code.t("ui.telemetry_off")))
         when ""
-          state = @telemetry.enabled? ? Hcode.t("ui.telemetry_on_label") : Hcode.t("ui.telemetry_off_label")
+          state = @telemetry.enabled? ? H2code.t("ui.telemetry_on_label") : H2code.t("ui.telemetry_off_label")
           counters = @telemetry.counter_names.map do |name|
             flag = @telemetry.counter_enabled?(name) ? "✓" : "✗"
             "  #{flag} #{name}"
           end.join("\n")
-          emit_to_log(Message.new("system", Hcode.t("ui.telemetry_status", state: state, counters: counters)))
+          emit_to_log(Message.new("system", H2code.t("ui.telemetry_status", state: state, counters: counters)))
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.telemetry_usage")))
+          emit_to_log(Message.new("error", H2code.t("ui.telemetry_usage")))
         end
       end
 
@@ -610,7 +610,7 @@ module Hcode
             end
             cfg.save
           end
-          emit_to_log(Message.new("system", Hcode.t("ui.sounds_on")))
+          emit_to_log(Message.new("system", H2code.t("ui.sounds_on")))
         when "off"
           if cfg = @app_config
             cfg.notifications.sound_enabled = false
@@ -619,14 +619,14 @@ module Hcode
             end
             cfg.save
           end
-          emit_to_log(Message.new("system", Hcode.t("ui.sounds_off")))
+          emit_to_log(Message.new("system", H2code.t("ui.sounds_off")))
         when ""
           enabled = @app_config.try(&.notifications.sound_enabled?) || false
           volume = @app_config.try(&.notifications.sound_volume) || 70
-          state = Hcode.t(enabled ? "ui.sounds_on_label" : "ui.sounds_off_label")
-          emit_to_log(Message.new("system", Hcode.t("ui.sounds_status", state: state, volume: volume)))
+          state = H2code.t(enabled ? "ui.sounds_on_label" : "ui.sounds_off_label")
+          emit_to_log(Message.new("system", H2code.t("ui.sounds_status", state: state, volume: volume)))
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.sounds_usage")))
+          emit_to_log(Message.new("error", H2code.t("ui.sounds_usage")))
         end
       end
 
@@ -634,7 +634,7 @@ module Hcode
         val = args.strip.to_i?
         if val.nil? || val < 0 || val > 100
           current = @app_config.try(&.notifications.sound_volume) || 70
-          emit_to_log(Message.new("error", Hcode.t("ui.volume_invalid", current: current)))
+          emit_to_log(Message.new("error", H2code.t("ui.volume_invalid", current: current)))
           return
         end
         if cfg = @app_config
@@ -645,7 +645,7 @@ module Hcode
           end
           cfg.save
         end
-        emit_to_log(Message.new("system", Hcode.t("ui.volume_set", value: val)))
+        emit_to_log(Message.new("system", H2code.t("ui.volume_set", value: val)))
       end
     end
   end

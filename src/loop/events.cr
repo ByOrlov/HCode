@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Loop
     enum EventType
       UserMessage

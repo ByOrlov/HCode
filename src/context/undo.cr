@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Context
     # Raised when an undo request cannot be fully satisfied — either it
     # would cross a compaction boundary, or there are not enough undoable

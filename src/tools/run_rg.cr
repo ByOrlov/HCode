@@ -1,6 +1,6 @@
 require "./sensitive"
 
-module Hcode
+module H2code
   module Tools
     # Shared ripgrep subprocess plumbing for Glob and Grep.
     #

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Notify
     # Configuration for the notification subsystem, mirroring the `[notifications]`
     # TOML block. See PLAN.md §Config for the schema.

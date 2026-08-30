@@ -1,18 +1,18 @@
 require "../spec_helper"
 require "../support/mock_http_transport"
 
-describe Hcode::Notify::Webhook do
+describe H2code::Notify::Webhook do
   describe ".build_payload" do
     it "produces a JSON body with event, status, and prev_status" do
-      payload = Hcode::Notify::Transition.new(
+      payload = H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
         title: "Turn complete",
         body: "3 steps",
         session_id: "abc123",
       )
-      body = Hcode::Notify::Webhook.build_payload(payload)
+      body = H2code::Notify::Webhook.build_payload(payload)
       parsed = JSON.parse(body)
       parsed["event"].as_s.should eq("turn_done")
       parsed["status"].as_s.should eq("done")
@@ -24,56 +24,56 @@ describe Hcode::Notify::Webhook do
     end
 
     it "lowercases status names" do
-      payload = Hcode::Notify::Transition.new(
+      payload = H2code::Notify::Transition.new(
         event: "input_required",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::InputRequired,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::InputRequired,
       )
-      parsed = JSON.parse(Hcode::Notify::Webhook.build_payload(payload))
+      parsed = JSON.parse(H2code::Notify::Webhook.build_payload(payload))
       parsed["status"].as_s.should eq("inputrequired")
     end
   end
 
   describe "#fire" do
     it "does not raise when the URL is unreachable" do
-      webhook = Hcode::Notify::Webhook.new(url: "http://127.0.0.1:1", method: "POST")
-      webhook.fire(Hcode::Notify::Transition.new(
+      webhook = H2code::Notify::Webhook.new(url: "http://127.0.0.1:1", method: "POST")
+      webhook.fire(H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
       ))
       # Give the detached fiber a chance to fail silently.
       10.times { Fiber.yield }
     end
 
     it "is a no-op with an empty URL" do
-      webhook = Hcode::Notify::Webhook.new(url: "")
-      webhook.fire(Hcode::Notify::Transition.new(
+      webhook = H2code::Notify::Webhook.new(url: "")
+      webhook.fire(H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
       ))
     end
 
     it "honours PUT method" do
-      webhook = Hcode::Notify::Webhook.new(url: "http://127.0.0.1:1", method: "put")
-      webhook.fire(Hcode::Notify::Transition.new(
+      webhook = H2code::Notify::Webhook.new(url: "http://127.0.0.1:1", method: "put")
+      webhook.fire(H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
       ))
       10.times { Fiber.yield }
     end
 
     it "uses injected transport and swallows network errors silently" do
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       transport.request_error = IO::Error.new("Broken pipe")
 
-      webhook = Hcode::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
-      webhook.fire(Hcode::Notify::Transition.new(
+      webhook = H2code::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
+      webhook.fire(H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
       ))
       10.times { Fiber.yield }
       # No exception propagated — the IO::Error was swallowed.
@@ -81,15 +81,15 @@ describe Hcode::Notify::Webhook do
     end
 
     it "delivers payload through transport on success" do
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       transport.response_status = 200
       transport.response_body = "ok"
 
-      webhook = Hcode::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
-      webhook.fire(Hcode::Notify::Transition.new(
+      webhook = H2code::Notify::Webhook.new(url: "http://example.com/hook", transport: transport)
+      webhook.fire(H2code::Notify::Transition.new(
         event: "turn_done",
-        prev_status: Hcode::Notify::AgentStatus::Working,
-        next_status: Hcode::Notify::AgentStatus::Done,
+        prev_status: H2code::Notify::AgentStatus::Working,
+        next_status: H2code::Notify::AgentStatus::Done,
       ))
       10.times { Fiber.yield }
       (transport.last_body || "").should contain("turn_done")

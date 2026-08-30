@@ -1,5 +1,5 @@
 /*
- * miniaudio_bridge.c — thin C wrapper over miniaudio for hcode's in-process
+ * miniaudio_bridge.c — thin C wrapper over miniaudio for h2code's in-process
  * sound playback. The embedded OGG is decoded in memory and played through
  * a single global ma_engine.  Each play call spawns a detached POSIX thread
  * that owns the decoder + sound for the duration of playback; the agent loop

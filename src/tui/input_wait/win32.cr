@@ -1,6 +1,6 @@
 {% skip_file unless flag?(:win32) %}
 
-module Hcode
+module H2code
   module TUI
     # Windows adapter: wait on the console input handle via WaitForSingleObject.
     #

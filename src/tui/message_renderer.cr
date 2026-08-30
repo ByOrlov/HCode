@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     module MessageRenderer
       THINKING_PREVIEW_LINES = 2
@@ -569,8 +569,8 @@ module Hcode
         # Logo lines beyond this list render on their own (logo only), so
         # adding rows to `logo_lines` is automatically reflected in the box.
         side_texts = [
-          {"#{ANSI.bold}#{Hcode.t("ui.welcome")}#{r}", tc},
-          {Hcode.t("ui.send_help"), mc},
+          {"#{ANSI.bold}#{H2code.t("ui.welcome")}#{r}", tc},
+          {H2code.t("ui.send_help"), mc},
           {"", tc},
         ] of Tuple(String, String)
 
@@ -590,10 +590,10 @@ module Hcode
         lines << "#{bc}│#{r}#{" " * (box_w - 2)}#{bc}│#{r}"
 
         info = [
-          {Hcode.t("ui.status_directory"), @work_dir},
-          {Hcode.t("ui.status_session"), @session_id.empty? ? Hcode.t("ui.status_new") : @session_id},
-          {Hcode.t("ui.status_model"), @model},
-          {Hcode.t("ui.status_version"), Hcode::VERSION},
+          {H2code.t("ui.status_directory"), @work_dir},
+          {H2code.t("ui.status_session"), @session_id.empty? ? H2code.t("ui.status_new") : @session_id},
+          {H2code.t("ui.status_model"), @model},
+          {H2code.t("ui.status_version"), H2code::VERSION},
         ]
 
         info.each do |label, value|
@@ -758,9 +758,9 @@ module Hcode
         if name == Tools::Names::BASH
           label_color = sudo_command?(msg.tool_args) ? @theme.colors.warning : @theme.colors.primary
           pc = ANSI.color(label_color, nil)
-          lines << "#{lead}#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{Hcode.t("tools.running_command")}#{r}"
+          lines << "#{lead}#{tc}#{bullet_frame}#{r} #{pc}#{ANSI.bold}#{H2code.t("tools.running_command")}#{r}"
         else
-          verb = Hcode.t("tools.using")
+          verb = H2code.t("tools.using")
           key_arg = extract_key_argument(name, msg.tool_args)
           tool_label = "#{pc}#{ANSI.bold}#{name}#{r}"
           arg_str = key_arg ? "#{dc} (#{key_arg})#{r}" : ""
@@ -789,12 +789,12 @@ module Hcode
           end
 
         if name == Tools::Names::BASH
-          label = has_result ? Hcode.t("tools.ran_command") : Hcode.t("tools.running_command")
+          label = has_result ? H2code.t("tools.ran_command") : H2code.t("tools.running_command")
           tone = is_error ? @theme.colors.error : (sudo_command?(args) ? @theme.colors.warning : @theme.colors.primary)
           return "#{bullet}#{ANSI.color(tone, nil)}#{ANSI.bold}#{label}#{ANSI.reset}"
         end
 
-        verb = has_result ? Hcode.t("tools.used") : Hcode.t("tools.using")
+        verb = has_result ? H2code.t("tools.used") : H2code.t("tools.using")
         key_arg = extract_key_argument(name, args)
         tool_label = "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}#{name}#{ANSI.reset}"
         arg_str = key_arg ? "#{ANSI.color(@theme.colors.dim, nil)} (#{key_arg})#{ANSI.reset}" : ""
@@ -803,7 +803,7 @@ module Hcode
         if name == Tools::Names::READ && has_result && !is_error
           if result = tool_result
             lines_count = count_non_empty_lines(result)
-            chip_str = "#{ANSI.color(@theme.colors.dim, nil)} · #{lines_count} #{lines_count == 1 ? Hcode.t("tools.line") : Hcode.t("tools.lines")}#{ANSI.reset}"
+            chip_str = "#{ANSI.color(@theme.colors.dim, nil)} · #{lines_count} #{lines_count == 1 ? H2code.t("tools.line") : H2code.t("tools.lines")}#{ANSI.reset}"
           end
         end
 

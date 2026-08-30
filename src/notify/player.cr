@@ -1,7 +1,7 @@
-module Hcode
+module H2code
   module Notify
     # C bindings for the miniaudio bridge (vendor/miniaudio/miniaudio_bridge.c).
-    # Linked statically into the hcode binary — see Rakefile.
+    # Linked statically into the h2code binary — see Rakefile.
     lib MiniAudio
       fun ma_notify_init : Int32
       fun ma_notify_is_ready : Int32

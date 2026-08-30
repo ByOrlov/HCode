@@ -3,7 +3,7 @@ require "./abort"
 require "../tools/agent"
 require "../tools/task"
 
-module Hcode
+module H2code
   module Loop
     # `Tools::AgentRunner` implementation: drives one turn on a child agent
     # (spawned or resumed) and returns the distilled result. Foreground runs
@@ -29,7 +29,7 @@ module Hcode
       end
 
       def launch(spec : Tools::AgentLaunchSpec,
-                 signal : Hcode::Tools::AbortController?) : Tools::AgentRunOutcome
+                 signal : H2code::Tools::AbortController?) : Tools::AgentRunOutcome
         if resume_id = spec[:resume_agent_id]
           launch_resume(resume_id, spec, signal)
         else
@@ -42,7 +42,7 @@ module Hcode
       # ----------------------------------------------------------------
 
       private def launch_spawn(spec : Tools::AgentLaunchSpec,
-                               signal : Hcode::Tools::AbortController?) : Tools::AgentRunOutcome
+                               signal : H2code::Tools::AbortController?) : Tools::AgentRunOutcome
         profile_name = spec[:subagent_type] || Tools::Agent::DEFAULT_PROFILE_NAME
 
         entry = @registry.create(
@@ -68,7 +68,7 @@ module Hcode
 
       private def launch_resume(agent_id : String,
                                 spec : Tools::AgentLaunchSpec,
-                                signal : Hcode::Tools::AbortController?) : Tools::AgentRunOutcome
+                                signal : H2code::Tools::AbortController?) : Tools::AgentRunOutcome
         entry = @registry.get(agent_id)
         unless entry
           return failure_outcome(agent_id, "subagent",
@@ -100,7 +100,7 @@ module Hcode
       # ----------------------------------------------------------------
 
       private def run_foreground(entry : SubagentEntry, prompt : String,
-                                 signal : Hcode::Tools::AbortController?) : Tools::AgentRunOutcome
+                                 signal : H2code::Tools::AbortController?) : Tools::AgentRunOutcome
         entry.running = true
         # Link the parent's abort to the child: if the parent is cancelled
         # mid-turn, propagate the cancel to the child agent so its run_turn
@@ -133,7 +133,7 @@ module Hcode
       # `AgentRunOutcome`. The abort controller (if any) is linked so a parent
       # cancel propagates: we poll it around the turn.
       private def drive_turn(entry : SubagentEntry, prompt : String,
-                             signal : Hcode::Tools::AbortController?) : Tools::AgentRunOutcome
+                             signal : H2code::Tools::AbortController?) : Tools::AgentRunOutcome
         agent = entry.agent
 
         # If the parent was cancelled before or during the run, surface it as

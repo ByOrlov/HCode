@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Loop
     # Retry policy for transient LLM failures (429 rate limits, 5xx server
     # errors, network timeouts). Extracted from the inline retry loop in

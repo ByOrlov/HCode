@@ -75,7 +75,7 @@ jobs:
     needs: compute-version
     runs-on: ${{ matrix.runner }}
     env:
-      HCODE_VERSION: ${{ needs.compute-version.outputs.version }}
+      H2CODE_VERSION: ${{ needs.compute-version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,8 +146,8 @@ jobs:
           LINK_FLAGS="$(./scripts/build_miniaudio.sh ${{ matrix.target }})"
           TARGET_ARGS=""
           [ -n "${{ matrix.cross_target }}" ] && TARGET_ARGS="--target ${{ matrix.cross_target }}"
-          crystal build src/hcode.cr -o hcode --release --no-debug --warnings none $TARGET_ARGS --link-flags "$LINK_FLAGS"
-          if [ -f hcode.exe ]; then ./hcode.exe --version; else ./hcode --version; fi
+          crystal build src/h2code.cr -o h2code --release --no-debug --warnings none $TARGET_ARGS --link-flags "$LINK_FLAGS"
+          if [ -f h2code.exe ]; then ./h2code.exe --version; else ./h2code --version; fi
 
       - name: Rebind Homebrew dylibs (macOS)
         if: startsWith(matrix.target, 'x86_64-darwin') || startsWith(matrix.target, 'aarch64-darwin')
@@ -160,10 +160,10 @@ jobs:
           # dyld "Library not loaded". Rebind to @rpath and bundle the dylibs
           # next to the binary so the archive is self-contained.
           set -euo pipefail
-          otool -L hcode
+          otool -L h2code
           # Only act on the Homebrew-linked OpenSSL dylibs.
           for lib in libssl.3.dylib libcrypto.3.dylib; do
-            abs=$(otool -L hcode | grep -E "/.*/${lib}\b" | awk '{print $1}' | head -n1 || true)
+            abs=$(otool -L h2code | grep -E "/.*/${lib}\b" | awk '{print $1}' | head -n1 || true)
             [ -n "$abs" ] || continue
             cp "$abs" "./${lib}"
             # Rewrite the dylib's own id and its dependency on the sibling.
@@ -174,21 +174,21 @@ jobs:
               install_name_tool -change "$dep" "@rpath/${depname}" "./${lib}"
             done
             # Point the binary at the rebundled copy.
-            install_name_tool -change "$abs" "@rpath/${lib}" hcode
+            install_name_tool -change "$abs" "@rpath/${lib}" h2code
           done
           # Look beside the binary for the dylibs.
-          install_name_tool -add_rpath @loader_path hcode 2>/dev/null || true
+          install_name_tool -add_rpath @loader_path h2code 2>/dev/null || true
           echo "--- after rebind ---"
-          otool -L hcode
+          otool -L h2code
 
       - name: Collect Windows runtime DLLs
         if: matrix.target == 'x86_64-windows'
         shell: pwsh
         run: |
-          # hcode.exe links dynamically against OpenSSL (libcrypto/libssl),
+          # h2code.exe links dynamically against OpenSSL (libcrypto/libssl),
           # libyaml and pcre2. The Crystal Windows install bundles these DLLs;
           # ship them in a separate deps asset so install.ps1 can drop them
-          # next to hcode.exe on machines that lack a package manager.
+          # next to h2code.exe on machines that lack a package manager.
           $crystalDir = Split-Path (Get-Command crystal).Source
           $needed = @('libcrypto-3-x64.dll','libssl-3-x64.dll','pcre2-8.dll','yaml.dll')
           $found = @{}
@@ -203,31 +203,31 @@ jobs:
           $staging = "deps-staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
           foreach ($path in $found.Values) { Copy-Item $path -Destination $staging -Force }
-          Compress-Archive -Path "$staging/*" -DestinationPath "hcode-deps-windows.zip" -Force
+          Compress-Archive -Path "$staging/*" -DestinationPath "h2code-deps-windows.zip" -Force
           Write-Host "Packaged deps:"
           Get-ChildItem $staging | Format-Table Name,Length
 
       # ---- Archive + upload ----
       - name: Archive (tar.gz)
         if: matrix.archive == 'tar.gz'
-        run: tar -czf "hcode-${{ matrix.target }}.tar.gz" hcode *.dylib 2>/dev/null || tar -czf "hcode-${{ matrix.target }}.tar.gz" hcode
+        run: tar -czf "h2code-${{ matrix.target }}.tar.gz" h2code *.dylib 2>/dev/null || tar -czf "h2code-${{ matrix.target }}.tar.gz" h2code
 
       - name: Archive (zip)
         if: matrix.archive == 'zip'
         shell: pwsh
-        run: Compress-Archive -Path hcode.exe -DestinationPath "hcode-${{ matrix.target }}.zip"
+        run: Compress-Archive -Path h2code.exe -DestinationPath "h2code-${{ matrix.target }}.zip"
 
       - name: Generate SHA256
         shell: bash
-        run: sha256sum hcode-${{ matrix.target }}.*
+        run: sha256sum h2code-${{ matrix.target }}.*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hcode-${{ matrix.target }}
+          name: h2code-${{ matrix.target }}
           path: |
-            hcode-${{ matrix.target }}.*
-            hcode-deps-windows.zip
+            h2code-${{ matrix.target }}.*
+            h2code-deps-windows.zip
 
   release:
     needs: [compute-version, build]
@@ -246,8 +246,8 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum hcode-* > ../hcode-checksums.txt
-          cat ../hcode-checksums.txt
+          sha256sum h2code-* > ../h2code-checksums.txt
+          cat ../h2code-checksums.txt
 
       - name: Create tag (if short form was pushed)
         env:
@@ -265,5 +265,5 @@ jobs:
           name: ${{ env.VERSION }}
           generate_release_notes: true
           files: |
-            artifacts/hcode-*
-            hcode-checksums.txt
+            artifacts/h2code-*
+            h2code-checksums.txt

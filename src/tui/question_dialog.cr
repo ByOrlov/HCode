@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Full port of the TS `QuestionDialogComponent`
     # (`apps/kimi-code/src/tui/components/dialogs/question-dialog.ts`).

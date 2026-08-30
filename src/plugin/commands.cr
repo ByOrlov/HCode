@@ -2,7 +2,7 @@ require "json"
 require "file"
 require "./types"
 
-module Hcode
+module H2code
   module Plugin
     module CommandLoader
       def self.load(path : String, plugin_id : String, fallback_name : String? = nil) : PluginCommandDef?

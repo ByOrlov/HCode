@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Interactive plan-review dialog surfaced by `ExitPlanMode` in manual / yolo
     # permission modes. Mirrors the JS `PlanBoxComponent` + approval-runtime

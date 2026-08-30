@@ -1,10 +1,10 @@
-module Hcode
+module H2code
   module TUI
     struct CommandInfo
       property name : String
       property usage : String
       # Translation key into the `commands.*` namespace, e.g. "help" resolves
-      # via `Hcode.t("commands.help")`. Empty falls back to `@description`.
+      # via `H2code.t("commands.help")`. Empty falls back to `@description`.
       property description_key : String
       @description : String
 
@@ -16,7 +16,7 @@ module Hcode
       # runtime is reflected on the next render without rebuilding COMMANDS.
       def description : String
         return @description if @description_key.empty?
-        Hcode.t("commands.#{@description_key}")
+        H2code.t("commands.#{@description_key}")
       end
     end
 
@@ -78,7 +78,7 @@ module Hcode
         CommandInfo.new("/sounds", "Toggle sound notifications", "on|off", "sounds"),
         CommandInfo.new("/volume", "Set sound volume", "0-100", "volume"),
         CommandInfo.new("/voicelang", "Default voice message language", "ru|en|…|auto", "voicelang"),
-        CommandInfo.new("/upgrade", "Update hcode to the latest release", description_key: "upgrade"),
+        CommandInfo.new("/upgrade", "Update h2code to the latest release", description_key: "upgrade"),
       ]
 
       def self.names : Array(String)

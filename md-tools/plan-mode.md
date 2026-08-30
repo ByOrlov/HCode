@@ -6,7 +6,7 @@
 >   `configSection.ts`, `profile/plan.ts`, `injection/planModeInjection.ts`,
 >   `injection/*.md` (6 reminder variants).
 
-Цель — два тула в `hcode.cr/src/tools/plan_mode.cr` (`Tools::EnterPlanMode` и
+Цель — два тула в `h2code.cr/src/tools/plan_mode.cr` (`Tools::EnterPlanMode` и
 `Tools::ExitPlanMode`) с идентичным LLM-контрактом. Состояние plan mode —
 в `Context::Memory`/`Loop::Agent` через `PlanService`.
 
@@ -437,7 +437,7 @@ JS использует три политики (`plan-mode-guard-deny`, `plan-m
 ## 6. Config
 
 ```crystal
-DEFAULT_PLAN_MODE = false  # HCODE_DEFAULT_PLAN_MODE env / [default_plan_mode] TOML
+DEFAULT_PLAN_MODE = false  # H2CODE_DEFAULT_PLAN_MODE env / [default_plan_mode] TOML
 ```
 
 Когда `true` — каждая свежая сессия стартует в plan mode. Resume/fork

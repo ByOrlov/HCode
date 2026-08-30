@@ -184,13 +184,13 @@
 | `src/tui/tasks_browser.cr` | `TasksBrowser`, `Filter` (enum) | class | строки таблицы задач | transient |
 | `src/tui/help_panel.cr` | `HelpPanel`, `Shortcut` | class/struct | список шорткатов | статично |
 
-### 1.10. Точка входа (`src/hcode.cr`)
+### 1.10. Точка входа (`src/h2code.cr`)
 
 | Файл | Тип | Вид | Поля / размеры | Поведение роста |
 |---|---|---|---|---|
-| `src/hcode.cr` | `CLI` | class | class_property `@@ram_tracing`, `@@ram_start_rss`, `@@ram_initialised`; локальные коллекции в `run_*` | класс-уровень статичен; `pending_calls`/`pending_tool_names` — transient per-turn |
-| `src/hcode.cr` | `ProviderConfigError` | class | exception | transient |
-| `src/hcode.cr` | `AppQuestionService` | class | `@app : TUI::App` | долгоживущий в TUI-режиме |
+| `src/h2code.cr` | `CLI` | class | class_property `@@ram_tracing`, `@@ram_start_rss`, `@@ram_initialised`; локальные коллекции в `run_*` | класс-уровень статичен; `pending_calls`/`pending_tool_names` — transient per-turn |
+| `src/h2code.cr` | `ProviderConfigError` | class | exception | transient |
+| `src/h2code.cr` | `AppQuestionService` | class | `@app : TUI::App` | долгоживущий в TUI-режиме |
 | константы | `C_SUCCESS`, `C_ERROR`, ... | `Colorize::ColorRGB` | 6 RGB-констант | статично |
 
 ---
@@ -202,7 +202,7 @@
 Новый файл `src/profiled.cr`:
 
 ```crystal
-module Hcode
+module H2code
   module Profiled
     # Единый глобальный реестр всех profiled-объектов.
     # Ключ — идентификатор "FILE:TypeName" (см. §2.2).
@@ -290,7 +290,7 @@ end
 - `"src/llm/types.cr:Message"`
 - `"src/tools/todo_list.cr:TodoList"`
 
-Путь берётся **относительно корня проекта** (`/home/oleg/hcode`), чтобы
+Путь берётся **относительно корня проекта** (`/home/oleg/h2code`), чтобы
 идентификатор был стабильным между машинами. Константа `PROFILED_FILE`
 вычисляется один раз на файл.
 
@@ -364,7 +364,7 @@ end
 ```
 
 3. `Profiled.unregister(id, object_id)` — удаляет запись по object_id.
-4. Добавить `require "./profiled"` в `src/hcode.cr`.
+4. Добавить `require "./profiled"` в `src/h2code.cr`.
 
 **Критерий готовности:** `crystal build` проходит; реестр пуст (ничего не
 наследуется ещё).
@@ -422,7 +422,7 @@ end
    `Profiled.memsize_all`, отсортированных по убыванию.
 2. В `--ram`-режим (`CLI.ram_line`) добавить колонку `heap=` =
    `Profiled.total_memsize` рядом с RSS.
-3. При `HCODE_DEBUG` в конце turn выводить дельту `total_memsize` (до/после).
+3. При `H2CODE_DEBUG` в конце turn выводить дельту `total_memsize` (до/после).
 
 ### Фаза 5 — Тесты и спецификации
 

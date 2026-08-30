@@ -1,7 +1,7 @@
 require "json"
 require "../mcp/config"
 
-module Hcode
+module H2code
   module Config
     # Explicit web-search service configuration. Mirrors the JS
     # `[services.moonshot_search]` section: when present it wins over the
@@ -29,14 +29,14 @@ module Hcode
     end
 
     # Global cloud-sync settings (`sync` section of config.json) — the
-    # `/sync on` TUI command and `hcode sync` both flip `enabled`; the
-    # pairing code itself lives in `~/.hcode/remote/code` (see
+    # `/sync on` TUI command and `h2code sync` both flip `enabled`; the
+    # pairing code itself lives in `~/.h2code/remote/code` (see
     # src/remote/, plans/CloudSync.md in the hibechat repo).
     struct SyncConfig
       include JSON::Serializable
 
       property? enabled : Bool = false
-      # Relay the hcode-remote daemon connects to in cloud mode. Default is
+      # Relay the h2code-remote daemon connects to in cloud mode. Default is
       # the LAN address of this machine (resolved at read time) so the
       # pairing QR works from a phone — localhost would point the phone at
       # itself. Override explicitly via config.json when a public relay
@@ -50,15 +50,15 @@ module Hcode
     end
 
     # Voice transcription settings (`transcription` section of config.json)
-    # — hcode-remote stores inbound APK voice clips and sends the file
+    # — h2code-remote stores inbound APK voice clips and sends the file
     # paths to the local soroka-server over a Unix socket. The socket path
     # keeps its literal `~` here; callers expand it at the use site.
-    # HCODE_VOICE_SOCKET overrides it (the same env soroka-server reads).
+    # H2CODE_VOICE_SOCKET overrides it (the same env soroka-server reads).
     struct TranscriptionConfig
       include JSON::Serializable
 
       property? enabled : Bool = false
-      property socket : String = "~/.hcode/voice.sock"
+      property socket : String = "~/.h2code/voice.sock"
       property engine : String = "auto"
       # Default voice language ("auto" = detect on the server; detection can
       # misfire on short/noisy clips). Set via /voicelang.
@@ -66,7 +66,7 @@ module Hcode
       property max_duration_sec : Int32 = 120
 
       def initialize(@enabled : Bool = false,
-                     @socket : String = "~/.hcode/voice.sock",
+                     @socket : String = "~/.h2code/voice.sock",
                      @engine : String = "auto",
                      @language : String = "auto",
                      @max_duration_sec : Int32 = 120)
@@ -252,22 +252,22 @@ module Hcode
         if model = ENV["ZAI_CODING_PLAN_MODEL"]?
           config.zai_coding_plan_model = model
         end
-        if provider = ENV["HCODE_PROVIDER"]?
+        if provider = ENV["H2CODE_PROVIDER"]?
           config.provider_name = provider
         end
-        if lang = ENV["HCODE_LANG"]?
+        if lang = ENV["H2CODE_LANG"]?
           config.language = lang
         end
-        # HCODE_SOUND=1 forces sound notifications on at startup (for demos /
+        # H2CODE_SOUND=1 forces sound notifications on at startup (for demos /
         # testing) without editing config.json.
-        if ENV["HCODE_SOUND"]? == "1"
+        if ENV["H2CODE_SOUND"]? == "1"
           config.notifications.sound_enabled = true
         end
         # Same env soroka-server reads — keeps both sides on one socket.
-        if sock = ENV["HCODE_VOICE_SOCKET"]?
+        if sock = ENV["H2CODE_VOICE_SOCKET"]?
           config.transcription.socket = sock
         end
-        if vol = ENV["HCODE_VOLUME"]?.try(&.to_i?)
+        if vol = ENV["H2CODE_VOLUME"]?.try(&.to_i?)
           config.notifications.sound_volume = vol.clamp(0, 100)
         end
         if proxy = ENV["HTTP_PROXY"]? || ENV["HTTPS_PROXY"]? || ENV["ALL_PROXY"]?
@@ -275,14 +275,14 @@ module Hcode
         end
 
         # --- Поведенческие флаги: единственная точка чтения из ENV ---
-        config.debug = ENV.has_key?("HCODE_DEBUG")
-        config.cron_enabled = !ENV.has_key?("HCODE_DISABLE_CRON")
-        config.cron_no_stale = ENV.has_key?("HCODE_CRON_NO_STALE")
-        if v = ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?.try(&.to_i?)
+        config.debug = ENV.has_key?("H2CODE_DEBUG")
+        config.cron_enabled = !ENV.has_key?("H2CODE_DISABLE_CRON")
+        config.cron_no_stale = ENV.has_key?("H2CODE_CRON_NO_STALE")
+        if v = ENV["H2CODE_SUBAGENT_TIMEOUT_MS"]?.try(&.to_i?)
           config.subagent_timeout_ms = v if v >= 1
         end
-        config.experimental_flag = ENV["HCODE_EXPERIMENTAL_FLAG"]?
-        config.mock_script = ENV["HCODE_MOCK_SCRIPT"]?
+        config.experimental_flag = ENV["H2CODE_EXPERIMENTAL_FLAG"]?
+        config.mock_script = ENV["H2CODE_MOCK_SCRIPT"]?
         config.editor = ENV["EDITOR"]? || ENV["VISUAL"]?
         config.tmp_dir = ENV["TMPDIR"]?
         config.git_terminal_prompt = ENV["GIT_TERMINAL_PROMPT"]?
@@ -293,8 +293,8 @@ module Hcode
 
       def self.default_config_path : String
         home = ENV["HOME"]? || "/tmp"
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        File.join(hcode_home, "config.json")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
+        File.join(h2code_home, "config.json")
       end
 
       def self.parse_json(content : String) : Config
@@ -674,13 +674,13 @@ module Hcode
         File.write(config_path, root + "\n")
       end
 
-      def ensure_hcode_home : Nil
+      def ensure_h2code_home : Nil
         home = ENV["HOME"]? || "/tmp"
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        Dir.mkdir_p(hcode_home) unless Dir.exists?(hcode_home)
-        sessions_dir = File.join(hcode_home, "sessions")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
+        Dir.mkdir_p(h2code_home) unless Dir.exists?(h2code_home)
+        sessions_dir = File.join(h2code_home, "sessions")
         Dir.mkdir_p(sessions_dir) unless Dir.exists?(sessions_dir)
-        exceptions_dir = File.join(hcode_home, "exceptions")
+        exceptions_dir = File.join(h2code_home, "exceptions")
         Dir.mkdir_p(exceptions_dir) unless Dir.exists?(exceptions_dir)
       end
 

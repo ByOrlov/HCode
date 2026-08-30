@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # Shared transport for any backend that speaks the OpenAI Chat Completions
     # wire format over SSE (Moonshot, Z.AI/Zhipu, ...).

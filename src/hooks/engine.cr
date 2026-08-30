@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Hooks
     # Hook lifecycle events. Mirrors the TS `HOOK_EVENT_TYPES` subset that the
     # agent loop actually fires; the full list lives in the TS types file.

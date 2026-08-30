@@ -5,7 +5,7 @@ require "./http_transport"
 require "./types"
 require "./config"
 
-module Hcode
+module H2code
   module Mcp
     PROTOCOL_VERSION = "2025-06-18"
 
@@ -32,7 +32,7 @@ module Hcode
 
       # Perform the `initialize` request and the `notifications/initialized`
       # back-channel. Must be called once before `list_tools` / `call_tool`.
-      def connect(client_name : String = "hcode", client_version : String = Hcode::VERSION,
+      def connect(client_name : String = "h2code", client_version : String = H2code::VERSION,
                   timeout : Time::Span = 30.seconds) : Nil
         params = JSON::Any.new({
           "protocolVersion" => JSON::Any.new(PROTOCOL_VERSION),

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     abstract class Component
       getter width : Int32 = 0

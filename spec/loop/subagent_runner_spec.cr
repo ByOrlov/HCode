@@ -1,29 +1,29 @@
 require "../spec_helper"
 
-describe Hcode::Loop::SubagentAgentRunner do
+describe H2code::Loop::SubagentAgentRunner do
   describe "foreground spawn" do
     it "drives a turn and returns completed with the assistant summary" do
-      provider = Hcode::LLM::MockProvider.new([
-        Hcode::LLM::MockStep.new(
-          parts: [Hcode::LLM::TextPart.new("Child agent reply.")] of Hcode::LLM::MessagePart,
+      provider = H2code::LLM::MockProvider.new([
+        H2code::LLM::MockStep.new(
+          parts: [H2code::LLM::TextPart.new("Child agent reply.")] of H2code::LLM::MessagePart,
           stop_reason: "end_turn",
           text: "Child agent reply.",
         ),
       ])
-      memory = Hcode::Context::Memory.new
-      tools = Hcode::Tools::Registry.new
-      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-      parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+      memory = H2code::Context::Memory.new
+      tools = H2code::Tools::Registry.new
+      permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+      parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-      registry = Hcode::Loop::SubagentRegistry.new
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      runner = Hcode::Loop::SubagentAgentRunner.new(
+      registry = H2code::Loop::SubagentRegistry.new
+      task_service = H2code::Tools::InMemoryTaskService.new
+      runner = H2code::Loop::SubagentAgentRunner.new(
         registry: registry,
         parent_agent: parent,
         task_service: task_service,
         system_prompt: "sys",
         work_dir: Dir.current,
-        permission_mode: Hcode::Permission::Mode::Yolo,
+        permission_mode: H2code::Permission::Mode::Yolo,
       )
 
       outcome = runner.launch(
@@ -45,9 +45,9 @@ describe Hcode::Loop::SubagentAgentRunner do
     end
 
     it "returns failed when the child turn raises" do
-      provider = Hcode::LLM::MockProvider.new([
-        Hcode::LLM::MockStep.new(
-          parts: [Hcode::LLM::TextPart.new("")] of Hcode::LLM::MessagePart,
+      provider = H2code::LLM::MockProvider.new([
+        H2code::LLM::MockStep.new(
+          parts: [H2code::LLM::TextPart.new("")] of H2code::LLM::MessagePart,
           stop_reason: "end_turn",
           text: "",
         ),
@@ -55,20 +55,20 @@ describe Hcode::Loop::SubagentAgentRunner do
       # Force the provider to raise on chat by exhausting the script and
       # letting it replay the last step harmlessly — instead test the abort
       # path directly via a cancelled parent.
-      memory = Hcode::Context::Memory.new
-      tools = Hcode::Tools::Registry.new
-      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-      parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+      memory = H2code::Context::Memory.new
+      tools = H2code::Tools::Registry.new
+      permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+      parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-      registry = Hcode::Loop::SubagentRegistry.new
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      runner = Hcode::Loop::SubagentAgentRunner.new(
+      registry = H2code::Loop::SubagentRegistry.new
+      task_service = H2code::Tools::InMemoryTaskService.new
+      runner = H2code::Loop::SubagentAgentRunner.new(
         registry: registry,
         parent_agent: parent,
         task_service: task_service,
         system_prompt: "sys",
         work_dir: Dir.current,
-        permission_mode: Hcode::Permission::Mode::Yolo,
+        permission_mode: H2code::Permission::Mode::Yolo,
       )
 
       # Pre-cancel the parent so the child's run_turn aborts immediately.
@@ -92,21 +92,21 @@ describe Hcode::Loop::SubagentAgentRunner do
 
   describe "resume" do
     it "returns failed for an unknown agent_id" do
-      provider = Hcode::LLM::MockProvider.new
-      memory = Hcode::Context::Memory.new
-      tools = Hcode::Tools::Registry.new
-      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-      parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+      provider = H2code::LLM::MockProvider.new
+      memory = H2code::Context::Memory.new
+      tools = H2code::Tools::Registry.new
+      permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+      parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-      registry = Hcode::Loop::SubagentRegistry.new
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      runner = Hcode::Loop::SubagentAgentRunner.new(
+      registry = H2code::Loop::SubagentRegistry.new
+      task_service = H2code::Tools::InMemoryTaskService.new
+      runner = H2code::Loop::SubagentAgentRunner.new(
         registry: registry,
         parent_agent: parent,
         task_service: task_service,
         system_prompt: "sys",
         work_dir: Dir.current,
-        permission_mode: Hcode::Permission::Mode::Yolo,
+        permission_mode: H2code::Permission::Mode::Yolo,
       )
 
       outcome = runner.launch(
@@ -125,32 +125,32 @@ describe Hcode::Loop::SubagentAgentRunner do
     end
 
     it "resumes an existing child agent on its prior context" do
-      provider = Hcode::LLM::MockProvider.new([
-        Hcode::LLM::MockStep.new(
-          parts: [Hcode::LLM::TextPart.new("First turn.")] of Hcode::LLM::MessagePart,
+      provider = H2code::LLM::MockProvider.new([
+        H2code::LLM::MockStep.new(
+          parts: [H2code::LLM::TextPart.new("First turn.")] of H2code::LLM::MessagePart,
           stop_reason: "end_turn",
           text: "First turn.",
         ),
-        Hcode::LLM::MockStep.new(
-          parts: [Hcode::LLM::TextPart.new("Second turn.")] of Hcode::LLM::MessagePart,
+        H2code::LLM::MockStep.new(
+          parts: [H2code::LLM::TextPart.new("Second turn.")] of H2code::LLM::MessagePart,
           stop_reason: "end_turn",
           text: "Second turn.",
         ),
       ])
-      memory = Hcode::Context::Memory.new
-      tools = Hcode::Tools::Registry.new
-      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-      parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+      memory = H2code::Context::Memory.new
+      tools = H2code::Tools::Registry.new
+      permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+      parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-      registry = Hcode::Loop::SubagentRegistry.new
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      runner = Hcode::Loop::SubagentAgentRunner.new(
+      registry = H2code::Loop::SubagentRegistry.new
+      task_service = H2code::Tools::InMemoryTaskService.new
+      runner = H2code::Loop::SubagentAgentRunner.new(
         registry: registry,
         parent_agent: parent,
         task_service: task_service,
         system_prompt: "sys",
         work_dir: Dir.current,
-        permission_mode: Hcode::Permission::Mode::Yolo,
+        permission_mode: H2code::Permission::Mode::Yolo,
       )
 
       # First run: spawn.
@@ -186,27 +186,27 @@ describe Hcode::Loop::SubagentAgentRunner do
 
   describe "background spawn" do
     it "returns detached immediately and registers a task" do
-      provider = Hcode::LLM::MockProvider.new([
-        Hcode::LLM::MockStep.new(
-          parts: [Hcode::LLM::TextPart.new("Background done.")] of Hcode::LLM::MessagePart,
+      provider = H2code::LLM::MockProvider.new([
+        H2code::LLM::MockStep.new(
+          parts: [H2code::LLM::TextPart.new("Background done.")] of H2code::LLM::MessagePart,
           stop_reason: "end_turn",
           text: "Background done.",
         ),
       ])
-      memory = Hcode::Context::Memory.new
-      tools = Hcode::Tools::Registry.new
-      permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-      parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+      memory = H2code::Context::Memory.new
+      tools = H2code::Tools::Registry.new
+      permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+      parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-      registry = Hcode::Loop::SubagentRegistry.new
-      task_service = Hcode::Tools::InMemoryTaskService.new
-      runner = Hcode::Loop::SubagentAgentRunner.new(
+      registry = H2code::Loop::SubagentRegistry.new
+      task_service = H2code::Tools::InMemoryTaskService.new
+      runner = H2code::Loop::SubagentAgentRunner.new(
         registry: registry,
         parent_agent: parent,
         task_service: task_service,
         system_prompt: "sys",
         work_dir: Dir.current,
-        permission_mode: Hcode::Permission::Mode::Yolo,
+        permission_mode: H2code::Permission::Mode::Yolo,
       )
 
       outcome = runner.launch(
@@ -233,36 +233,36 @@ describe Hcode::Loop::SubagentAgentRunner do
   end
 end
 
-describe Hcode::Loop::SubagentSwarmRunner do
+describe H2code::Loop::SubagentSwarmRunner do
   it "runs a spawn spec and returns completed" do
-    provider = Hcode::LLM::MockProvider.new([
-      Hcode::LLM::MockStep.new(
-        parts: [Hcode::LLM::TextPart.new("Swarm child result.")] of Hcode::LLM::MessagePart,
+    provider = H2code::LLM::MockProvider.new([
+      H2code::LLM::MockStep.new(
+        parts: [H2code::LLM::TextPart.new("Swarm child result.")] of H2code::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "Swarm child result.",
       ),
-      Hcode::LLM::MockStep.new(
-        parts: [Hcode::LLM::TextPart.new("Swarm child result 2.")] of Hcode::LLM::MessagePart,
+      H2code::LLM::MockStep.new(
+        parts: [H2code::LLM::TextPart.new("Swarm child result 2.")] of H2code::LLM::MessagePart,
         stop_reason: "end_turn",
         text: "Swarm child result 2.",
       ),
     ])
-    memory = Hcode::Context::Memory.new
-    tools = Hcode::Tools::Registry.new
-    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-    parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+    memory = H2code::Context::Memory.new
+    tools = H2code::Tools::Registry.new
+    permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+    parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-    registry = Hcode::Loop::SubagentRegistry.new
-    runner = Hcode::Loop::SubagentSwarmRunner.new(
+    registry = H2code::Loop::SubagentRegistry.new
+    runner = H2code::Loop::SubagentSwarmRunner.new(
       registry: registry,
       parent_agent: parent,
       system_prompt: "sys",
       work_dir: Dir.current,
-      permission_mode: Hcode::Permission::Mode::Yolo,
+      permission_mode: H2code::Permission::Mode::Yolo,
     )
 
-    spec = Hcode::Tools::SpawnSpec.new(index: 1, prompt: "review file a", item: "src/a.cr")
-    ctx = Hcode::Tools::SwarmRunContext.new(
+    spec = H2code::Tools::SpawnSpec.new(index: 1, prompt: "review file a", item: "src/a.cr")
+    ctx = H2code::Tools::SwarmRunContext.new(
       parent_description: "Review",
       profile_name: "coder",
       description: "Review #1 (coder)",
@@ -276,23 +276,23 @@ describe Hcode::Loop::SubagentSwarmRunner do
   end
 
   it "returns failed for a resume spec with unknown agent_id" do
-    provider = Hcode::LLM::MockProvider.new
-    memory = Hcode::Context::Memory.new
-    tools = Hcode::Tools::Registry.new
-    permission = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Yolo)
-    parent = Hcode::Loop::Agent.new(provider, memory, tools, permission)
+    provider = H2code::LLM::MockProvider.new
+    memory = H2code::Context::Memory.new
+    tools = H2code::Tools::Registry.new
+    permission = H2code::Permission::Manager.new(H2code::Permission::Mode::Yolo)
+    parent = H2code::Loop::Agent.new(provider, memory, tools, permission)
 
-    registry = Hcode::Loop::SubagentRegistry.new
-    runner = Hcode::Loop::SubagentSwarmRunner.new(
+    registry = H2code::Loop::SubagentRegistry.new
+    runner = H2code::Loop::SubagentSwarmRunner.new(
       registry: registry,
       parent_agent: parent,
       system_prompt: "sys",
       work_dir: Dir.current,
-      permission_mode: Hcode::Permission::Mode::Yolo,
+      permission_mode: H2code::Permission::Mode::Yolo,
     )
 
-    spec = Hcode::Tools::ResumeSpec.new(index: 1, agent_id: "agent-404", prompt: "continue")
-    ctx = Hcode::Tools::SwarmRunContext.new(
+    spec = H2code::Tools::ResumeSpec.new(index: 1, agent_id: "agent-404", prompt: "continue")
+    ctx = H2code::Tools::SwarmRunContext.new(
       parent_description: "Review",
       profile_name: "subagent",
       description: "Resume #1",
@@ -305,30 +305,30 @@ describe Hcode::Loop::SubagentSwarmRunner do
   end
 end
 
-describe Hcode::Loop::ProfileRegistry do
+describe H2code::Loop::ProfileRegistry do
   it "builds a read-only registry for the explore profile" do
-    registry = Hcode::Loop::ProfileRegistry.build("explore", Dir.current)
-    registry.get(Hcode::Tools::Names::READ).should_not be_nil
-    registry.get(Hcode::Tools::Names::GREP).should_not be_nil
-    registry.get(Hcode::Tools::Names::GLOB).should_not be_nil
+    registry = H2code::Loop::ProfileRegistry.build("explore", Dir.current)
+    registry.get(H2code::Tools::Names::READ).should_not be_nil
+    registry.get(H2code::Tools::Names::GREP).should_not be_nil
+    registry.get(H2code::Tools::Names::GLOB).should_not be_nil
     # explore has no file-editing tools and no Agent/Swarm delegation.
-    registry.get(Hcode::Tools::Names::WRITE).should be_nil
-    registry.get(Hcode::Tools::Names::EDIT).should be_nil
-    registry.get(Hcode::Tools::Names::AGENT).should be_nil
+    registry.get(H2code::Tools::Names::WRITE).should be_nil
+    registry.get(H2code::Tools::Names::EDIT).should be_nil
+    registry.get(H2code::Tools::Names::AGENT).should be_nil
   end
 
   it "builds a full registry for the coder profile" do
-    registry = Hcode::Loop::ProfileRegistry.build("coder", Dir.current)
-    registry.get(Hcode::Tools::Names::READ).should_not be_nil
-    registry.get(Hcode::Tools::Names::WRITE).should_not be_nil
-    registry.get(Hcode::Tools::Names::EDIT).should_not be_nil
-    registry.get(Hcode::Tools::Names::BASH).should_not be_nil
-    registry.get(Hcode::Tools::Names::AGENT).should_not be_nil
+    registry = H2code::Loop::ProfileRegistry.build("coder", Dir.current)
+    registry.get(H2code::Tools::Names::READ).should_not be_nil
+    registry.get(H2code::Tools::Names::WRITE).should_not be_nil
+    registry.get(H2code::Tools::Names::EDIT).should_not be_nil
+    registry.get(H2code::Tools::Names::BASH).should_not be_nil
+    registry.get(H2code::Tools::Names::AGENT).should_not be_nil
   end
 
   it "raises for an unknown profile" do
     expect_raises(Exception, "Unknown agent profile: nope") do
-      Hcode::Loop::ProfileRegistry.build("nope", Dir.current)
+      H2code::Loop::ProfileRegistry.build("nope", Dir.current)
     end
   end
 end

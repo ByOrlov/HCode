@@ -7,7 +7,7 @@
 > `notificationXml.ts`, `taskOps.ts`, `persist.ts`, `errors.ts`,
 > `configSection.ts`.
 
-Цель — 3 тула в `hcode.cr/src/tools/task.cr` (`Tools::TaskList`,
+Цель — 3 тула в `h2code.cr/src/tools/task.cr` (`Tools::TaskList`,
 `Tools::TaskOutput`, `Tools::TaskStop`), плюс минимальная `TaskService`
 абстракция и `render_notification_xml`. Все 3 тула регистрируются только
 для main agent (как и goal-тулы).
@@ -495,7 +495,7 @@ end
       запускать процесс через `TaskService.register` +
       `register_process`, с output capture в файл и notification
       delivery.
-- [x] Регистрация тулов в `src/hcode.cr` для main agent.
+- [x] Регистрация тулов в `src/h2code.cr` для main agent.
 - [x] JSON-сериализация `AgentTaskInfo` (`to_json_str` / `from_json_obj`).
 - [x] Тесты в `spec/tools/task_spec.cr`:
   - [x] TaskList — empty/non-empty; `active_only` filter; `limit` cap;

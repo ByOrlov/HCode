@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   # Compares rolling-release version strings of the form "YYYY.MM.DD.N".
   # Returns negative if a < b, zero if equal, positive if a > b. Missing
   # segments are treated as 0, so "2026.07.31" sorts before "2026.07.31.1".

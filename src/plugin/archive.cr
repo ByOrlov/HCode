@@ -3,7 +3,7 @@ require "file"
 require "file_utils"
 require "./manifest"
 
-module Hcode
+module H2code
   module Plugin
     module Archive
       DOWNLOAD_TIMEOUT = 300.seconds

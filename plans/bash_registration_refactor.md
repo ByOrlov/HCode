@@ -5,14 +5,14 @@
 `Tools::Bash` сегодня регистрируется **дважды** с разным набором зависимостей,
 а часть зависимостей висит на классе (`@@`), часть — на экземпляре (`@`). В
 результате один и тот же класс в разных режимах ведёт себя по-разному, и это
-нигде не выражено в типах — только в порядке вызовов в `src/hcode.cr`.
+нигде не выражено в типах — только в порядке вызовов в `src/h2code.cr`.
 
 Точки регистрации/создания `Bash.new`:
 
 | Место                          | Аргументы                                             | Режим              |
 |--------------------------------|-------------------------------------------------------|--------------------|
-| `src/hcode.cr:292`             | `(work_dir)`                                          | общий (оба режима) |
-| `src/hcode.cr:802`             | `(app_work_dir, ts, session_dir, delivery)`           | только interactive |
+| `src/h2code.cr:292`             | `(work_dir)`                                          | общий (оба режима) |
+| `src/h2code.cr:802`             | `(app_work_dir, ts, session_dir, delivery)`           | только interactive |
 | `src/loop/subagent_registry.cr:122` | `(work_dir)`                                     | субагенты          |
 
 Состояние зависимостей в `src/tools/bash.cr`:
@@ -26,17 +26,17 @@
 - чтение режима для UI — `src/tui/input_controller.cr:981`,
   `src/tui/ui_panels.cr:620`;
 - `terminal_exec=` / `sudo_approval=` — только в `run_interactive`,
-  `src/hcode.cr:748-755`.
+  `src/h2code.cr:748-755`.
 
 ## Проблема
 
 1. **Двойная регистрация.** В `run` (общий путь) Bash создаётся «усечённым»
-   (`hcode.cr:292`). Затем `run_interactive` пересоздаёт его с полным набором
+   (`h2code.cr:292`). Затем `run_interactive` пересоздаёт его с полным набором
    зависимостей и перерегистрирует через `agent.tools.register(bash_tool)`
-   (`hcode.cr:802-803`). В headless остаётся усечённый экземпляр →
+   (`h2code.cr:802-803`). В headless остаётся усечённый экземпляр →
    `run_in_background: true` падает с «Background execution is not available
    for this agent» (`bash.cr:156-161`), хотя `task_service` в headless
-   существует и живёт (`hcode.cr:398-399`). Скрытый контракт: «в headless
+   существует и живёт (`h2code.cr:398-399`). Скрытый контракт: «в headless
    фоновые команды запрещены» — нигде в типах не выражен.
 
 2. **Классовое состояние вместо инстансного.** `@@terminal_exec`,
@@ -100,10 +100,10 @@ def sudo_approval=(cb : (String -> SudoApprovalChoice)?); @sudo_approval = cb; e
 ### 2. Связывание `/sudo` и UI через ссылку на экземпляр
 
 `/sudo` и панель статуса сейчас ходят к классовым аксессорам. Им нужна ссылка
-на активный Bash. Завести в `Hcode::TUI::App` (или в `run_interactive`) поле:
+на активный Bash. Завести в `H2code::TUI::App` (или в `run_interactive`) поле:
 
 ```crystal
-@bash_tool : Hcode::Tools::Bash?
+@bash_tool : H2code::Tools::Bash?
 ```
 
 Присваивается после создания инструмента (см. п. 4). Затем:
@@ -122,13 +122,13 @@ def sudo_approval=(cb : (String -> SudoApprovalChoice)?); @sudo_approval = cb; e
 
 ### 4. Одна точка регистрации в `run`
 
-В `src/hcode.cr` перенести создание полного Bash из `run_interactive`
-(`hcode.cr:798-803`) в общий путь `run`, сразу после создания `task_service`
-(`hcode.cr:398-399`):
+В `src/h2code.cr` перенести создание полного Bash из `run_interactive`
+(`h2code.cr:798-803`) в общий путь `run`, сразу после создания `task_service`
+(`h2code.cr:398-399`):
 
 ```crystal
-task_service = Hcode::Tools::InMemoryTaskService.new(store)
-Hcode::Tools::Task.service = task_service
+task_service = H2code::Tools::InMemoryTaskService.new(store)
+H2code::Tools::Task.service = task_service
 # ...
 delivery = nil # headless: авто-доставка уведомлений о завершении фоновых
                # задач не нужна; пользователь опрашивает через TaskList/TaskOutput
@@ -136,9 +136,9 @@ bash_tool = Tools::Bash.new(work_dir, task_service, store.session_dir, delivery)
 tools.register(bash_tool)   # заменяет tools.register(Tools::Bash.new(work_dir))
 ```
 
-Удалить `tools.register(Tools::Bash.new(work_dir))` в `hcode.cr:292`.
+Удалить `tools.register(Tools::Bash.new(work_dir))` в `h2code.cr:292`.
 
-В `run_interactive` (`hcode.cr:798-803`) удалить повторное создание и
+В `run_interactive` (`h2code.cr:798-803`) удалить повторное создание и
 перерегистрацию. Вместо этого — дополнить уже зарегистрированный экземпляр
 TUI-мостами:
 
@@ -201,7 +201,7 @@ end
    - Сделать `parameters` условным по `@task_service` (112-146).
    - Дефолт `@sudo_mode` → `SudoMode::Off`.
 
-2. **`src/hcode.cr`**
+2. **`src/h2code.cr`**
    - `run`: после `task_service` (398) создавать `bash_tool` с полным набором
      зависимостей и регистрировать его; удалить `Bash.new(work_dir)` (292).
    - `run_interactive`: удалить блок 798-803 (пересоздание/перерегистрация);

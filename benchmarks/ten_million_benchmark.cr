@@ -69,7 +69,7 @@ def build_chunk(i : Int32, line_len : Int32, lines : Int32) : String
   line * lines
 end
 
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = 262144
 memory.add_user("prompt")
 
@@ -99,7 +99,7 @@ end
 tui_final = measurements.last
 
 # Phase C: render markdown for all assistant messages
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered_lines = 0_i64
 rendered_bytes = 0_i64
 messages.each do |msg|
@@ -111,7 +111,7 @@ end
 render_m = measure("After markdown render", "#{rendered_lines} lines, #{(rendered_bytes / 1_048_576.0).round(2)} MB")
 
 # Phase D: serialize request to JSON
-_request = Hcode::LLM::ChatRequest.new(
+_request = H2code::LLM::ChatRequest.new(
   model: "mock",
   messages: memory.messages,
   tools: nil,

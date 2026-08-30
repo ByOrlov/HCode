@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Hcode::ProfiledMemory do
+describe H2code::ProfiledMemory do
   describe "String#profiled_bytes" do
     it "counts bytesize plus header overhead" do
       "hello".profiled_bytes.should eq(5 + 24)
@@ -11,7 +11,7 @@ describe Hcode::ProfiledMemory do
 
   describe ".register and .snapshot" do
     it "registers a calculator and retrieves its snapshot" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       val = 100_i64
       pm.register("test", "Test Collection",
         calc: -> { val }, count: -> { 3 })
@@ -25,8 +25,8 @@ describe Hcode::ProfiledMemory do
     end
 
     it "reflects live changes through the closure" do
-      pm = Hcode::ProfiledMemory.new
-      mem = Hcode::Context::Memory.new
+      pm = H2code::ProfiledMemory.new
+      mem = H2code::Context::Memory.new
       pm.register("ctx", "context",
         calc: -> { mem.profiled_bytes }, count: -> { mem.profiled_count })
 
@@ -37,7 +37,7 @@ describe Hcode::ProfiledMemory do
     end
 
     it "deduplicates by id (re-register replaces)" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       pm.register("dup", "First", calc: -> { 1_i64 })
       pm.register("dup", "Second", calc: -> { 2_i64 })
 
@@ -48,14 +48,14 @@ describe Hcode::ProfiledMemory do
     end
 
     it "total_bytes sums all entries" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       pm.register("a", "A", calc: -> { 10_i64 })
       pm.register("b", "B", calc: -> { 20_i64 })
       pm.total_bytes.should eq(30)
     end
 
     it "format_report produces human-readable output" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       pm.register("big", "Big Collection",
         calc: -> { 2_000_000_i64 }, count: -> { 42 })
       report = pm.format_report
@@ -71,21 +71,21 @@ describe Hcode::ProfiledMemory do
     end
 
     it "defaults count to 0 when counter omitted" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       pm.register("n", "NoCount", calc: -> { 50_i64 })
       pm.snapshot.first.count.should eq(0)
     end
 
     it "registered? tracks ids" do
-      pm = Hcode::ProfiledMemory.new
+      pm = H2code::ProfiledMemory.new
       pm.registered?("x").should be_false
       pm.register("x", "X", calc: -> { 0_i64 })
       pm.registered?("x").should be_true
     end
 
     it "isolates state between instances" do
-      a = Hcode::ProfiledMemory.new
-      b = Hcode::ProfiledMemory.new
+      a = H2code::ProfiledMemory.new
+      b = H2code::ProfiledMemory.new
       a.register("only-in-a", "A", calc: -> { 1_i64 })
       a.registered?("only-in-a").should be_true
       b.registered?("only-in-a").should be_false
@@ -94,39 +94,39 @@ describe Hcode::ProfiledMemory do
   end
 end
 
-describe Hcode::LLM::Message do
+describe H2code::LLM::Message do
   describe "#profiled_bytes" do
     it "sums role and content parts" do
-      msg = Hcode::LLM::Message.user("hello")
-      part = msg.content[0].as(Hcode::LLM::TextContent)
+      msg = H2code::LLM::Message.user("hello")
+      part = msg.content[0].as(H2code::LLM::TextContent)
       expected = "user".profiled_bytes + part.profiled_bytes
       msg.profiled_bytes.should eq(expected)
     end
 
     it "includes tool_calls arguments" do
-      tc = Hcode::LLM::ToolCall.new("id", Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::BASH, "command"))
-      msg = Hcode::LLM::Message.assistant("ran a command", [tc])
+      tc = H2code::LLM::ToolCall.new("id", H2code::LLM::ToolCallFunction.new(H2code::Tools::Names::BASH, "command"))
+      msg = H2code::LLM::Message.assistant("ran a command", [tc])
       part = msg.content.first
       expected = "assistant".profiled_bytes +
                  part.profiled_bytes +
                  "id".profiled_bytes + "function".profiled_bytes +
-                 Hcode::Tools::Names::BASH.profiled_bytes + "command".profiled_bytes
+                 H2code::Tools::Names::BASH.profiled_bytes + "command".profiled_bytes
       msg.profiled_bytes.should eq(expected)
     end
   end
 end
 
-describe Hcode::Context::Memory do
+describe H2code::Context::Memory do
   describe "#profiled_bytes" do
     it "grows when messages are added" do
-      mem = Hcode::Context::Memory.new
+      mem = H2code::Context::Memory.new
       before = mem.profiled_bytes
       mem.add_user("A" * 500)
       mem.profiled_bytes.should be > before
     end
 
     it "drops after clear" do
-      mem = Hcode::Context::Memory.new
+      mem = H2code::Context::Memory.new
       mem.add_user("X" * 200)
       populated = mem.profiled_bytes
       mem.clear

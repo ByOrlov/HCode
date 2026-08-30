@@ -43,7 +43,7 @@ puts "Turns: #{N_TURNS}, tool_result: #{TOOL_SIZE} chars, assistant: #{ASSISTANT
 gc_and_measure("Baseline")
 
 # 1. Context::Memory
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = 262144
 
 N_TURNS.times do |i|
@@ -68,7 +68,7 @@ end
 gc_and_measure("2. TUI transcript duplicate")
 
 # 3. Rendered markdown lines (assistant + tool results)
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered_lines = 0
 rendered_chars = 0
 
@@ -85,7 +85,7 @@ gc_and_measure("3. After markdown render of all messages")
 puts "   Rendered lines: #{rendered_lines}, rendered bytes: #{(rendered_chars / 1_048_576.0).round(2)} MB"
 
 # 4. HTTP request JSON serialization
-_request = Hcode::LLM::ChatRequest.new(
+_request = H2code::LLM::ChatRequest.new(
   model: "mock",
   messages: memory.messages,
   tools: nil,

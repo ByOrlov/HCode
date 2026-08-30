@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     class Markdown
       @theme : Theme

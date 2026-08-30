@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # EnterPlanMode + ExitPlanMode — перевод агента в/из режим планирования.
     #

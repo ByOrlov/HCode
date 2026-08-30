@@ -2,7 +2,7 @@ require "digest/sha256"
 require "./danger"
 require "./policies"
 
-module Hcode
+module H2code
   module Permission
     enum Mode
       Manual

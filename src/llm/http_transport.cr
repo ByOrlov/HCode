@@ -1,6 +1,6 @@
 require "http/client"
 
-module Hcode
+module H2code
   # Network abstraction layer over `HTTP::Client`.
   #
   # All outbound HTTP goes through an `HttpTransport`. The default

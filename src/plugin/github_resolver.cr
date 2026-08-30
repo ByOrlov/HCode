@@ -3,7 +3,7 @@ require "uri"
 require "./source"
 require "./types"
 
-module Hcode
+module H2code
   module Plugin
     struct GithubResolution
       property tarball_url : String

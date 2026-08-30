@@ -4,7 +4,7 @@ require "../tools/agent"
 require "../tools/agent_swarm"
 require "../tools/registry"
 
-module Hcode
+module H2code
   module Loop
     # One tracked child agent. Mirrors the JS `IAgentScopeHandle` + subagent
     # metadata pair: the lifecycle registry owns *existence*, this struct owns

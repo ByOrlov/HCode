@@ -5,16 +5,16 @@ def md_strip_ansi(str : String) : String
   str.gsub(/\e\[[0-9;]*m/, "")
 end
 
-def md_render_text(md : Hcode::TUI::Markdown, text : String, width = 80) : String
+def md_render_text(md : H2code::TUI::Markdown, text : String, width = 80) : String
   md.render(text, width).map { |l| md_strip_ansi(l) }.join('\n')
 end
 
-def md_render_raw(md : Hcode::TUI::Markdown, text : String, width = 80) : Array(String)
+def md_render_raw(md : H2code::TUI::Markdown, text : String, width = 80) : Array(String)
   md.render(text, width)
 end
 
-describe Hcode::TUI::Markdown do
-  md = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+describe H2code::TUI::Markdown do
+  md = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 
   # =========================================================================
   # Inline formatting
@@ -81,9 +81,9 @@ describe Hcode::TUI::Markdown do
 
   describe "links" do
     it "renders [text](url) with underline" do
-      joined = md_render_raw(md, "[HCode](https://example.com)").join
+      joined = md_render_raw(md, "[H2Code](https://example.com)").join
       joined.should contain("\e[4m")
-      md_strip_ansi(joined).should contain("HCode")
+      md_strip_ansi(joined).should contain("H2Code")
     end
 
     it "shows URL when link text differs from href" do
@@ -304,7 +304,7 @@ describe Hcode::TUI::Markdown do
       # The right border must sit at the same display column on every row.
       right_col = lines.compact_map do |l|
         idx = l.rindex('│')
-        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+        idx.nil? ? nil : H2code::TUI::CharWidth.visible_width(l[0...idx])
       end
       right_col.uniq.size.should eq(1)
     end
@@ -332,7 +332,7 @@ describe Hcode::TUI::Markdown do
       lines = text.split('\n')
       right_col = lines.compact_map do |l|
         idx = l.rindex('│')
-        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+        idx.nil? ? nil : H2code::TUI::CharWidth.visible_width(l[0...idx])
       end
       right_col.uniq.size.should eq(1)
     end
@@ -344,7 +344,7 @@ describe Hcode::TUI::Markdown do
       lines = text.split('\n')
       right_col = lines.compact_map do |l|
         idx = l.rindex('│')
-        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+        idx.nil? ? nil : H2code::TUI::CharWidth.visible_width(l[0...idx])
       end
       right_col.uniq.size.should eq(1)
     end
@@ -354,7 +354,7 @@ describe Hcode::TUI::Markdown do
       lines = text.split('\n')
       right_col = lines.compact_map do |l|
         idx = l.rindex('│')
-        idx.nil? ? nil : Hcode::TUI::CharWidth.visible_width(l[0...idx])
+        idx.nil? ? nil : H2code::TUI::CharWidth.visible_width(l[0...idx])
       end
       right_col.uniq.size.should eq(1)
     end
@@ -367,11 +367,11 @@ describe Hcode::TUI::Markdown do
     end
 
     it "wraps overflowing cells instead of breaking borders" do
-      input = "| File | Purpose |\n|------|---------|\n| `src/hcode.cr` | Entry point for the CLI application |"
+      input = "| File | Purpose |\n|------|---------|\n| `src/h2code.cr` | Entry point for the CLI application |"
       lines = md_render_text(md, input, 30)
       # Every line should have the same visible width (no overflow).
       widths = lines.split('\n').reject(&.empty?).map do |l|
-        Hcode::TUI::CharWidth.visible_width(l)
+        H2code::TUI::CharWidth.visible_width(l)
       end
       widths.uniq.size.should eq(1)
       # The right border │ must appear on every content line.
@@ -394,13 +394,13 @@ describe Hcode::TUI::Markdown do
     end
 
     it "renders inline code in cells without showing backticks" do
-      input = "| File | Purpose |\n|------|---------|\n| `src/hcode.cr` | Entry point |"
+      input = "| File | Purpose |\n|------|---------|\n| `src/h2code.cr` | Entry point |"
       joined = md_render_raw(md, input, 60).join
       # Inline code should be styled with ANSI color, not literal backticks.
       joined.should contain("\e[38;5;")
       stripped = md_strip_ansi(joined)
-      stripped.should_not contain("`src/hcode.cr`")
-      stripped.should contain("src/hcode.cr")
+      stripped.should_not contain("`src/h2code.cr`")
+      stripped.should contain("src/h2code.cr")
     end
 
     it "does not render a single pipe-bearing line as a table" do

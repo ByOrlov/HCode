@@ -3,7 +3,7 @@ require "./retry"
 require "../tools/swarm_mode"
 require "../exception_handler"
 
-module Hcode
+module H2code
   module Loop
     alias StepResult = LLM::StepResult
     alias TurnResult = LLM::TurnResult
@@ -294,7 +294,7 @@ module Hcode
       private def execute_step(system_prompt : String?, on_event : Event ->) : StepResult
         # State which model/provider actually serves this session: without it,
         # models with a strong baked-in brand identity answer "who are you"
-        # with their vendor's name instead of HCode. Built per step so a
+        # with their vendor's name instead of H2Code. Built per step so a
         # runtime /provider or /model switch is reflected immediately.
         sys_prompt = system_prompt
         if sys_prompt && !sys_prompt.empty?

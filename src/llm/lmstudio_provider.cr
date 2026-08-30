@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # LM Studio backend over the OpenAI Chat Completions protocol. LM Studio
     # runs locally and needs no API key — the `token` is always empty and the

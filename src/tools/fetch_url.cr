@@ -1,7 +1,7 @@
 require "compress/gzip"
 require "compress/deflate"
 
-module Hcode
+module H2code
   module Tools
     # FetchURL — чтение публичного URL с извлечением текста.
     #

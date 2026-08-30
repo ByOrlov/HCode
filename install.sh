@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# HCode installer — macOS / Linux.
-# Usage:  curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/master/install.sh | bash
+# H2Code installer — macOS / Linux.
+# Usage:  curl -fsSL https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.sh | bash
 set -euo pipefail
 
-REPO="ByOrlov/HCode"
-INSTALL_DIR="${HCODE_INSTALL_DIR:-$HOME/.hcode/bin}"
-BIN_NAME="hcode"
+REPO="ByOrlov/H2Code"
+INSTALL_DIR="${H2CODE_INSTALL_DIR:-$HOME/.h2code/bin}"
+BIN_NAME="h2code"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '  %s\n' "$*"; }
@@ -26,10 +26,10 @@ case "$ARCH" in
 esac
 
 # aarch64-linux is built via QEMU; verify it exists before assuming.
-ASSET="hcode-${arch}-${os}.tar.gz"
+ASSET="h2code-${arch}-${os}.tar.gz"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
-bold "Installing HCode for ${arch}-${os}…"
+bold "Installing H2Code for ${arch}-${os}…"
 info "Release asset: ${ASSET}"
 info "Install dir:   ${INSTALL_DIR}"
 
@@ -50,7 +50,7 @@ info "Extracting…"
 tar -xzf "${TMP}/${ASSET}" -C "$TMP"
 
 # --- Runtime dependencies -----------------------------------------------------
-# HCode links dynamically against OpenSSL (libssl/libcrypto), libyaml and pcre2.
+# H2Code links dynamically against OpenSSL (libssl/libcrypto), libyaml and pcre2.
 # They are part of Crystal's stdlib runtime and not declared in shard.yml, so we
 # make sure they are present via the platform package manager. ripgrep (rg) is
 # also required by the Grep and Glob tools and is installed the same way.
@@ -182,7 +182,7 @@ case ":${PATH}:" in
       : already added
     else
       mkdir -p "$(dirname "$PROFILE")"
-      printf '\n# Added by HCode installer\n%s\n' "$LINE" >> "$PROFILE"
+      printf '\n# Added by H2Code installer\n%s\n' "$LINE" >> "$PROFILE"
       info "Added ${INSTALL_DIR} to PATH in ${PROFILE}"
       info "Restart your shell or run:  source ${PROFILE}"
     fi
@@ -190,6 +190,6 @@ case ":${PATH}:" in
 esac
 
 # --- Done ---------------------------------------------------------------------
-bold "✓ HCode installed."
+bold "✓ H2Code installed."
 info "Version: $(${INSTALL_DIR}/${BIN_NAME} --version 2>/dev/null || echo 'unknown')"
-info "Run 'hcode' to start. Use '/upgrade' inside the TUI to update later."
+info "Run 'h2code' to start. Use '/upgrade' inside the TUI to update later."

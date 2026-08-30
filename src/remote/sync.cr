@@ -1,20 +1,20 @@
-# Cloud-sync orchestration shared by `hcode sync` (CLI) and `/sync` (TUI):
-# pairing-code storage, `hcode-remote --cloud` daemon lifecycle, and the
+# Cloud-sync orchestration shared by `h2code sync` (CLI) and `/sync` (TUI):
+# pairing-code storage, `h2code-remote --cloud` daemon lifecycle, and the
 # QR banner. Config (`sync.enabled` / `sync.relay_url` / `sync.email`)
-# lives in config.json; the 12-digit code in `$HCODE_HOME/remote/code`
-# (same file `hcode-remote password` writes).
+# lives in config.json; the 12-digit code in `$H2CODE_HOME/remote/code`
+# (same file `h2code-remote password` writes).
 require "random/secure"
 require "process"
 require "file_utils"
 require "socket"
 require "./qr"
 
-module Hcode
+module H2code
   module Remote
     module Sync
-      # State dir: `$HCODE_HOME/remote` (default `~/.hcode/remote`).
+      # State dir: `$H2CODE_HOME/remote` (default `~/.h2code/remote`).
       def self.state_dir : String
-        home = ENV["HCODE_HOME"]? || File.join(ENV["HOME"]? || "/tmp", ".hcode")
+        home = ENV["H2CODE_HOME"]? || File.join(ENV["HOME"]? || "/tmp", ".h2code")
         dir = File.join(home, "remote")
         Dir.mkdir_p(dir)
         dir
@@ -68,8 +68,8 @@ module Hcode
       end
 
       # The external relay URL the daemon last connected to (nil if it
-      # never ran in cloud mode). The hcode-remote daemon writes it on
-      # startup; `hcode sync resync` re-reads it so `sync.relay_url` tracks
+      # never ran in cloud mode). The h2code-remote daemon writes it on
+      # startup; `h2code sync resync` re-reads it so `sync.relay_url` tracks
       # the daemon's actual uplink instead of a stale address.
       def self.stored_relay_url : String?
         return nil unless File.exists?(relay_url_path)
@@ -95,7 +95,7 @@ module Hcode
       end
 
       # Force a fresh 16-digit pairing code, overwriting the stored one.
-      # Used by `hcode sync resync` / `hcode resync`: the old code dies with
+      # Used by `h2code sync resync` / `h2code resync`: the old code dies with
       # the old relay so a re-pair can't silently reuse stale credentials.
       def self.regenerate_code : String
         code = (0...16).map { Random::Secure.rand(10).to_s }.join
@@ -122,31 +122,31 @@ module Hcode
         "ws://#{lan_ip}:#{port}"
       end
 
-      # Resolve the hcode-remote binary: sibling of the running hcode
+      # Resolve the h2code-remote binary: sibling of the running h2code
       # executable, then PATH lookup.
       private def self.resolve_remote_bin : String?
         if exe = Process.executable_path
-          sibling = File.join(File.dirname(exe), "hcode-remote")
+          sibling = File.join(File.dirname(exe), "h2code-remote")
           return sibling if File.exists?(sibling) && File.executable?(sibling)
         end
         ENV["PATH"]?.try do |paths|
           paths.split(':').each do |dir|
-            candidate = File.join(dir, "hcode-remote")
+            candidate = File.join(dir, "h2code-remote")
             return candidate if !dir.empty? && File.executable?(candidate)
           end
         end
         nil
       end
 
-      # Start `hcode-remote --cloud` detached; logs go to
+      # Start `h2code-remote --cloud` detached; logs go to
       # `remote/daemon.log`. The local WS port defaults to 8788 (or
-      # `REMOTE_CLOUD_PORT`) so a local-mode hcode-remote on 8787 doesn't
+      # `REMOTE_CLOUD_PORT`) so a local-mode h2code-remote on 8787 doesn't
       # collide with it. Returns the outcome for user feedback.
       def self.start_daemon(relay_url : String) : Symbol
         return :already if daemon_running?
         bin = resolve_remote_bin
         return :no_binary unless bin
-        read_or_create_code # hcode-remote exits 2 without it
+        read_or_create_code # h2code-remote exits 2 without it
         port = ENV["REMOTE_CLOUD_PORT"]?.try(&.to_i?) || 8788
         log = File.open(File.join(state_dir, "daemon.log"), "a")
         begin
@@ -176,7 +176,7 @@ module Hcode
       # code and where the relay lives (plans/QrAuth.md).
       def self.qr_banner(code : String, relay_url : String, quiet : Int32 = 2) : String
         pretty = pretty_code(code)
-        pair_url = "https://pair.hcode/?code=#{code}&url=#{URI.encode_path(relay_url)}"
+        pair_url = "https://pair.h2code/?code=#{code}&url=#{URI.encode_path(relay_url)}"
         String.build do |s|
           Qr.render(pair_url, quiet).each { |row| s << row << '\n' }
           s << "Pairing code: " << pretty << '\n'

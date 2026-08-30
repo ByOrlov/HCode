@@ -1,7 +1,7 @@
 require "json"
 require "./types"
 
-module Hcode
+module H2code
   module Mcp
     # On-disk cache of MCP tool definitions, keyed by provider → server.
     # Avoids a network round-trip at startup: cached tools are registered
@@ -87,8 +87,8 @@ module Hcode
 
       private def self.cache_path : String
         home = ENV["HOME"]? || "/tmp"
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-        File.join(hcode_home, "mcp_cache.json")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
+        File.join(h2code_home, "mcp_cache.json")
       end
 
       private def self.read_cache : JSON::Any?

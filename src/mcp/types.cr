@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Mcp
     # One tool advertised by a remote MCP server, decoded from the `tools/list`
     # response. `input_schema` is the raw JSON Schema the server published and

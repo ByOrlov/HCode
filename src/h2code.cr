@@ -162,7 +162,7 @@ require "./tui/app"
 require "./tui/diff"
 require "./tui/usage_panel"
 
-module Hcode
+module H2code
   # Headless print-mode palette, ported from the original Moonshot kimi-code
   # TUI dark theme (apps/kimi-code/src/tui/theme/colors.ts).
   C_SUCCESS = Colorize::ColorRGB.new(0x4E, 0xC8, 0x7E)
@@ -191,17 +191,17 @@ module Hcode
     end
 
     def self.run(argv : Array(String)) : Nil
-      # Subcommand dispatch: `hcode acp` starts the ACP server for IDE integration.
+      # Subcommand dispatch: `h2code acp` starts the ACP server for IDE integration.
       if argv.size > 0 && argv[0] == "acp"
         return run_acp(argv[1..])
       end
 
-      # `hcode sync` — cloud-sync management (see Remote::Sync).
+      # `h2code sync` — cloud-sync management (see Remote::Sync).
       if argv.size > 0 && argv[0] == "sync"
         return run_sync(argv[1..])
       end
 
-      # `hcode resync [url]` — shortcut for `hcode sync resync`: fresh
+      # `h2code resync [url]` — shortcut for `h2code sync resync`: fresh
       # pairing code + QR, optionally pointing at a new relay.
       if argv.size > 0 && argv[0] == "resync"
         return run_sync(["resync"] + argv[1..])
@@ -263,22 +263,22 @@ module Hcode
       end
 
       if show_version
-        puts "HCode #{VERSION}"
+        puts "H2Code #{VERSION}"
         return
       end
 
       config = Config::Config.load
 
-      Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
+      H2code::I18n.init(H2code::I18n.resolve_locale(config.language))
 
       config.model = model if model
       if pm = permission_mode
         config.permission_mode = pm
       end
-      config.ensure_hcode_home
+      config.ensure_h2code_home
 
       # Cloud-sync autostart: when sync is enabled, make sure the
-      # hcode-remote cloud daemon is up (idempotent — skips if running).
+      # h2code-remote cloud daemon is up (idempotent — skips if running).
       if config.sync.enabled? && !Remote::Sync.daemon_running?
         Remote::Sync.start_daemon(config.sync.relay_url)
       end
@@ -296,13 +296,13 @@ module Hcode
           # instead of falling through to build_provider, which would raise.
           exit(0) unless run_setup_wizard(config)
         else
-          STDERR.puts Hcode.t("errors.no_provider")
+          STDERR.puts H2code.t("errors.no_provider")
           STDERR.puts ""
-          STDERR.puts Hcode.t("errors.setup_hint")
-          STDERR.puts Hcode.t("errors.setup_hint_provider")
-          STDERR.puts Hcode.t("errors.setup_hint_key")
+          STDERR.puts H2code.t("errors.setup_hint")
+          STDERR.puts H2code.t("errors.setup_hint_provider")
+          STDERR.puts H2code.t("errors.setup_hint_key")
           STDERR.puts ""
-          STDERR.puts Hcode.t("errors.setup_hint_help")
+          STDERR.puts H2code.t("errors.setup_hint_help")
           exit(2)
         end
       end
@@ -379,42 +379,42 @@ module Hcode
         active_provider: config.provider_name, blocking: prompt ? true : false)
 
       home = ENV["HOME"]? || "/tmp"
-      lifecycle = Hcode::Session::Lifecycle.new(home)
+      lifecycle = H2code::Session::Lifecycle.new(home)
       store = begin
         if sid = session_id
           # Resolve across every workspace + legacy flat layout.
           entry = lifecycle.index.get(sid)
-          dir = entry ? entry.path : File.join(home, ".hcode", "sessions", sid)
+          dir = entry ? entry.path : File.join(home, ".h2code", "sessions", sid)
           # open_existing! refuses to silently resurrect a deleted
           # session as an empty one (which would lose everything on
           # the next save) and raises FileDeletedError instead.
           begin
-            Hcode::Session::Store.open_existing!(dir)
-          rescue Hcode::Session::FileDeletedError
-            STDERR.puts Hcode.t("errors.session_deleted", id: sid)
+            H2code::Session::Store.open_existing!(dir)
+          rescue H2code::Session::FileDeletedError
+            STDERR.puts H2code.t("errors.session_deleted", id: sid)
             exit(1)
           end
         elsif continue_session
-          ws_id = Hcode::Session::Index.workspace_id(work_dir)
+          ws_id = H2code::Session::Index.workspace_id(work_dir)
           entry = lifecycle.index.find_most_recent(ws_id) ||
                   lifecycle.index.find_most_recent
           unless entry
-            STDERR.puts Hcode.t("errors.no_previous_session")
+            STDERR.puts H2code.t("errors.no_previous_session")
             exit(1)
           end
           begin
-            Hcode::Session::Store.open_existing!(entry.path)
-          rescue Hcode::Session::FileDeletedError
-            STDERR.puts Hcode.t("errors.session_deleted", id: entry.id)
+            H2code::Session::Store.open_existing!(entry.path)
+          rescue H2code::Session::FileDeletedError
+            STDERR.puts H2code.t("errors.session_deleted", id: entry.id)
             exit(1)
           end
         else
           lifecycle.create(work_dir)
         end
-      rescue e : Hcode::Session::SessionBusyError
-        # Another live hcode process owns the session; two writers on one
+      rescue e : H2code::Session::SessionBusyError
+        # Another live h2code process owns the session; two writers on one
         # wire.jsonl corrupt it, so refuse instead of interleaving.
-        STDERR.puts Hcode.t("errors.session_busy", id: session_id || File.basename(e.session_dir))
+        STDERR.puts H2code.t("errors.session_busy", id: session_id || File.basename(e.session_dir))
         STDERR.puts e.message
         exit(1)
       end
@@ -436,19 +436,19 @@ module Hcode
 
       # Discover skills from disk (user home + project root) plus plugin skills,
       # and register them in the global catalog so the Skill tool can resolve them.
-      discovered = Hcode::Tools::SkillDiscovery.discover(home, work_dir)
+      discovered = H2code::Tools::SkillDiscovery.discover(home, work_dir)
       discovered += plugin_manager.plugin_skills
-      skill_catalog = Hcode::Tools::InMemorySkillCatalog.new(discovered)
-      Hcode::Tools::Skill.catalog = skill_catalog
-      Hcode::Tools::Skill.memory = memory
+      skill_catalog = H2code::Tools::InMemorySkillCatalog.new(discovered)
+      H2code::Tools::Skill.catalog = skill_catalog
+      H2code::Tools::Skill.memory = memory
 
       system_prompt = Prompt::SystemPrompt.build(work_dir,
         additional_dirs: [] of String,
         skills_listing: skill_catalog.model_listing,
         shell: config.shell)
 
-      task_service = Hcode::Tools::InMemoryTaskService.new(store)
-      Hcode::Tools::Task.service = task_service
+      task_service = H2code::Tools::InMemoryTaskService.new(store)
+      H2code::Tools::Task.service = task_service
 
       # App-wide sudo mode from config: every Bash instance (main agent,
       # subagents, ACP) starts with it; the TUI `/sudo` command changes it
@@ -465,8 +465,8 @@ module Hcode
       Tools::Bash.shell = config.shell
       tools.register(bash_tool)
 
-      goal_service = Hcode::Tools::AgentGoalService.new
-      Hcode::Tools::Goal.service = goal_service
+      goal_service = H2code::Tools::AgentGoalService.new
+      H2code::Tools::Goal.service = goal_service
       agent_runner, swarm_runner = wire_subagent_runners(agent, task_service, system_prompt, work_dir, config)
 
       begin
@@ -489,7 +489,7 @@ module Hcode
     private def self.build_provider(config, oauth) : LLM::Provider
       build_named_provider(config.provider_name, config, oauth)
     rescue ex : ProviderConfigError
-      STDERR.puts Hcode.t("errors.generic", message: ex.message.to_s)
+      STDERR.puts H2code.t("errors.generic", message: ex.message.to_s)
       exit(1)
     end
 
@@ -543,10 +543,10 @@ module Hcode
     # result. No tools, no system prompt, no agent loop — just a raw
     # chat call to verify the key, endpoint, model, and balance.
     private def self.run_hi(provider : LLM::Provider) : Nil
-      puts Hcode.t("info.provider_label", name: provider.name)
-      puts Hcode.t("info.model_label", name: provider.model_name)
-      puts Hcode.t("info.prompt_label")
-      puts Hcode.t("info.separator")
+      puts H2code.t("info.provider_label", name: provider.name)
+      puts H2code.t("info.model_label", name: provider.model_name)
+      puts H2code.t("info.prompt_label")
+      puts H2code.t("info.separator")
 
       messages = [LLM::Message.user("hi")]
       text = IO::Memory.new
@@ -563,17 +563,17 @@ module Hcode
 
         puts ""
         puts ""
-        puts Hcode.t("info.ok_replied", tokens: result.usage.total_tokens)
+        puts H2code.t("info.ok_replied", tokens: result.usage.total_tokens)
           .colorize.fore(C_SUCCESS)
         exit(0)
       rescue ex : LLM::ApiError
         STDERR.puts ""
-        STDERR.puts Hcode.t("info.http_error", code: ex.status_code, message: ex.message.to_s)
+        STDERR.puts H2code.t("info.http_error", code: ex.status_code, message: ex.message.to_s)
           .colorize.fore(C_ERROR)
         exit(1)
       rescue ex
         STDERR.puts ""
-        STDERR.puts Hcode.t("info.error_prefix", message: ex.message.to_s).colorize.fore(C_ERROR)
+        STDERR.puts H2code.t("info.error_prefix", message: ex.message.to_s).colorize.fore(C_ERROR)
         exit(1)
       end
     end
@@ -696,27 +696,27 @@ module Hcode
           when .info?
             puts "[#{event.text}]".colorize.yellow
           when .error?
-            STDERR.puts Hcode.t("errors.generic", message: event.text).colorize.red
+            STDERR.puts H2code.t("errors.generic", message: event.text).colorize.red
           end
         end
 
         puts
-        puts "#{Hcode.t("info.done", steps: result.steps)}" \
+        puts "#{H2code.t("info.done", steps: result.steps)}" \
              "#{result.usage.total_tokens} tokens)".colorize.fore(C_SUCCESS)
         puts
-        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete"))
+        status_tracker.transition!(Notify::AgentStatus::Done, H2code.t("status.turn_complete"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex : Loop::UserCancellationError
-        agent.context.add_user(Hcode.t("status.interrupted"))
-        puts Hcode.t("info.interrupted_by_user").colorize.yellow
-        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.cancelled"))
+        agent.context.add_user(H2code.t("status.interrupted"))
+        puts H2code.t("info.interrupted_by_user").colorize.yellow
+        status_tracker.transition!(Notify::AgentStatus::Done, H2code.t("status.cancelled"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex : Loop::NetworkFailureError
         puts "\n#{ex.message}".colorize.yellow
-        status_tracker.transition!(Notify::AgentStatus::Done, Hcode.t("status.network_failure"))
+        status_tracker.transition!(Notify::AgentStatus::Done, H2code.t("status.network_failure"))
         status_tracker.transition!(Notify::AgentStatus::Idle)
       rescue ex
-        STDERR.puts Hcode.t("errors.fatal", message: ex.message.to_s).colorize.red
+        STDERR.puts H2code.t("errors.fatal", message: ex.message.to_s).colorize.red
         ex.backtrace.each { |b| STDERR.puts "  #{b}" } if config.debug?
         ExceptionHandler.report_and_notify(ex, "run_headless")
         exit(1)
@@ -725,14 +725,14 @@ module Hcode
       end
     end
 
-    # `hcode sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
+    # `h2code sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
     # command. Flips `sync.enabled` in config.json and manages the
-    # hcode-remote cloud daemon (see Remote::Sync). `resync [url]` issues a
-    # fresh pairing code + QR, optionally for a new relay (`hcode resync` is
+    # h2code-remote cloud daemon (see Remote::Sync). `resync [url]` issues a
+    # fresh pairing code + QR, optionally for a new relay (`h2code resync` is
     # the shortcut). Auth is code-only (plans/QrAuth.md) — no email needed.
     private def self.run_sync(rest_argv : Array(String)) : Nil
       config = Config::Config.load
-      config.ensure_hcode_home
+      config.ensure_h2code_home
       cmd = rest_argv[0]? || "status"
       case cmd
       when "on"
@@ -761,7 +761,7 @@ module Hcode
         # Fresh pairing code + QR, optionally for a new relay URL. The old
         # code dies with the old relay — the daemon restart (if running)
         # picks up the regenerated code. Without an explicit URL the relay
-        # comes from the running hcode-remote daemon (it publishes the
+        # comes from the running h2code-remote daemon (it publishes the
         # external form of its `--cloud` uplink on startup), so the config
         # self-heals stale LAN addresses on every resync.
         relay = rest_argv[1]?
@@ -787,26 +787,26 @@ module Hcode
         puts "relay: #{config.sync.relay_url}"
         puts "bridge: #{Remote::Sync.bridge_url}" if Remote::Sync.daemon_running?
       else
-        STDERR.puts "usage: hcode sync [on|off|code|resync [relay-url]|status]"
-        STDERR.puts "       hcode resync [relay-url]   # same as `hcode sync resync`"
+        STDERR.puts "usage: h2code sync [on|off|code|resync [relay-url]|status]"
+        STDERR.puts "       h2code resync [relay-url]   # same as `h2code sync resync`"
         exit 2
       end
     end
 
     private def self.sync_daemon_start_message(relay_url : String) : String
       case Remote::Sync.start_daemon(relay_url)
-      when :started   then "hcode-remote cloud daemon started (#{relay_url})"
-      when :already   then "hcode-remote cloud daemon already running (#{relay_url})"
-      when :no_binary then "hcode-remote binary not found — build it with `rake` or start it manually"
-      else                 "cloud daemon failed to start — see ~/.hcode/remote/daemon.log"
+      when :started   then "h2code-remote cloud daemon started (#{relay_url})"
+      when :already   then "h2code-remote cloud daemon already running (#{relay_url})"
+      when :no_binary then "h2code-remote binary not found — build it with `rake` or start it manually"
+      else                 "cloud daemon failed to start — see ~/.h2code/remote/daemon.log"
       end
     end
 
     private def self.sync_daemon_stop_message : String
       case Remote::Sync.stop_daemon
-      when :stopped     then "hcode-remote cloud daemon stopped"
-      when :not_running then "hcode-remote cloud daemon was not running"
-      else                   "daemon stop failed — check ~/.hcode/remote/daemon.pid"
+      when :stopped     then "h2code-remote cloud daemon stopped"
+      when :not_running then "h2code-remote cloud daemon was not running"
+      else                   "daemon stop failed — check ~/.h2code/remote/daemon.pid"
       end
     end
 
@@ -817,14 +817,14 @@ module Hcode
       # Handle --login flag (terminal-auth pivot)
       if rest_argv.includes?("--login")
         config = Config::Config.load
-        Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
-        config.ensure_hcode_home
+        H2code::I18n.init(H2code::I18n.resolve_locale(config.language))
+        config.ensure_h2code_home
 
         unless config.provider_name && config.provider_configured?
           if STDIN.tty?
             run_setup_wizard(config)
           else
-            STDERR.puts Hcode.t("errors.no_provider")
+            STDERR.puts H2code.t("errors.no_provider")
             exit(2)
           end
         end
@@ -833,14 +833,14 @@ module Hcode
       end
 
       config = Config::Config.load
-      Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
-      config.ensure_hcode_home
+      H2code::I18n.init(H2code::I18n.resolve_locale(config.language))
+      config.ensure_h2code_home
 
       # Provider gate
       unless config.provider_name && config.provider_configured?
-        STDERR.puts Hcode.t("errors.no_provider")
+        STDERR.puts H2code.t("errors.no_provider")
         STDERR.puts ""
-        STDERR.puts Hcode.t("errors.setup_hint")
+        STDERR.puts H2code.t("errors.setup_hint")
         exit(2)
       end
 
@@ -921,8 +921,8 @@ module Hcode
       # method argument captured by the `app.run` block below; reassigning it
       # here updates what every subsequent turn sees.
       app.on_additional_dirs_change = ->(dirs : Array(String)) do
-        catalog = Hcode::Tools::Skill.catalog
-        listing = catalog.is_a?(Hcode::Tools::InMemorySkillCatalog) ? catalog.model_listing : ""
+        catalog = H2code::Tools::Skill.catalog
+        listing = catalog.is_a?(H2code::Tools::InMemorySkillCatalog) ? catalog.model_listing : ""
         # Reassigning the captured arg is intentional: other closures capturing
         # `system_prompt` read the new value (closures share it by reference).
         system_prompt = Prompt::SystemPrompt.build(work_dir, dirs, listing, shell: config.shell) # ameba:disable Lint/ShadowedArgument
@@ -937,7 +937,7 @@ module Hcode
       # When the agent calls AskUserQuestion, the QuestionService implementation
       # pushes the questions into the App's dialog and blocks until the user
       # answers. Mirrors TS `reverse-rpc/question-adapter.ts`.
-      Hcode::Tools::AskUserQuestion.service = AppQuestionService.new(app)
+      H2code::Tools::AskUserQuestion.service = AppQuestionService.new(app)
 
       # Wire the Bash tool's TUI-only bridges onto the instance registered in
       # `run`. terminal_exec routes sudo commands into a real terminal (alt
@@ -955,15 +955,15 @@ module Hcode
       # Plan-mode wiring: instantiate the per-session plan service, expose its
       # permission mode, and bridge ExitPlanMode's interactive review to the
       # TUI's PlanReviewDialog. `/plan` toggles the mode through on_plan_mode.
-      plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
-      Hcode::Tools::PlanMode.plan_service = plan_service
+      plan_service = H2code::Tools::AgentPlanService.new(store.session_dir, "main")
+      H2code::Tools::PlanMode.plan_service = plan_service
       # Swarm-mode wiring: a fresh in-memory service per interactive session.
-      Hcode::Tools::SwarmMode.service = Hcode::Tools::SwarmModeService.new
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(
+      H2code::Tools::SwarmMode.service = H2code::Tools::SwarmModeService.new
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(
         auto: permission.mode.auto?)
-      Hcode::Tools::PlanMode.plan_review_service = AppPlanReviewService.new(app)
+      H2code::Tools::PlanMode.plan_review_service = AppPlanReviewService.new(app)
       app.on_plan_mode = ->(next_on : Bool) do
-        svc = Hcode::Tools::PlanMode.plan_service
+        svc = H2code::Tools::PlanMode.plan_service
         return false if svc.nil?
         begin
           # Idempotent: only transition when the desired state differs from
@@ -984,7 +984,7 @@ module Hcode
       # TaskService was already created and assigned in `run` so the headless
       # path shares the same instance; reuse it here for the profilers and the
       # /tasks browser.
-      ts = task_service || Hcode::Tools::Task.service.as(Hcode::Tools::InMemoryTaskService)
+      ts = task_service || H2code::Tools::Task.service.as(H2code::Tools::InMemoryTaskService)
 
       # Wire background-task + cron delivery into the TUI. `deliver_external_prompt`
       # enqueues the message (without a wire-log write) when busy, or starts a
@@ -998,19 +998,19 @@ module Hcode
 
       # Create + start the cron scheduler. Reconcile any persisted tasks on
       # resume; missed fires are coalesced on the next tick.
-      cron_service = Hcode::Tools::LiveCronService.new(
+      cron_service = H2code::Tools::LiveCronService.new(
         store: store,
         agent: agent,
         delivery: delivery,
         enabled: config.cron_enabled?,
         no_stale: config.cron_no_stale?,
       )
-      Hcode::Tools::Cron.service = cron_service
+      H2code::Tools::Cron.service = cron_service
       ts.mark_lost_on_resume
       cron_service.start
 
       # Flush cron state + kill background processes on clean exit.
-      # Control socket for hcode-remote: lets the remote daemon inject
+      # Control socket for h2code-remote: lets the remote daemon inject
       # prompts/interrupts into this live TUI session (external input path).
       control_socket = Remote::ControlSocket.new(
         ->(text : String) { app.deliver_external_prompt(text) },
@@ -1086,26 +1086,26 @@ module Hcode
         store.adopt(new_store)
         store.ensure_wire
         app.session_id = store.read_state.try(&.id) || ""
-        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+        H2code::Tools::PlanMode.plan_service = H2code::Tools::AgentPlanService.new(store.session_dir, "main")
         # Restart the cron scheduler against the fresh session store.
         cron_service.stop
-        new_cron = Hcode::Tools::LiveCronService.new(
+        new_cron = H2code::Tools::LiveCronService.new(
           store: store,
           agent: agent,
           delivery: delivery,
           enabled: config.cron_enabled?,
           no_stale: config.cron_no_stale?,
         )
-        Hcode::Tools::Cron.service = new_cron
+        H2code::Tools::Cron.service = new_cron
         new_cron.start
         control_socket.rebind(store.session_dir)
         nil
       }
       app.on_resume_session = ->(path : String) do
-        # Resuming the session this hcode already owns would trip the
+        # Resuming the session this h2code already owns would trip the
         # session lock (held by this very process) — treat as a no-op.
         if path.chomp("/") == store.session_dir.chomp("/")
-          app.add_message("system", "This session is already open in this hcode.")
+          app.add_message("system", "This session is already open in this h2code.")
         else
           # open_existing! raises FileDeletedError when the picked
           # session's files are gone, and SessionBusyError when another
@@ -1120,18 +1120,18 @@ module Hcode
           store.adopt(resumed)
           app.session_id = resumed.read_state.try(&.id) || resumed.meta_id? || ""
           app.load_transcript_from(agent.context)
-          Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
+          H2code::Tools::PlanMode.plan_service = H2code::Tools::AgentPlanService.new(store.session_dir, "main")
           # Restart the cron scheduler against the resumed session store and
           # reconcile persisted task records (mark non-terminal as Lost).
           cron_service.stop
-          new_cron = Hcode::Tools::LiveCronService.new(
+          new_cron = H2code::Tools::LiveCronService.new(
             store: store,
             agent: agent,
             delivery: delivery,
             enabled: config.cron_enabled?,
             no_stale: config.cron_no_stale?,
           )
-          Hcode::Tools::Cron.service = new_cron
+          H2code::Tools::Cron.service = new_cron
           new_cron.start
           ts.mark_lost_on_resume
           control_socket.rebind(store.session_dir)
@@ -1176,10 +1176,10 @@ module Hcode
           app.model = provider.model_name
           true
         rescue ex : ProviderConfigError
-          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
+          app.add_message("error", H2code.t("errors.provider_switch_failed", message: ex.message.to_s))
           false
         rescue ex
-          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
+          app.add_message("error", H2code.t("errors.provider_switch_failed", message: ex.message.to_s))
           false
         end
       end
@@ -1205,10 +1205,10 @@ module Hcode
           config.save
           true
         rescue ex : ProviderConfigError
-          app.add_message("error", Hcode.t("errors.model_switch_failed", message: ex.message.to_s))
+          app.add_message("error", H2code.t("errors.model_switch_failed", message: ex.message.to_s))
           false
         rescue ex
-          app.add_message("error", Hcode.t("errors.model_switch_failed", message: ex.message.to_s))
+          app.add_message("error", H2code.t("errors.model_switch_failed", message: ex.message.to_s))
           false
         end
       end
@@ -1245,7 +1245,7 @@ module Hcode
           mcp_manager.reconcile(wizard.provider_name.to_s)
           app.model = provider.model_name
         rescue ex : ProviderConfigError
-          app.add_message("error", Hcode.t("errors.provider_switch_failed", message: ex.message.to_s))
+          app.add_message("error", H2code.t("errors.provider_switch_failed", message: ex.message.to_s))
         end
         nil
       end
@@ -1255,14 +1255,14 @@ module Hcode
       # registered (no TodoList in this agent) or the list is empty.
       app.on_fetch_todos = -> : Array({String, String})? do
         todo_tool = agent.tools.get(Tools::Names::TODO_LIST)
-        return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
+        return nil unless t = todo_tool.as?(H2code::Tools::TodoList)
         todos = t.todos
         return nil if todos.empty?
         todos.map { |todo| {todo.title, todo.status.to_s.downcase} }
       end
       app.on_clear_todos = -> : Nil do
         todo_tool = agent.tools.get(Tools::Names::TODO_LIST)
-        return nil unless t = todo_tool.as?(Hcode::Tools::TodoList)
+        return nil unless t = todo_tool.as?(H2code::Tools::TodoList)
         t.todos.clear
         nil
       end
@@ -1275,7 +1275,7 @@ module Hcode
 
       # `/tasks` browser: pull the current task list from the service,
       # stop a task, open its full output.
-      app.on_fetch_tasks = -> : Array(Hcode::Tools::AgentTaskInfo) do
+      app.on_fetch_tasks = -> : Array(H2code::Tools::AgentTaskInfo) do
         task_service.list(active_only: false, limit: 100)
       end
       app.on_stop_task = ->(task_id : String) do
@@ -1287,7 +1287,7 @@ module Hcode
         preview = snapshot.preview
         # Surface the output inline as a system message so the user can read
         # it without leaving the transcript.
-        app.add_message("system", "#{Hcode.t("info.output_of", task_id: task_id)}\n#{preview}")
+        app.add_message("system", "#{H2code.t("info.output_of", task_id: task_id)}\n#{preview}")
         nil
       end
       # `/logout` clears the configured API keys and re-saves config.json.
@@ -1303,8 +1303,8 @@ module Hcode
           begin
             cred_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
             creds = Auth::OAuth.login(credentials_path: cred_path) do |auth|
-              app.on_event(Loop::Event.info(Hcode.t("info.open_auth_url", url: auth.verification_uri_complete)))
-              app.on_event(Loop::Event.info(Hcode.t("info.user_code", code: auth.user_code)))
+              app.on_event(Loop::Event.info(H2code.t("info.open_auth_url", url: auth.verification_uri_complete)))
+              app.on_event(Loop::Event.info(H2code.t("info.user_code", code: auth.user_code)))
             end
             # Rebuild the provider with fresh credentials so the next turn uses
             # them without a restart.
@@ -1316,11 +1316,11 @@ module Hcode
               temperature: config.temperature,
             )
             agent.swap_provider!(provider)
-            app.on_event(Loop::Event.info(Hcode.t("info.login_success", path: cred_path)))
+            app.on_event(Loop::Event.info(H2code.t("info.login_success", path: cred_path)))
           rescue ex : Auth::OAuth::OAuthError
-            app.on_event(Loop::Event.error(Hcode.t("errors.login_failed", message: ex.message.to_s)))
+            app.on_event(Loop::Event.error(H2code.t("errors.login_failed", message: ex.message.to_s)))
           rescue ex
-            app.on_event(Loop::Event.error(Hcode.t("errors.login_error", message: ex.message.to_s)))
+            app.on_event(Loop::Event.error(H2code.t("errors.login_error", message: ex.message.to_s)))
           end
         end
       end
@@ -1342,7 +1342,7 @@ module Hcode
       end
 
       app.on_get_language = -> : String do
-        config.language || Hcode::I18n.resolve_locale
+        config.language || H2code::I18n.resolve_locale
       end
       app.on_language_change = ->(lang : String) do
         config.language = lang
@@ -1388,7 +1388,7 @@ module Hcode
       # turn of a new or resumed session (mirrors TS PluginSessionStartInjector).
       session_starts = plugin_manager.enabled_session_starts
       unless session_starts.empty?
-        catalog = Hcode::Tools::Skill.catalog
+        catalog = H2code::Tools::Skill.catalog
         Plugin::SessionStartInjector.render(session_starts, catalog, agent.context)
       end
 
@@ -1407,7 +1407,7 @@ module Hcode
       # starts immediately. Respects a 24h cache — most startups are a no-op.
       # If a newer version exists, surfaces it as a system message.
       spawn do
-        if msg = Hcode::Upgrader.background_check
+        if msg = H2code::Upgrader.background_check
           app.add_message("system", msg)
           app.dirty!
         end
@@ -1459,7 +1459,7 @@ module Hcode
               # model can toggle it directly via EnterPlanMode/ExitPlanMode,
               # bypassing toggle_plan_mode, which would otherwise leave the
               # input-frame tint and placeholder stale.
-              if svc = Hcode::Tools::PlanMode.plan_service
+              if svc = H2code::Tools::PlanMode.plan_service
                 app.plan_mode = !svc.status.nil?
               end
             when .step_begin?, .step_end?, .info?, .error?, .turn_end?,
@@ -1817,10 +1817,10 @@ module Hcode
 
     private def self.print_usage : Nil
       puts <<-USAGE
-        HCode #{VERSION} — lighter than air AI agent
+        H2Code #{VERSION} — lighter than air AI agent
 
         Usage:
-          hcode -p "your prompt here" [options]
+          h2code -p "your prompt here" [options]
 
         Options:
           -p, --prompt <text>     Prompt to send to the agent
@@ -1840,24 +1840,24 @@ module Hcode
                                   Type / for slash commands
 
         Commands:
-          hcode sync [on|off|code|resync|status]   Cloud sync management
+          h2code sync [on|off|code|resync|status]   Cloud sync management
               sync on                  Enable sync, start daemon, show pairing QR
               sync off                 Stop daemon and disable sync
               sync code                Show current pairing QR
               sync resync [relay-url]  New pairing code + QR (e.g. for a new relay)
               sync status              Show sync status
-          hcode resync [relay-url]                Shortcut for `hcode sync resync`
-          hcode acp                                ACP server for IDE integration
+          h2code resync [relay-url]                Shortcut for `h2code sync resync`
+          h2code acp                                ACP server for IDE integration
 
         Environment:
           MOONSHOT_API_KEY        API key for Moonshot
           MOONSHOT_ENDPOINT       API endpoint (default: https://api.kimi.com/coding/v1)
           MOONSHOT_MODEL          Default model name
-          HCODE_PROVIDER          Provider: #{LLM::Provider.providers.map(&.name).join(" | ")}
-          HCODE_HOME              Config directory (default: ~/.hcode)
+          H2CODE_PROVIDER          Provider: #{LLM::Provider.providers.map(&.name).join(" | ")}
+          H2CODE_HOME              Config directory (default: ~/.h2code)
           HTTP_PROXY              HTTP/HTTPS proxy URL
           ALL_PROXY               SOCKS proxy URL
-          HCODE_DEBUG             Show backtraces on error
+          H2CODE_DEBUG             Show backtraces on error
         USAGE
     end
   end
@@ -1870,7 +1870,7 @@ module Hcode
     def initialize(@app : TUI::App)
     end
 
-    def request(req : Tools::QuestionRequest, signal : ::Hcode::Loop::AbortController?) : Tools::QuestionResult?
+    def request(req : Tools::QuestionRequest, signal : ::H2code::Loop::AbortController?) : Tools::QuestionResult?
       # Capacity 1: the dialog's callback runs synchronously inside
       # handle_input, so a rendezvous channel would deadlock (send waits
       # for receive, receive can't start until handle_input returns).
@@ -2077,4 +2077,4 @@ module Hcode
   end
 end
 
-Hcode::CLI.run(ARGV) unless ARGV.includes?("--no-cli-run")
+H2code::CLI.run(ARGV) unless ARGV.includes?("--no-cli-run")

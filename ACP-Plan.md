@@ -1,7 +1,7 @@
-# ACP Implementation Plan — HCode (Crystal)
+# ACP Implementation Plan — H2Code (Crystal)
 
-**Goal:** Implement an ACP (Agent Client Protocol) server for HCode so IDEs
-(Zed, JetBrains, Neovim, any ACP client) can drive HCode sessions over
+**Goal:** Implement an ACP (Agent Client Protocol) server for H2Code so IDEs
+(Zed, JetBrains, Neovim, any ACP client) can drive H2Code sessions over
 JSON-RPC/stdio.
 
 **Reference:** `ACP-Features-JS.md` — full feature/use-case/edge-case inventory
@@ -43,7 +43,7 @@ Acp::Server ──────────────────────�
        ├─ RequestPermission reverse-RPC                    │
        └─ Config options                                   │
                                                            │
-Entry: `hcode acp` subcommand ────────────────────────────┘
+Entry: `h2code acp` subcommand ────────────────────────────┘
 ```
 
 ---
@@ -59,7 +59,7 @@ src/acp/
   protocol.cr         — ACP wire types (request/response/notification structs)
   approval.cr         — permission reverse-RPC + channel bridge
   convert.cr          — ACP content blocks → prompt parts, tool display → ACP content
-  modes.cr            — ACP mode ↔ HCode permission mode mapping
+  modes.cr            — ACP mode ↔ H2Code permission mode mapping
   auth.cr             — terminal-auth method advertisement + auth gate
   config_options.cr   — model/thinking/mode config option snapshots
   slash.cr            — slash command detection and routing
@@ -152,7 +152,7 @@ end
 | (any other) | — | `methodNotFound (-32601)` |
 
 **Shared setup:** Reuses the config/provider/tools/memory wiring from
-`CLI.run` (lines 245-403 of `hcode.cr`). This should be factored into a
+`CLI.run` (lines 245-403 of `h2code.cr`). This should be factored into a
 `CLI::SessionContext` builder that both headless and ACP modes call.
 
 ```crystal
@@ -236,7 +236,7 @@ class Acp::Session
   end
 
   def set_mode(mode_id : String) : Nil
-    # Map ACP mode → HCode permission mode + plan mode
+    # Map ACP mode → H2Code permission mode + plan mode
   end
 
   def set_model(model_id : String) : Nil
@@ -367,7 +367,7 @@ end
 
 **ACP content blocks → prompt:**
 
-| ACP block type | HCode handling |
+| ACP block type | H2Code handling |
 |---|---|
 | `text` | Extract text; check for leading `/` (slash command) |
 | `image` | Convert data URL → base64; pass to provider if it supports images |
@@ -414,7 +414,7 @@ module Acp::Auth
     JSON.parse(%({
       "id": "login",
       "type": "terminal",
-      "name": "Login with HCode account",
+      "name": "Login with H2Code account",
       "args": ["--login"]
     }))
   end
@@ -458,13 +458,13 @@ end
 
 ---
 
-## Entry Point: `hcode acp` Subcommand
+## Entry Point: `h2code acp` Subcommand
 
-**In `src/hcode.cr`, at the top of `CLI.run`:**
+**In `src/h2code.cr`, at the top of `CLI.run`:**
 
 ```crystal
 def self.run(argv : Array(String)) : Nil
-  # Subcommand dispatch: `hcode acp` starts the ACP server
+  # Subcommand dispatch: `h2code acp` starts the ACP server
   if argv.first? == "acp"
     return run_acp(argv[1..])
   end
@@ -478,8 +478,8 @@ end
 ```crystal
 private def self.run_acp(rest_argv : Array(String)) : Nil
   config = Config::Config.load
-  Hcode::I18n.init(Hcode::I18n.resolve_locale(config.language))
-  config.ensure_hcode_home
+  H2code::I18n.init(H2code::I18n.resolve_locale(config.language))
+  config.ensure_h2code_home
 
   # Handle --login flag (terminal-auth pivot)
   if rest_argv.includes?("--login")
@@ -488,7 +488,7 @@ private def self.run_acp(rest_argv : Array(String)) : Nil
 
   # Provider gate (same as headless)
   unless config.provider_name && config.provider_configured?
-    STDERR.puts Hcode.t("errors.no_provider")
+    STDERR.puts H2code.t("errors.no_provider")
     exit(2)
   end
 
@@ -507,7 +507,7 @@ end
 
 ## Shared Setup Refactor
 
-Lines 245-403 of `hcode.cr` (config load → provider build → memory/tools/permission
+Lines 245-403 of `h2code.cr` (config load → provider build → memory/tools/permission
 → MCP connect → session store → agent) are shared between headless and
 interactive modes. The ACP server needs the same setup.
 
@@ -540,7 +540,7 @@ the setup like `run_headless` does.
 
 ### Phase 1: JSON-RPC Frame + Subcommand Entry
 **Files:** `src/acp/json_rpc.cr`, `src/acp/server.cr`, `src/acp/protocol.cr`,
-`src/hcode.cr` (subcommand dispatch)
+`src/h2code.cr` (subcommand dispatch)
 
 - [ ] Implement `Acp::JsonRpc` with reader fiber, writer mutex, request/response correlation
 - [ ] Implement `Acp::JsonRpcMessage` struct (id, method, params, result, error)
@@ -549,7 +549,7 @@ the setup like `run_headless` does.
 - [ ] Implement graceful shutdown (SIGINT/SIGTERM/EOF → close sessions)
 - [ ] Log to stderr only
 
-**Test:** `echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | hcode acp`
+**Test:** `echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | h2code acp`
 should return a valid `InitializeResponse`.
 
 ### Phase 2: Session Lifecycle
@@ -626,7 +626,7 @@ verify auth gate.
 **Files:** `src/acp/server.cr`, `src/acp/convert.cr`
 
 - [ ] Forward `mcpServers` from `session/new` params to MCP manager
-- [ ] Map ACP MCP transport types (stdio/http/sse) to HCode config
+- [ ] Map ACP MCP transport types (stdio/http/sse) to H2Code config
 - [ ] Drop unsupported transport types with warning
 - [ ] Stdout hygiene audit (ensure no stray prints)
 - [ ] Error response standardization (JSON-RPC error codes)
@@ -665,15 +665,15 @@ verify auth gate.
 
 These Kimi features are deferred for the initial Crystal implementation:
 
-1. **File I/O reverse-RPC** (`fs/read_text_file`, `fs/write_text_file`) — HCode
+1. **File I/O reverse-RPC** (`fs/read_text_file`, `fs/write_text_file`) — H2Code
    always reads/writes locally; bridging through the IDE is a later enhancement.
 2. **Terminal reverse-RPC** (`terminal/*`) — not implemented in Kimi JS either.
-3. **Image compression** — HCode's providers handle image sizing; input-stage
+3. **Image compression** — H2Code's providers handle image sizing; input-stage
    compression can be added later.
 4. **Audio input** — not supported (`promptCapabilities.audio: false`).
 5. **`session/close` / `logout`** — return `methodNotFound`.
 6. **Unstable methods** (18 of 19) — return `methodNotFound`.
-7. **Telemetry** — HCode has no telemetry system.
+7. **Telemetry** — H2Code has no telemetry system.
 8. **ACP `resource`/`resource_link` with blob content** — dropped.
 
 ---
@@ -710,9 +710,9 @@ These Kimi features are deferred for the initial Crystal implementation:
 ```json
 {
   "agent_servers": {
-    "HCode": {
+    "H2Code": {
       "type": "custom",
-      "command": "hcode",
+      "command": "h2code",
       "args": ["acp"],
       "env": {}
     }
@@ -724,8 +724,8 @@ These Kimi features are deferred for the initial Crystal implementation:
 ```json
 {
   "agent_servers": {
-    "HCode": {
-      "command": "/absolute/path/to/hcode",
+    "H2Code": {
+      "command": "/absolute/path/to/h2code",
       "args": ["acp"],
       "env": {}
     }

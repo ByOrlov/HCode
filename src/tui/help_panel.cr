@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Modal `/help` overlay — mirrors Moonshot kimi-code's `HelpPanelComponent`.
     #
@@ -22,15 +22,15 @@ module Hcode
       end
 
       DEFAULT_SHORTCUTS = [
-        Shortcut.new("Enter", Hcode.t("shortcuts.submit")),
-        Shortcut.new("Shift+Enter", Hcode.t("shortcuts.newline")),
-        Shortcut.new("Ctrl+C", Hcode.t("shortcuts.interrupt")),
-        Shortcut.new("Ctrl+D", Hcode.t("shortcuts.exit")),
-        Shortcut.new("Ctrl+S", Hcode.t("shortcuts.steer")),
-        Shortcut.new("Ctrl+G", Hcode.t("shortcuts.external_editor")),
-        Shortcut.new("Ctrl+E", Hcode.t("shortcuts.expand")),
-        Shortcut.new("Esc", Hcode.t("shortcuts.close")),
-        Shortcut.new("Up/Down", Hcode.t("shortcuts.history")),
+        Shortcut.new("Enter", H2code.t("shortcuts.submit")),
+        Shortcut.new("Shift+Enter", H2code.t("shortcuts.newline")),
+        Shortcut.new("Ctrl+C", H2code.t("shortcuts.interrupt")),
+        Shortcut.new("Ctrl+D", H2code.t("shortcuts.exit")),
+        Shortcut.new("Ctrl+S", H2code.t("shortcuts.steer")),
+        Shortcut.new("Ctrl+G", H2code.t("shortcuts.external_editor")),
+        Shortcut.new("Ctrl+E", H2code.t("shortcuts.expand")),
+        Shortcut.new("Esc", H2code.t("shortcuts.close")),
+        Shortcut.new("Up/Down", H2code.t("shortcuts.history")),
       ]
 
       property? visible : Bool = false
@@ -117,18 +117,18 @@ module Hcode
         rule = "#{accent}#{CharWidth.truncate_to_width("─" * cols, cols)}#{r}"
 
         lines << rule
-        lines << truncate("#{primary}#{ANSI.bold} #{Hcode.t("help.title")} #{r}#{muted}#{Hcode.t("help.subtitle")}#{r}", cols)
-        lines << truncate("  #{dim}#{Hcode.t("help.intro")}#{r}", cols)
+        lines << truncate("#{primary}#{ANSI.bold} #{H2code.t("help.title")} #{r}#{muted}#{H2code.t("help.subtitle")}#{r}", cols)
+        lines << truncate("  #{dim}#{H2code.t("help.intro")}#{r}", cols)
         lines << ""
 
-        lines << truncate("  #{ANSI.bold}#{Hcode.t("help.shortcuts_heading")}#{r}", cols)
+        lines << truncate("  #{ANSI.bold}#{H2code.t("help.shortcuts_heading")}#{r}", cols)
         kbd_w = pad_width(@shortcuts.map(&.keys))
         @shortcuts.each do |s|
           lines << truncate("    #{warn}#{s.keys.ljust(kbd_w)}#{r}  #{dim}#{s.description}#{r}", cols)
         end
         lines << ""
 
-        lines << truncate("  #{ANSI.bold}#{Hcode.t("help.commands_heading")}#{r}", cols)
+        lines << truncate("  #{ANSI.bold}#{H2code.t("help.commands_heading")}#{r}", cols)
         sorted = @commands.to_a.sort { |a, b| a.name <=> b.name }
         cmd_w = pad_width(sorted.map(&.name))
         sorted.each do |cmd|

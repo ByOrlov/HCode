@@ -4,7 +4,7 @@
 > + `web-search.md`, `webSearch.ts`, `webSearchService.ts`,
 >   `providers/moonshot-web-search.ts`, `app/auth/configSection.ts`.
 
-Цель — тул `WebSearch` в `hcode.cr/src/tools/web_search.cr` с идентичным
+Цель — тул `WebSearch` в `h2code.cr/src/tools/web_search.cr` с идентичным
 LLM-контрактом. Поиск — через `MoonshotWebSearchProvider`, который дёргает
 `<base_url>` endpoint с телом `{"text_query": "..."}`.
 
@@ -325,7 +325,7 @@ Env: `MOONSHOT_CODE_BASE_URL` (по умолчанию `"https://api.kimi.com/co
   `auto_approve?`.
 - **Условная регистрация**: тул НЕ регистрируется в `Tools::Registry`, если
   `WebSearchProviderService.get_web_search_provider.nil?`. Реализуется
-  проверкой перед `tools.register(WebSearch.new(...))` в `src/hcode.cr`.
+  проверкой перед `tools.register(WebSearch.new(...))` в `src/h2code.cr`.
 
 ---
 
@@ -348,7 +348,7 @@ Env: `MOONSHOT_CODE_BASE_URL` (по умолчанию `"https://api.kimi.com/co
     5. rescue: `classify_search_error` → `ToolResult.error`.
   - [ ] Хелперы: `format_results`, `format_empty`, `classify_search_error`,
         `truncate_to_budget`.
-- [ ] В `src/hcode.cr`:
+- [ ] В `src/h2code.cr`:
   - [ ] Инициализация `WebSearch.service = CompositeWebSearchService.new(...)`.
   - [ ] Условная регистрация только если provider доступен.
 - [ ] Тесты в `spec/tools/web_search_spec.cr`:
@@ -365,7 +365,7 @@ Env: `MOONSHOT_CODE_BASE_URL` (по умолчанию `"https://api.kimi.com/co
 ## 12. Расхождения / допущения
 
 - `MoonshotWebSearchProvider` требует наличия API-key или OAuth-token. Пока
-  в `hcode.cr` нет OAuth, реализовать только API-key path через
+  в `h2code.cr` нет OAuth, реализовать только API-key path через
   `[services.moonshot_search].api_key`. Без него тул не регистрируется.
 - `MoonshotSearchResult.content`/`icon`/`mime` игнорируются (как в JS).
 - `ToolResultBuilder` — упростить до ручной транкации по `MAX_CHARS` с

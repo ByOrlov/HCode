@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Terminal column-width measurement, mirroring the layered architecture of
     # the TypeScript `visibleWidth` pipeline in `packages/pi-tui/src/utils.ts`.

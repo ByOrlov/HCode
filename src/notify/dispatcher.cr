@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Notify
     # Fan-out + per-channel gating. Holds the optional Terminal, Player, and
     # Webhook instances and is called once per transition. Respects per-channel

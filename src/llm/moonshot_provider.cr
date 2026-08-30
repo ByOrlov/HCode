@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     class OAuthCredentials
       include JSON::Serializable
@@ -42,7 +42,7 @@ module Hcode
         # OAuth refresh uses a plaintext POST and does not go through the
         # OpenAIChatProvider transport; proxy support here is intentionally
         # minimal. Users behind a corporate proxy should refresh tokens via
-        # `hcode --login` on a network path that does not require it, or set
+        # `h2code --login` on a network path that does not require it, or set
         # the tokens manually.
         uri = URI.parse("#{oauth_host}/api/oauth/token")
         t = transport || HttpTransport::RealHttpTransport.new(->(u : URI) { HTTP::Client.new(u) })

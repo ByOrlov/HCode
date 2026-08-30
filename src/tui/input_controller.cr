@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     module InputController
       # Maximum number of slash-command hints rendered at once. The list scrolls
@@ -298,7 +298,7 @@ module Hcode
         cfg = @app_config
         editor_cmd = cfg.try(&.editor) || "vim"
         tmp_dir = cfg.try(&.tmp_dir) || "/tmp"
-        tmp_file = File.join(tmp_dir, "hcode-edit-#{Random::Secure.hex(4)}.md")
+        tmp_file = File.join(tmp_dir, "h2code-edit-#{Random::Secure.hex(4)}.md")
         File.write(tmp_file, @editor.expanded_text)
 
         @terminal.restore!
@@ -344,25 +344,25 @@ module Hcode
       end
 
       # Bundle the current session (wire.jsonl, state.json) plus a manifest
-      # (hcode version, provider, model, session id) into a tar.gz the user
+      # (h2code version, provider, model, session id) into a tar.gz the user
       # can share for debugging. Output goes to the OS temp dir. Returns nil
       # when `tar` is unavailable or the session dir is unknown. Mirrors TS
       # `handleExportDebugZipCommand` (which additionally includes the global
-      # log — we add the ~/.hcode log file too when it exists).
+      # log — we add the ~/.h2code log file too when it exists).
       private def export_debug_bundle : String?
         return nil if @session_id.empty?
         return nil unless session_dir = @on_session_dir.try(&.call)
         return nil unless Process.find_executable("tar")
 
         tmp_dir = @app_config.try(&.tmp_dir) || "/tmp"
-        bundle_dir = File.join(tmp_dir, "hcode-debug-#{Random::Secure.hex(4)}")
+        bundle_dir = File.join(tmp_dir, "h2code-debug-#{Random::Secure.hex(4)}")
         Dir.mkdir_p(bundle_dir)
 
         # Manifest with version / provider / model / timestamps.
         manifest_path = File.join(bundle_dir, "manifest.txt")
         manifest = String.build do |s|
-          s << "hcode_version=#{Hcode::VERSION}\n"
-          s << "build=#{Hcode.build_date || "dev"}\n"
+          s << "h2code_version=#{H2code::VERSION}\n"
+          s << "build=#{H2code.build_date || "dev"}\n"
           s << "crystal=#{Crystal::VERSION}\n"
           s << "session_id=#{@session_id}\n"
           s << "provider=#{@provider_name}\n"
@@ -379,12 +379,12 @@ module Hcode
         File.copy(state_src, File.join(bundle_dir, "state.json")) if File.exists?(state_src)
 
         # Copy the global log when present.
-        global_log = File.join(@home, ".hcode", "hcode.log")
+        global_log = File.join(@home, ".h2code", "h2code.log")
         if File.exists?(global_log)
-          File.copy(global_log, File.join(bundle_dir, "hcode.log"))
+          File.copy(global_log, File.join(bundle_dir, "h2code.log"))
         end
 
-        out_path = File.join(tmp_dir, "hcode-debug-#{Time.utc.to_unix}.tar.gz")
+        out_path = File.join(tmp_dir, "h2code-debug-#{Time.utc.to_unix}.tar.gz")
         begin
           Process.run("tar", ["-czf", out_path, "-C", File.dirname(bundle_dir), File.basename(bundle_dir)],
             output: Process::Redirect::Close, error: Process::Redirect::Close)
@@ -404,7 +404,7 @@ module Hcode
       private def toggle_plan_mode : Nil
         cb = @on_plan_mode
         if cb.nil?
-          emit_to_log(Message.new("error", Hcode.t("ui.plan_not_wired")))
+          emit_to_log(Message.new("error", H2code.t("ui.plan_not_wired")))
           return
         end
         desired = !@plan_mode
@@ -414,7 +414,7 @@ module Hcode
           # Callback exists but failed (e.g. service raised). Sync from the
           # service when possible so the flag tracks reality instead of
           # flipping blindly, and surface a distinct error.
-          emit_to_log(Message.new("error", Hcode.t("ui.plan_toggle_failed")))
+          emit_to_log(Message.new("error", H2code.t("ui.plan_toggle_failed")))
         end
       end
 
@@ -424,8 +424,8 @@ module Hcode
       private def toggle_debug_zones : Nil
         @debug_zones = !@debug_zones
         @on_debug_zones_change.try(&.call(@debug_zones))
-        state = @debug_zones ? Hcode.t("ui.debugzones_on") : Hcode.t("ui.debugzones_off")
-        emit_to_log(Message.new("system", "#{Hcode.t("commands.debugzones")}: #{state}"))
+        state = @debug_zones ? H2code.t("ui.debugzones_on") : H2code.t("ui.debugzones_off")
+        emit_to_log(Message.new("system", "#{H2code.t("commands.debugzones")}: #{state}"))
       end
 
       private def handle_slash_command(input : String) : Nil
@@ -557,7 +557,7 @@ module Hcode
         when "/language"
           handle_language_command(args)
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.unknown_command", cmd: cmd)))
+          emit_to_log(Message.new("error", H2code.t("ui.unknown_command", cmd: cmd)))
         end
 
         @show_command_hints = false
@@ -566,53 +566,53 @@ module Hcode
       end
 
       private def handle_swarm_command(args : String) : Nil
-        service = Hcode::Tools::SwarmMode.service
+        service = H2code::Tools::SwarmMode.service
         unless service
-          emit_to_log(Message.new("error", Hcode.t("ui.swarm_not_wired")))
+          emit_to_log(Message.new("error", H2code.t("ui.swarm_not_wired")))
           return
         end
 
         sub = args.strip.downcase
         case sub
         when "on"
-          enable_swarm_mode(service, Hcode::Tools::SwarmTrigger::Manual)
+          enable_swarm_mode(service, H2code::Tools::SwarmTrigger::Manual)
         when "off"
           disable_swarm_mode(service)
         when ""
-          service.active? ? disable_swarm_mode(service) : enable_swarm_mode(service, Hcode::Tools::SwarmTrigger::Manual)
+          service.active? ? disable_swarm_mode(service) : enable_swarm_mode(service, H2code::Tools::SwarmTrigger::Manual)
         else
           # `/swarm <prompt>`: a one-shot swarm task. Enters with the `task`
           # trigger so `Loop::Agent` auto-exits (and leaves an exit-reminder)
           # at the end of this turn.
           if @agent_busy
-            emit_to_log(Message.new("error", Hcode.t("ui.swarm_busy")))
+            emit_to_log(Message.new("error", H2code.t("ui.swarm_busy")))
             return
           end
-          service.enter(Hcode::Tools::SwarmTrigger::Task)
-          emit_to_log(Message.new("system", Hcode.t("ui.swarm_task_started")))
+          service.enter(H2code::Tools::SwarmTrigger::Task)
+          emit_to_log(Message.new("system", H2code.t("ui.swarm_task_started")))
           start_turn(args.strip)
         end
       end
 
-      private def enable_swarm_mode(service : Hcode::Tools::SwarmModeService,
-                                    trigger : Hcode::Tools::SwarmTrigger) : Nil
+      private def enable_swarm_mode(service : H2code::Tools::SwarmModeService,
+                                    trigger : H2code::Tools::SwarmTrigger) : Nil
         if service.active?
-          emit_to_log(Message.new("system", Hcode.t("ui.swarm_already_on")))
+          emit_to_log(Message.new("system", H2code.t("ui.swarm_already_on")))
           return
         end
         service.enter(trigger)
-        emit_to_log(Message.new("system", Hcode.t("ui.swarm_mode_state",
-          state: Hcode.t("ui.swarm_mode_on"))))
+        emit_to_log(Message.new("system", H2code.t("ui.swarm_mode_state",
+          state: H2code.t("ui.swarm_mode_on"))))
       end
 
-      private def disable_swarm_mode(service : Hcode::Tools::SwarmModeService) : Nil
+      private def disable_swarm_mode(service : H2code::Tools::SwarmModeService) : Nil
         unless service.active?
-          emit_to_log(Message.new("system", Hcode.t("ui.swarm_already_off")))
+          emit_to_log(Message.new("system", H2code.t("ui.swarm_already_off")))
           return
         end
         service.exit
-        emit_to_log(Message.new("system", Hcode.t("ui.swarm_mode_state",
-          state: Hcode.t("ui.swarm_mode_off"))))
+        emit_to_log(Message.new("system", H2code.t("ui.swarm_mode_state",
+          state: H2code.t("ui.swarm_mode_off"))))
       end
 
       private def handle_plugins_command(args : String) : Nil
@@ -637,13 +637,13 @@ module Hcode
         end
         return false unless match
 
-        expanded = Hcode::Plugin::CommandLoader.expand_arguments(match.body, args)
+        expanded = H2code::Plugin::CommandLoader.expand_arguments(match.body, args)
         submit_message(expanded)
         true
       end
 
       private def handle_goal_command(args : String) : Nil
-        service = Hcode::Tools::Goal.service
+        service = H2code::Tools::Goal.service
         unless service
           emit_to_log(Message.new("error", "Goal service is not wired up."))
           return
@@ -656,68 +656,68 @@ module Hcode
           if snapshot
             emit_to_log(Message.new("system", format_goal_snapshot(snapshot)))
           else
-            emit_to_log(Message.new("system", Hcode.t("ui.no_active_goal")))
+            emit_to_log(Message.new("system", H2code.t("ui.no_active_goal")))
           end
         when "pause"
           begin
             snapshot = service.pause_goal
-            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}"))
+            emit_to_log(Message.new("system", "#{H2code.t("ui.goal_paused")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            emit_to_log(Message.new("error", Hcode.t("ui.cannot_pause", message: ex.message.to_s)))
+            emit_to_log(Message.new("error", H2code.t("ui.cannot_pause", message: ex.message.to_s)))
           end
         when "resume"
           begin
             snapshot = service.resume_goal
-            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}"))
+            emit_to_log(Message.new("system", "#{H2code.t("ui.goal_resumed")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            emit_to_log(Message.new("error", Hcode.t("ui.cannot_resume", message: ex.message.to_s)))
+            emit_to_log(Message.new("error", H2code.t("ui.cannot_resume", message: ex.message.to_s)))
           end
         when "cancel"
           begin
             snapshot = service.cancel_goal
-            emit_to_log(Message.new("system", "#{Hcode.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}"))
+            emit_to_log(Message.new("system", "#{H2code.t("ui.goal_cancelled")}\n#{format_goal_snapshot(snapshot)}"))
           rescue ex
-            emit_to_log(Message.new("error", Hcode.t("ui.cannot_cancel", message: ex.message.to_s)))
+            emit_to_log(Message.new("error", H2code.t("ui.cannot_cancel", message: ex.message.to_s)))
           end
         else
-          emit_to_log(Message.new("error", Hcode.t("ui.usage_goal")))
+          emit_to_log(Message.new("error", H2code.t("ui.usage_goal")))
         end
       end
 
-      private def format_goal_snapshot(s : Hcode::Tools::GoalSnapshot) : String
+      private def format_goal_snapshot(s : H2code::Tools::GoalSnapshot) : String
         String.build do |str|
-          str << "#{Hcode.t("ui.goal_label")}: #{s.objective}\n"
-          str << "#{Hcode.t("ui.goal_status")}: #{s.status}\n"
-          str << "#{Hcode.t("ui.goal_id")}: #{s.goal_id}\n"
+          str << "#{H2code.t("ui.goal_label")}: #{s.objective}\n"
+          str << "#{H2code.t("ui.goal_status")}: #{s.status}\n"
+          str << "#{H2code.t("ui.goal_id")}: #{s.goal_id}\n"
           if c = s.completion_criterion
-            str << "#{Hcode.t("ui.goal_completion")}: #{c}\n"
+            str << "#{H2code.t("ui.goal_completion")}: #{c}\n"
           end
           if r = s.terminal_reason
-            str << "#{Hcode.t("ui.goal_reason")}: #{r}\n"
+            str << "#{H2code.t("ui.goal_reason")}: #{r}\n"
           end
         end.strip
       end
 
       private def handle_language_command(args : String) : Nil
-        supported = Hcode::I18n.available_locales
+        supported = H2code::I18n.available_locales
         lang = args.strip.downcase
         if lang.empty?
-          current = @on_get_language.try(&.call) || Hcode::I18n.resolve_locale
+          current = @on_get_language.try(&.call) || H2code::I18n.resolve_locale
           emit_to_log(Message.new("system",
-            "#{Hcode.t("ui.current_language", name: current)}\n" \
-            "#{Hcode.t("ui.available_languages", list: supported.join(", "))}\n" \
-            "#{Hcode.t("ui.usage_language", list: supported.join("|"))}"))
+            "#{H2code.t("ui.current_language", name: current)}\n" \
+            "#{H2code.t("ui.available_languages", list: supported.join(", "))}\n" \
+            "#{H2code.t("ui.usage_language", list: supported.join("|"))}"))
           return
         end
         unless supported.includes?(lang)
           emit_to_log(Message.new("error",
-            Hcode.t("language.unknown", name: lang) + "\n" +
-            Hcode.t("language.available", list: supported.join(", "))))
+            H2code.t("language.unknown", name: lang) + "\n" +
+            H2code.t("language.available", list: supported.join(", "))))
           return
         end
         @on_language_change.try(&.call(lang))
-        Hcode::I18n.activate(lang)
-        emit_to_log(Message.new("system", Hcode.t("language.changed", name: lang)))
+        H2code::I18n.activate(lang)
+        emit_to_log(Message.new("system", H2code.t("language.changed", name: lang)))
       end
 
       private def open_tasks_browser : Nil
@@ -820,7 +820,7 @@ module Hcode
 
       private def open_provider_selector : Nil
         items = LLM::Provider.providers.map(&.name)
-        @provider_list.show(Hcode.t("ui.select_provider"), items)
+        @provider_list.show(H2code.t("ui.select_provider"), items)
         @provider_list.selected = items.index(@provider_name) || 0
         # Discard a queued Enter that was batched with the /provider submit,
         # otherwise it would close the selector on the very next read_key.
@@ -901,7 +901,7 @@ module Hcode
       SUDO_MODES       = ["request", "always", "off"]
 
       private def open_permission_selector : Nil
-        @permission_list.show(Hcode.t("ui.select_permission"), PERMISSION_MODES)
+        @permission_list.show(H2code.t("ui.select_permission"), PERMISSION_MODES)
         @permission_list.selected = PERMISSION_MODES.index(@permission_mode) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -931,7 +931,7 @@ module Hcode
 
       private def open_effort_selector : Nil
         current = @on_get_effort.try(&.call) || "off"
-        @effort_list.show(Hcode.t("ui.select_effort"), EFFORT_LEVELS)
+        @effort_list.show(H2code.t("ui.select_effort"), EFFORT_LEVELS)
         @effort_list.selected = EFFORT_LEVELS.index(current) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -948,9 +948,9 @@ module Hcode
           @dirty = true
           if cb = @on_set_effort
             cb.call(effort)
-            emit_to_log(Message.new("system", Hcode.t("ui.effort_set", name: effort)))
+            emit_to_log(Message.new("system", H2code.t("ui.effort_set", name: effort)))
           else
-            emit_to_log(Message.new("system", Hcode.t("ui.effort_not_wired")))
+            emit_to_log(Message.new("system", H2code.t("ui.effort_not_wired")))
           end
         when .escape?
           @effort_list.hide
@@ -959,7 +959,7 @@ module Hcode
       end
 
       private def open_theme_selector : Nil
-        @theme_list.show(Hcode.t("ui.select_theme"), THEMES)
+        @theme_list.show(H2code.t("ui.select_theme"), THEMES)
         @theme_list.selected = THEMES.index(@theme.name) || 0
         @input.drain_pending_enters
         @dirty = true
@@ -975,7 +975,7 @@ module Hcode
           @theme_list.hide
           @dirty = true
           @theme = name == "light" ? Theme.light : Theme.dark
-          emit_to_log(Message.new("system", Hcode.t("ui.theme_set", name: name)))
+          emit_to_log(Message.new("system", H2code.t("ui.theme_set", name: name)))
           invalidate_log_cache!
         when .escape?
           @theme_list.hide
@@ -1034,7 +1034,7 @@ module Hcode
       private def open_session_selector(mode : Symbol) : Nil
         @session_picker_mode = mode
         include_archived = mode == :restore
-        title = include_archived ? Hcode.t("ui.restore_session") : Hcode.t("ui.resume_session")
+        title = include_archived ? H2code.t("ui.restore_session") : H2code.t("ui.resume_session")
 
         # Scope to the current workspace so sessions from other folders don't
         # mix in. Falls back to all sessions when @work_dir is unset (e.g. in
@@ -1106,11 +1106,11 @@ module Hcode
                 emit_to_log(Message.new("error",
                   "Session file was deleted, cannot resume: #{entry.label} (#{ex.session_dir})"))
               rescue ex : Session::SessionBusyError
-                # Another live hcode process owns the session — a second
+                # Another live h2code process owns the session — a second
                 # writer would interleave two conversations into one wire
                 # log. Keep the current session intact.
                 emit_to_log(Message.new("error",
-                  "Session is open in another hcode process, cannot resume: #{entry.label} (#{ex.message})"))
+                  "Session is open in another h2code process, cannot resume: #{entry.label} (#{ex.message})"))
               end
             else
               emit_to_log(Message.new("error", "Session resume is not wired up."))
@@ -1138,7 +1138,7 @@ module Hcode
             if models.empty?
               emit_to_log(Message.new("system", "No models available for current provider."))
             else
-              @model_list.show(Hcode.t("ui.select_model", name: @provider_name), models)
+              @model_list.show(H2code.t("ui.select_model", name: @provider_name), models)
               @model_list.selected = models.index(@model) || 0
             end
           rescue ex

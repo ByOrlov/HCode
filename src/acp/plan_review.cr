@@ -2,11 +2,11 @@ require "json"
 require "../tools/plan_mode"
 require "./json_rpc"
 
-module Hcode
+module H2code
   module Acp
     # Bridges ExitPlanMode's interactive plan review over a custom reverse-RPC
     # (`session/plan_review`) to the ACP client — in the hibechat chain that is
-    # the hcode-remote daemon, which forwards the payload to the chat UI as a
+    # the h2code-remote daemon, which forwards the payload to the chat UI as a
     # `plan.review` frame and answers with the user's decision
     # (see hibechat PROTOCOL.md).
     #

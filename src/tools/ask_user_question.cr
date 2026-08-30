@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # AskUserQuestion — структурированный опрос пользователя (1–4 вопроса,
     # 2–4 опции каждый, опционально multi-select, опционально в фоне).
@@ -382,7 +382,7 @@ module Hcode
 
     abstract class QuestionService
       abstract def request(req : QuestionRequest,
-                           signal : ::Hcode::Loop::AbortController?) : QuestionResult?
+                           signal : ::H2code::Loop::AbortController?) : QuestionResult?
     end
 
     # Минимальный контракт фоновой службы задач (используется AskUserQuestion
@@ -393,7 +393,7 @@ module Hcode
       # signal. Возвращает task_id.
       abstract def register_question_task(description : String,
                                           question_count : Int32,
-                                          &run : ::Hcode::Loop::AbortController? -> String) : String
+                                          &run : ::H2code::Loop::AbortController? -> String) : String
 
       # Текущий статус задачи по id (или nil если не найдена).
       abstract def task_status(task_id : String) : String?

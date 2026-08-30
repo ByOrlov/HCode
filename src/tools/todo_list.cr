@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # TodoList — structured TODO list management tool.
     #

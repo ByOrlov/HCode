@@ -89,7 +89,7 @@ ASSISTANT_SIZE =     1_500
 USER_SIZE      =       200
 
 N_TURNS      = 100 # ~300 tool calls total
-MAX_TOKENS   = ENV["HCODE_MAX_TOKENS"]?.try(&.to_i?) || 262_144
+MAX_TOKENS   = ENV["H2CODE_MAX_TOKENS"]?.try(&.to_i?) || 262_144
 COMPACT_KEEP = 6
 
 puts "=== Edit + Read + Bash + thinking retention benchmark ==="
@@ -101,7 +101,7 @@ puts
 measurements = [] of Measurement
 measurements << measure("Baseline")
 
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = MAX_TOKENS
 memory.add_user("Initial prompt")
 measurements << measure("After Memory.new")
@@ -130,7 +130,7 @@ N_TURNS.times do |i|
   old_str = "o" * EDIT_OLD_SIZE
   new_str = "n" * EDIT_NEW_SIZE
   edit_args = %Q{{"path":"src/file#{i}.cr","old_string":"#{old_str}","new_string":"#{new_str}"}}
-  edit_tc = Hcode::LLM::ToolCall.new("tc_edit_#{i}", Hcode::LLM::ToolCallFunction.new("Edit", edit_args))
+  edit_tc = H2code::LLM::ToolCall.new("tc_edit_#{i}", H2code::LLM::ToolCallFunction.new("Edit", edit_args))
 
   memory.add_assistant(assistant_edit, [edit_tc])
   memory.add_tool_result("tc_edit_#{i}", "Edited src/file#{i}.cr")
@@ -139,32 +139,32 @@ N_TURNS.times do |i|
   thinking_read = "t" * THINKING_SIZE
   assistant_read = thinking_read + ("a" * ASSISTANT_SIZE)
   read_args = %Q{{"file_path":"src/file#{i}.cr"}}
-  read_tc = Hcode::LLM::ToolCall.new("tc_read_#{i}", Hcode::LLM::ToolCallFunction.new("Read", read_args))
+  read_tc = H2code::LLM::ToolCall.new("tc_read_#{i}", H2code::LLM::ToolCallFunction.new("Read", read_args))
 
   memory.add_assistant(assistant_read, [read_tc])
 
   # Read result goes through Context::Budget the same way ToolBatch does.
   raw_read = "r" * READ_RESULT
-  budgeted_read, _tr = Hcode::Context::Budget.budget("Read", "tc_read_#{i}", raw_read)
+  budgeted_read, _tr = H2code::Context::Budget.budget("Read", "tc_read_#{i}", raw_read)
   memory.add_tool_result("tc_read_#{i}", budgeted_read)
 
   # === STEP 3: Bash call ===
   thinking_bash = "t" * THINKING_SIZE
   assistant_bash = thinking_bash + ("a" * ASSISTANT_SIZE)
   bash_args = %Q{{"command":"crystal spec && crystal tool format --check src/"}}
-  bash_tc = Hcode::LLM::ToolCall.new("tc_bash_#{i}", Hcode::LLM::ToolCallFunction.new("Bash", bash_args))
+  bash_tc = H2code::LLM::ToolCall.new("tc_bash_#{i}", H2code::LLM::ToolCallFunction.new("Bash", bash_args))
 
   memory.add_assistant(assistant_bash, [bash_tc])
 
   raw_bash = "b" * BASH_RESULT
-  budgeted_bash, _tb = Hcode::Context::Budget.budget("Bash", "tc_bash_#{i}", raw_bash)
+  budgeted_bash, _tb = H2code::Context::Budget.budget("Bash", "tc_bash_#{i}", raw_bash)
   memory.add_tool_result("tc_bash_#{i}", budgeted_bash)
 
   # === Compaction: mirrors Loop::Agent#trigger_compaction ===
   if memory.near_limit?
     old = memory.history
     kept_count = Math.min(COMPACT_KEEP, old.size)
-    kept = old[-kept_count..] || [] of Hcode::Context::ContextMessage
+    kept = old[-kept_count..] || [] of H2code::Context::ContextMessage
     summary = "[compaction summary after turn #{i}]"
     memory.apply_compaction(summary, kept)
   end
@@ -203,12 +203,12 @@ tui_m = measure("2. TUI transcript (previews only)",
   "msgs=#{tui_messages.size}, stored=#{(tui_messages.sum { |_, c| c.bytesize } / 1_048_576.0).round(2)}MB")
 
 # Phase 3: simulate per-step JSON request serialization peak.
-_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
 _json_body = _request.to_json
 json_m = measure("3. JSON request body", "#{(_json_body.bytesize / 1_048_576.0).round(2)} MB")
 
 # Phase 4: simulate one full markdown render of the TUI transcript (peak).
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered_bytes = 0_i64
 tui_messages.each do |_, content|
   next if content.empty?
@@ -219,7 +219,7 @@ render_m = measure("4. Markdown render all TUI msgs", "#{(rendered_bytes / 1_048
 # Phase 5: clear one thing at a time.
 _json_body = nil
 _request = nil
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 measure("5. After JSON+request cleared")
 
 tui_messages.clear

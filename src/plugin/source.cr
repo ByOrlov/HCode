@@ -1,6 +1,6 @@
 require "uri"
 
-module Hcode
+module H2code
   module Plugin
     struct GithubSource
       property owner : String

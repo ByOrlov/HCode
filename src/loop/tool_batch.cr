@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Loop
     # Result produced by one fiber in a parallel tool batch.
     struct ToolBatchResult

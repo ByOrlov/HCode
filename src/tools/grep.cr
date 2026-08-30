@@ -1,6 +1,6 @@
 require "./sensitive"
 
-module Hcode
+module H2code
   module Tools
     class Grep < Tool
       DEFAULT_TIMEOUT_S  = 20

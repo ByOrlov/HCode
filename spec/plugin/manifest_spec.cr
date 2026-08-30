@@ -1,6 +1,6 @@
 require "../spec_helper"
 
-describe Hcode::Plugin::ManifestParser do
+describe H2code::Plugin::ManifestParser do
   it "parses a valid manifest with all fields" do
     with_tmpdir do |dir|
       manifest = {
@@ -16,7 +16,7 @@ describe Hcode::Plugin::ManifestParser do
       }
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)
 
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       result.has_error?.should be_false
       m = result.manifest.should_not be_nil
 
@@ -32,7 +32,7 @@ describe Hcode::Plugin::ManifestParser do
   it "errors when name is missing" do
     with_tmpdir do |dir|
       File.write(File.join(dir, "kimi.plugin.json"), %({"description": "no name"}))
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       result.manifest.should be_nil
       result.has_error?.should be_true
       result.diagnostics.any?(&.message.includes?("\"name\" is required")).should be_true
@@ -42,7 +42,7 @@ describe Hcode::Plugin::ManifestParser do
   it "errors when name does not match regex" do
     with_tmpdir do |dir|
       File.write(File.join(dir, "kimi.plugin.json"), %({"name": "Bad Name!"}))
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       result.manifest.should be_nil
       result.diagnostics.any?(&.message.includes?("must match")).should be_true
     end
@@ -52,7 +52,7 @@ describe Hcode::Plugin::ManifestParser do
     with_tmpdir do |dir|
       File.write(File.join(dir, "kimi.plugin.json"), %({"name": "auto-skill"}))
       File.write(File.join(dir, "SKILL.md"), "# My Skill\n\nInstructions")
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       m = result.manifest.should_not be_nil
       m.skills.should eq([dir])
     end
@@ -60,7 +60,7 @@ describe Hcode::Plugin::ManifestParser do
 
   it "errors when no manifest file found" do
     with_tmpdir do |dir|
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       result.manifest.should be_nil
       result.diagnostics.any?(&.message.includes?("No manifest")).should be_true
     end
@@ -79,7 +79,7 @@ describe Hcode::Plugin::ManifestParser do
       }
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)
 
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       m = result.manifest.should_not be_nil
       m.mcp_servers.size.should eq(1)
       cfg = m.mcp_servers["server1"]
@@ -93,12 +93,12 @@ describe Hcode::Plugin::ManifestParser do
       manifest = {
         "name"  => "hooks-plugin",
         "hooks" => [
-          {"event" => "PreToolUse", "matcher" => Hcode::Tools::Names::BASH, "command" => "echo check"},
+          {"event" => "PreToolUse", "matcher" => H2code::Tools::Names::BASH, "command" => "echo check"},
         ],
       }
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)
 
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       m = result.manifest.should_not be_nil
       m.hooks.size.should eq(1)
       m.hooks[0].event.should eq("PreToolUse")
@@ -114,7 +114,7 @@ describe Hcode::Plugin::ManifestParser do
       manifest = {"name" => "cmd-plugin", "commands" => "./commands/"}
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)
 
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       m = result.manifest.should_not be_nil
       m.commands.size.should eq(1)
       m.commands[0].name.should eq("report")
@@ -126,7 +126,7 @@ describe Hcode::Plugin::ManifestParser do
       manifest = {"name" => "test", "tools" => ["some-tool"]}
       File.write(File.join(dir, "kimi.plugin.json"), manifest.to_json)
 
-      result = Hcode::Plugin::ManifestParser.parse(dir)
+      result = H2code::Plugin::ManifestParser.parse(dir)
       result.diagnostics.any? { |d|
         d.severity.info? && d.message.includes?("\"tools\"")
       }.should be_true

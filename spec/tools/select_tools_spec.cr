@@ -1,20 +1,20 @@
 require "../spec_helper"
 require "../../src/tools/select_tools"
 
-describe Hcode::Tools::SelectTools do
+describe H2code::Tools::SelectTools do
   before_each do
-    Hcode::Tools::ToolSelect.service = Hcode::Tools::InMemoryToolSelectService.new(
+    H2code::Tools::ToolSelect.service = H2code::Tools::InMemoryToolSelectService.new(
       loadable: ["a", "b", "c"],
       active: ["c"]
     )
   end
   after_each do
-    Hcode::Tools::ToolSelect.service = nil
+    H2code::Tools::ToolSelect.service = nil
   end
 
   it "exposes snake_case JS-name and identical schema" do
-    tool = Hcode::Tools::SelectTools.new
-    tool.name.should eq(Hcode::Tools::Names::SELECT_TOOLS)
+    tool = H2code::Tools::SelectTools.new
+    tool.name.should eq(H2code::Tools::Names::SELECT_TOOLS)
     props = tool.parameters["properties"].as_h
     props.has_key?("names").should be_true
     tool.parameters["required"].as_a.map(&.as_s).should eq(["names"])
@@ -22,7 +22,7 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "loads requested tools and reports already-available" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a", "b", "c"] })))
     result.is_error?.should be_false
     result.content.should contain("Loaded: a, b")
@@ -30,7 +30,7 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "reports unknown tools" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["x", "y"] })))
     result.is_error?.should be_true
     result.content.should contain("Unknown tool: x.")
@@ -39,7 +39,7 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "partial case: mixed load + already-available + unknown" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a", "c", "z"] })))
     result.is_error?.should be_false
     result.content.should contain("Loaded: a")
@@ -48,57 +48,57 @@ describe Hcode::Tools::SelectTools do
   end
 
   it "is_error true when only unknown" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["unknown_tool"] })))
     result.is_error?.should be_true
   end
 
   it "is_error false when at least one loaded or already-available" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
     result.is_error?.should be_false
   end
 
   it "rejects empty names array" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": [] })))
     result.is_error?.should be_true
     result.content.should contain("must be a non-empty array")
   end
 
   it "rejects missing names field" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_true
     result.content.should contain("must be a non-empty array")
   end
 
   it "filters out empty strings in names" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["", "a"] })))
     result.is_error?.should be_false
     result.content.should contain("Loaded: a")
   end
 
   it "refuses when disabled" do
-    service = Hcode::Tools::ToolSelect.service.as(Hcode::Tools::InMemoryToolSelectService)
+    service = H2code::Tools::ToolSelect.service.as(H2code::Tools::InMemoryToolSelectService)
     service.disable!
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
     result.is_error?.should be_true
     result.content.should contain("not available for the current model")
   end
 
   it "fails when no service is registered" do
-    Hcode::Tools::ToolSelect.service = nil
-    tool = Hcode::Tools::SelectTools.new
+    H2code::Tools::ToolSelect.service = nil
+    tool = H2code::Tools::SelectTools.new
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))
     result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 
   it "marks tools as active after successful load" do
-    tool = Hcode::Tools::SelectTools.new
+    tool = H2code::Tools::SelectTools.new
     tool.execute(JSON.parse(%({ "names": ["a"] })))
     # Second call — a should now be already_available.
     result = tool.execute(JSON.parse(%({ "names": ["a"] })))

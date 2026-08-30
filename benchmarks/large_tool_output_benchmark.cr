@@ -78,7 +78,7 @@ measurements << measure("Baseline")
 
 _tool_output = "t" * TOOL_SIZE
 
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = 262144
 memory.add_user("Read a big file")
 memory.add_assistant("")
@@ -91,11 +91,11 @@ messages << TUIMessage.new("assistant", "")
 messages << TUIMessage.new("tool", tool_preview_text(_tool_output))
 tui_m = measure("2. TUI transcript (preview only)", "preview #{(messages[-1].content.bytesize / 1_048_576.0).round(3)} MB")
 
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered = markdown.render("```\n#{messages[-1].content}\n```", COLS)
 render_m = measure("3. Markdown render of preview", "#{rendered.size} lines")
 
-_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
 _json_body = _request.to_json
 json_m = measure("4. JSON request body", "#{(_json_body.bytesize / 1_048_576.0).round(2)} MB")
 

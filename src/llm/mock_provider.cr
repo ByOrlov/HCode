@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # One scripted step of a MockProvider replay: the MessageParts to stream
     # through the block and the stop_reason to report. A step whose stop_reason
@@ -25,7 +25,7 @@ module Hcode
     # the agent's run_turn / parallel tool batch / termination all execute
     # against real tool calls — with no network or API key.
     #
-    # Select it at runtime via `HCODE_PROVIDER=mock` or `[provider] default =
+    # Select it at runtime via `H2CODE_PROVIDER=mock` or `[provider] default =
     # "mock"` to exercise the loop without burning tokens.
     class MockProvider < Provider
       DEFAULT_MODEL = "mock"
@@ -57,7 +57,7 @@ module Hcode
 
       # Thinking-only demo: ~5 s of streamed reasoning (10 ThinkParts × 500 ms),
       # then a short text answer. Use with:
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=thinking
       THINKING_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -81,7 +81,7 @@ module Hcode
 
       # Thinking + tools demo: ~3 s of reasoning, then a Glob tool call, then
       # a final text answer. Tests the thinking → tool-call transition.
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=thinking-tools
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=thinking-tools
       THINKING_TOOLS_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -106,7 +106,7 @@ module Hcode
       # Markdown rendering demo: streams a reply that exercises the TUI's
       # markdown renderer — headings, emphasis, inline code, lists, a fenced
       # code block, a table, a blockquote and a horizontal rule. Use with:
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=markdown
       # Long (~200-line) streamed preamble so the TUI exercises scrolling and
       # incremental render over a large reply, before the markdown showcase.
       # Each line carries a `Line N of T:` prefix and an alternating `----`/`+`
@@ -157,7 +157,7 @@ module Hcode
             TextPart.new("[1, 2, 3].each do | n |\n  puts n\nend\n"),
             TextPart.new("```\n\n"),
             TextPart.new("## Table\n\n"),
-            TextPart.new("| File | Purpose |\n| --- | --- |\n| `src/hcode.cr` | Entry point |\n| `src/llm/` | Provider layer |\n| `src/tui/` | Terminal UI |\n| `src/tui/markdown.cr` | Markdown renderer with ANSI-aware wrapping, cell overflow, and inline code styling — handles tables, lists, blockquotes, code fences, horizontal rules, headings, bold, italic, strikethrough, links, task lists, nested structures, wide characters, emoji width measurement, and proportional column shrinking when content exceeds terminal width |\n\n"),
+            TextPart.new("| File | Purpose |\n| --- | --- |\n| `src/h2code.cr` | Entry point |\n| `src/llm/` | Provider layer |\n| `src/tui/` | Terminal UI |\n| `src/tui/markdown.cr` | Markdown renderer with ANSI-aware wrapping, cell overflow, and inline code styling — handles tables, lists, blockquotes, code fences, horizontal rules, headings, bold, italic, strikethrough, links, task lists, nested structures, wide characters, emoji width measurement, and proportional column shrinking when content exceeds terminal width |\n\n"),
             TextPart.new("> Markdown renders cleanly in the terminal.\n\n"),
             TextPart.new("---\n\n"),
             TextPart.new("That covers every block the renderer supports."),
@@ -174,7 +174,7 @@ module Hcode
       # extra blank line; when the next token arrives it is re-absorbed into the
       # list item and the blank line disappears. This makes the Active zone
       # shrink/grow on every list item and drives SyncBugsCount up.
-      # Use with: HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=markdown_tokens
+      # Use with: H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=markdown_tokens
       MARKDOWN_TOKENS_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -216,7 +216,7 @@ module Hcode
       # Sudo terminal-exec demo: a Bash call with `sudo` that triggers the
       # alt-screen terminal path (real /dev/tty for password entry), then a
       # final text answer. Requires `bin/mocksudo` on PATH or a real sudo.
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=sudo
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=sudo
       SUDO_DEMO_SCRIPT = [
         MockStep.new(
           parts: [
@@ -237,7 +237,7 @@ module Hcode
       # item is `done`, the TUI freezes it as a `todo_snapshot` message (migrates
       # into the append-only log) and clears the tool so a fresh list can start.
       # The 1 s delays make the active-zone → log-zone transition visible.
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=todos
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=todos
       TODOS_DEMO_SCRIPT = [
         MockStep.new(
           parts: [ToolCallPart.new("m_todo_1", Tools::Names::TODO_LIST, %({"todos":[{"title":"Analyze codebase","status":"in_progress"},{"title":"Write the fix","status":"pending"},{"title":"Run the test suite","status":"pending"}]}))] of MessagePart,
@@ -272,7 +272,7 @@ module Hcode
       # `__PLAN_FILE__`, which `MockProvider#chat` substitutes at runtime with
       # the real plan path from `PlanMode.plan_service` (only known after
       # EnterPlanMode executes). Use with:
-      #   HCODE_PROVIDER=mock HCODE_MOCK_SCRIPT=plan
+      #   H2CODE_PROVIDER=mock H2CODE_MOCK_SCRIPT=plan
       PLAN_SENTINEL = "__PLAN_FILE__"
 
       def self.build_plan_content : String
@@ -332,7 +332,7 @@ module Hcode
             b << "#{si + 1}.#{i + 1}. #{s}\n"
             b << "   - Rationale: keep the change minimal and match surrounding style.\n"
             b << "   - Risk: low; isolated to the dialog and its App wiring.\n"
-            b << "   - Verification: `crystal build src/hcode.cr` succeeds.\n"
+            b << "   - Verification: `crystal build src/h2code.cr` succeeds.\n"
           end
           b << "\n"
         end
@@ -394,7 +394,7 @@ module Hcode
       end
 
       # Select a named demo script by the value configured in
-      # `Config#mock_script` (originally the HCODE_MOCK_SCRIPT env var, now
+      # `Config#mock_script` (originally the H2CODE_MOCK_SCRIPT env var, now
       # surfaced through Config). Returns nil when unset or unknown.
       def self.script_for(name : String?) : Array(MockStep)?
         case name
@@ -432,7 +432,7 @@ module Hcode
       # the JSON arguments so the Write lands on the actual plan file.
       private def resolve_tool_arguments(name : String, args : String) : String
         return args unless name == Tools::Names::WRITE && args.includes?(PLAN_SENTINEL)
-        path = Hcode::Tools::PlanMode.plan_service.try(&.status).try(&.path) || ""
+        path = H2code::Tools::PlanMode.plan_service.try(&.status).try(&.path) || ""
         return args if path.empty?
         # Linux paths contain no characters that need JSON escaping; a literal
         # substitution keeps the demo's synthesized JSON valid.

@@ -1,6 +1,6 @@
 require "json"
 
-module Hcode
+module H2code
   module Acp
     # JSON-RPC 2.0 error codes (ACP-specific negative range starts at -32000).
     module ErrorCodes

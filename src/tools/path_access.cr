@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Path resolution + sensitive-file detection for the builtin tools.
     #

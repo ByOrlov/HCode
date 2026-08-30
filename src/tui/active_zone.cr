@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Stateless renderer for the repainted region at the bottom of the screen.
     #

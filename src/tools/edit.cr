@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Edit — exact string replacement in a file.
     #

@@ -2,7 +2,7 @@ require "json"
 require "../mcp/config"
 require "../hooks/engine"
 
-module Hcode
+module H2code
   module Plugin
     PLUGIN_NAME_REGEX = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
@@ -126,7 +126,7 @@ module Hcode
       property skills : Array(String)
       property session_start : PluginSessionStart?
       property mcp_servers : Hash(String, Mcp::McpServerConfig)
-      property hooks : Array(Hcode::Hooks::HookDef)
+      property hooks : Array(H2code::Hooks::HookDef)
       property commands : Array(PluginCommandEntry)
       property interface : PluginInterface?
       property skill_instructions : String?
@@ -141,7 +141,7 @@ module Hcode
                      @skills : Array(String) = [] of String,
                      @session_start : PluginSessionStart? = nil,
                      @mcp_servers : Hash(String, Mcp::McpServerConfig) = {} of String => Mcp::McpServerConfig,
-                     @hooks : Array(Hcode::Hooks::HookDef) = [] of Hcode::Hooks::HookDef,
+                     @hooks : Array(H2code::Hooks::HookDef) = [] of H2code::Hooks::HookDef,
                      @commands : Array(PluginCommandEntry) = [] of PluginCommandEntry,
                      @interface : PluginInterface? = nil,
                      @skill_instructions : String? = nil)

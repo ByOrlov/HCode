@@ -1,14 +1,14 @@
-module Hcode
+module H2code
   module Setup
     class SetupRequired < Exception
       def initialize(message : String? = nil)
-        super(message || Hcode.t("setup.required_message"))
+        super(message || H2code.t("setup.required_message"))
       end
     end
 
     # Alias so call sites (`Setup::Wizard.choices`, `current_choice`) read
     # naturally while staying backed by `LLM::ProviderInfo` from the registry.
-    alias ProviderChoice = Hcode::LLM::Provider::ProviderInfo
+    alias ProviderChoice = H2code::LLM::Provider::ProviderInfo
 
     # Stateful first-run wizard. Driven by the TUI input box: each step
     # produces a placeholder string; the user types a value and submits.
@@ -33,7 +33,7 @@ module Hcode
       # from the LLM provider registry (the single source of truth) so every
       # registered backend appears automatically — no second list to maintain.
       def self.choices : Array(ProviderChoice)
-        Hcode::LLM::Provider.wizard_choices
+        H2code::LLM::Provider.wizard_choices
       end
 
       def current_choice : ProviderChoice?
@@ -48,17 +48,17 @@ module Hcode
       def placeholder : String
         case step
         when Step::Welcome
-          Hcode.t("setup.pick_provider")
+          H2code.t("setup.pick_provider")
         when Step::Credentials
           if hint = current_choice.try(&.key_hint).presence
-            Hcode.t("setup.enter_api_key_hint", hint: hint)
+            H2code.t("setup.enter_api_key_hint", hint: hint)
           else
-            Hcode.t("setup.enter_api_key")
+            H2code.t("setup.enter_api_key")
           end
         when Step::Endpoint
-          Hcode.t("setup.enter_endpoint", value: default_endpoint)
+          H2code.t("setup.enter_endpoint", value: default_endpoint)
         when Step::Model
-          Hcode.t("setup.enter_model", value: default_model)
+          H2code.t("setup.enter_model", value: default_model)
         else
           ""
         end

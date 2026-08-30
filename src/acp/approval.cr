@@ -2,9 +2,9 @@ require "json"
 require "../permission/manager"
 require "./json_rpc"
 
-module Hcode
+module H2code
   module Acp
-    # Bridges HCode's permission approval flow over ACP reverse-RPC.
+    # Bridges H2Code's permission approval flow over ACP reverse-RPC.
     #
     # When the agent requests approval for a tool call, sends a
     # `session/request_permission` request to the IDE and blocks until the

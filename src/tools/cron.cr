@@ -1,6 +1,6 @@
 require "json"
 
-module Hcode
+module H2code
   module Tools
     # Cron tools — CronCreate, CronList, CronDelete.
     #
@@ -796,7 +796,7 @@ module Hcode
         - Coalesce: if multiple fires were missed (e.g. the runtime was paused), only one delivery happens on wake-up, with `coalescedCount` reflecting how many were skipped.
         - Cron-fire envelope: at fire time, the prompt arrives in a `<cron-fire>` XML block in your context.
         - 7-day stale: recurring jobs that haven't fired in 7 days emit one final delivery with `stale: true` and then auto-delete.
-        - Session lifetime: cron jobs persist on `hcode resume` of the same session.
+        - Session lifetime: cron jobs persist on `h2code resume` of the same session.
         - Limits: max 50 jobs per session, prompt ≤ 8 KiB UTF-8. Expressions with no fire within 5 years are rejected.
 
         After scheduling, tell the user how to cancel (`CronDelete`) or modify (delete + recreate).

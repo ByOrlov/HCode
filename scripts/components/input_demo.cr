@@ -82,7 +82,7 @@ require "../../src/tui/help_panel"
 require "../../src/tui/app"
 
 # Expose the private renderer + cursor state for the demo.
-class Hcode::TUI::App
+class H2code::TUI::App
   def demo_render_editor_box(cols)
     render_editor_box(cols)
   end
@@ -107,7 +107,7 @@ class Hcode::TUI::App
 end
 
 # Direct cursor setter used by the demo (Editor keeps cursor private).
-class Hcode::TUI::Editor
+class H2code::TUI::Editor
   def set_cursor(row : Int32, col : Int32) : Nil
     @cursor_row = row
     @cursor_col = col
@@ -115,7 +115,7 @@ class Hcode::TUI::Editor
   end
 end
 
-module Hcode::TUI
+module H2code::TUI
   ANSI_SGR = /\e\[[0-9;]*m/
 
   def self.strip_ansi(str : String) : String
@@ -140,7 +140,7 @@ class DemoRunner
   @passes = 0
 
   private def run_case(kase : DemoCase) : Nil
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.demo_editor = kase.text
     if c = kase.cursor
       app.demo_set_cursor(c[0], c[1])
@@ -155,8 +155,8 @@ class DemoRunner
     puts "──────────────────────────────────────────────────────────────────────"
     cursor_row = 1 + app.demo_cursor_visual_row
     rows.each_with_index do |row, i|
-      plain = Hcode::TUI.strip_ansi(row)
-      w = Hcode::TUI.visible_width(plain)
+      plain = H2code::TUI.strip_ansi(row)
+      w = H2code::TUI.visible_width(plain)
       marker = (i == cursor_row) ? "   ← hardware cursor (visual row=#{app.demo_cursor_visual_row}, col=#{app.demo_cursor_visual_col})" : ""
       puts "  [#{i.to_s.rjust(2)}] w=#{w.to_s.rjust(3)}  #{plain}#{marker}"
     end
@@ -164,7 +164,7 @@ class DemoRunner
     check_invariants(kase, rows, app)
   end
 
-  private def check_invariants(kase : DemoCase, rows : Array(String), app : Hcode::TUI::App) : Nil
+  private def check_invariants(kase : DemoCase, rows : Array(String), app : H2code::TUI::App) : Nil
     box_w = kase.cols
     content_rows = rows[1...-1] || [] of String
 
@@ -180,9 +180,9 @@ class DemoRunner
     #    are excluded — the cursor's trailing space can't fit a 1-col gutter).
     if box_w >= 8
       content_rows.each_with_index do |r, i|
-        w = Hcode::TUI.visible_width(Hcode::TUI.strip_ansi(r))
+        w = H2code::TUI.visible_width(H2code::TUI.strip_ansi(r))
         if w > box_w
-          @failures << "#{kase.name}: row #{i} width #{w} exceeds box_w #{box_w}: #{Hcode::TUI.strip_ansi(r).inspect}"
+          @failures << "#{kase.name}: row #{i} width #{w} exceeds box_w #{box_w}: #{H2code::TUI.strip_ansi(r).inspect}"
         end
       end
     end
@@ -194,7 +194,7 @@ class DemoRunner
     #    from both sides and verify the character sequence survives intact.
     unless kase.text.empty?
       plain = content_rows.map do |r|
-        body = Hcode::TUI.strip_ansi(r)
+        body = H2code::TUI.strip_ansi(r)
         # Drop the leading "│ > " / "│   " prompt (4 codepoints) and the
         # trailing "│" border (1 codepoint); pad spaces get stripped below.
         next "" if body.size < 5

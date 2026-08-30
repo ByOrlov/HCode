@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     alias StopReason = String
 

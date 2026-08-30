@@ -1,8 +1,8 @@
 require "../spec_helper"
 
-describe Hcode::Context::Memory do
+describe H2code::Context::Memory do
   it "adds and retrieves messages" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("hello")
     mem.add_assistant("hi")
 
@@ -13,14 +13,14 @@ describe Hcode::Context::Memory do
   end
 
   it "tracks token count" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("hello world")
 
     mem.token_count.should be > 0
   end
 
   it "undo removes messages up to last user message" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("first prompt")
     mem.add_assistant("response")
     mem.add_tool_result("call_1", "tool output")
@@ -32,10 +32,10 @@ describe Hcode::Context::Memory do
   end
 
   it "undo stops at compaction boundary" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("prompt 1")
     mem.add_assistant("response 1")
-    mem.apply_compaction("summary", [] of Hcode::Context::ContextMessage)
+    mem.apply_compaction("summary", [] of H2code::Context::ContextMessage)
     mem.add_user("prompt 2")
     mem.add_assistant("response 2")
 
@@ -46,7 +46,7 @@ describe Hcode::Context::Memory do
   end
 
   it "undo skips injection messages instead of stopping at them" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("prompt 1")
     mem.add_assistant("response 1")
     mem.add_injection("<system-reminder>todo</system-reminder>")
@@ -64,13 +64,13 @@ describe Hcode::Context::Memory do
   end
 
   it "Undo.undo_or_raise! raises UndoLimitError when crossing a compaction boundary" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("prompt 1")
-    mem.apply_compaction("summary", [] of Hcode::Context::ContextMessage)
+    mem.apply_compaction("summary", [] of H2code::Context::ContextMessage)
     mem.add_user("prompt 2")
 
-    expect_raises(Hcode::Context::UndoLimitError) do
-      Hcode::Context::Undo.undo_or_raise!(mem, 5)
+    expect_raises(H2code::Context::UndoLimitError) do
+      H2code::Context::Undo.undo_or_raise!(mem, 5)
     end
 
     # prompt 2 is still removed (best effort), but the boundary stops it.
@@ -79,16 +79,16 @@ describe Hcode::Context::Memory do
   end
 
   it "Undo.undo_or_raise! raises when not enough user prompts" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("only prompt")
 
-    expect_raises(Hcode::Context::UndoLimitError) do
-      Hcode::Context::Undo.undo_or_raise!(mem, 3)
+    expect_raises(H2code::Context::UndoLimitError) do
+      H2code::Context::Undo.undo_or_raise!(mem, 3)
     end
   end
 
   it "calculates token usage percent" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.max_context_tokens = 1000
     mem.add_user("hello world")
 
@@ -98,7 +98,7 @@ describe Hcode::Context::Memory do
   end
 
   it "update_token_count_from_usage overwrites the estimate with the API figure" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("hello world")
     estimate = mem.token_count
 
@@ -109,7 +109,7 @@ describe Hcode::Context::Memory do
   end
 
   it "update_token_count_from_usage ignores a zero usage report" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("hello world")
     estimate = mem.token_count
 
@@ -120,7 +120,7 @@ describe Hcode::Context::Memory do
   end
 
   it "detects near limit" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.max_context_tokens = 10
     mem.add_user("this is a longer message to push tokens up")
 
@@ -128,7 +128,7 @@ describe Hcode::Context::Memory do
   end
 
   it "prunes injection messages while keeping normal ones" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("hello")
     mem.add_injection("<system-reminder>todo</system-reminder>")
     mem.add_assistant("response")
@@ -142,9 +142,9 @@ describe Hcode::Context::Memory do
   end
 
   it "prune_injections does not remove compaction summary" do
-    mem = Hcode::Context::Memory.new
+    mem = H2code::Context::Memory.new
     mem.add_user("old prompt")
-    mem.apply_compaction("summary text", [] of Hcode::Context::ContextMessage)
+    mem.apply_compaction("summary text", [] of H2code::Context::ContextMessage)
     mem.add_injection("reminder")
 
     mem.prune_injections

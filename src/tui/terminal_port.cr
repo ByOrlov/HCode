@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Abstract terminal interface that zones and the orchestrator use for all
     # screen output. Two implementations exist: `TerminalMock` (array-backed,

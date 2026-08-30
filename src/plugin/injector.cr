@@ -2,14 +2,14 @@ require "../tools/skill"
 require "../context/memory"
 require "./types"
 
-module Hcode
+module H2code
   module Plugin
     module SessionStartInjector
       TAG_PREFIX = "<plugin_session_start"
 
       def self.render(session_starts : Array(EnabledPluginSessionStart),
-                      catalog : Hcode::Tools::SkillCatalog?,
-                      memory : Hcode::Context::Memory?) : Nil
+                      catalog : H2code::Tools::SkillCatalog?,
+                      memory : H2code::Context::Memory?) : Nil
         return if session_starts.empty?
         return unless catalog && memory
         return if already_injected?(memory)
@@ -32,7 +32,7 @@ module Hcode
         %(<plugin_session_start plugin="#{escape_attr(plugin_id)}" skill="#{escape_attr(skill_name)}">\n#{skill_content}\n</plugin_session_start>)
       end
 
-      private def self.already_injected?(memory : Hcode::Context::Memory) : Bool
+      private def self.already_injected?(memory : H2code::Context::Memory) : Bool
         memory.history.any? do |cm|
           cm.origin.injection? && cm.message.content.includes?(TAG_PREFIX)
         end

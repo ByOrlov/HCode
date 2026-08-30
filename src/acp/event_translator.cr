@@ -1,9 +1,9 @@
 require "json"
 require "../loop/events"
 
-module Hcode
+module H2code
   module Acp
-    # Pure mapping from HCode's `Loop::Event` to ACP `session/update` params.
+    # Pure mapping from H2Code's `Loop::Event` to ACP `session/update` params.
     #
     # Each method returns `JSON::Any` — the `session/update` notification params.
     module EventTranslator

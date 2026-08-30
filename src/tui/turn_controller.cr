@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     module TurnController
       private def submit_message(text : String) : Nil
@@ -244,7 +244,7 @@ module Hcode
 
       private def current_tip : String
         key = TIPS[(Time.utc.to_unix // 5) % TIPS.size]
-        Hcode.t(key)
+        H2code.t(key)
       end
 
       private def thinking_status : String

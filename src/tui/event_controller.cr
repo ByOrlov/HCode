@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     module EventController
       # Rebuild the visible TUI transcript from a replayed context memory.
@@ -68,7 +68,7 @@ module Hcode
         end
       end
 
-      def show_interrupted(message : String = Hcode.t("status.interrupted")) : Nil
+      def show_interrupted(message : String = H2code.t("status.interrupted")) : Nil
         finalize_streaming_thinking
         # Flush any in-flight streaming text into a permanent assistant message
         # so it doesn't disappear when we reset the streaming buffer.
@@ -295,14 +295,14 @@ module Hcode
           stop_spinner
           if event.is_error?
             @agent_status = AgentStatus::Error
-            @status = Hcode.t("status.interrupted")
+            @status = H2code.t("status.interrupted")
           else
             @agent_status = AgentStatus::Done
             step_word = @current_step == 1 ? "step" : "steps"
             tool_word = @turn_tool_count == 1 ? "tool" : "tools"
             @status = "Done · #{@current_step} #{step_word}, #{@turn_tool_count} #{tool_word}"
           end
-          @status_tracker.try(&.transition!(Notify::AgentStatus::Done, Hcode.t("status.turn_complete")))
+          @status_tracker.try(&.transition!(Notify::AgentStatus::Done, H2code.t("status.turn_complete")))
           @status_tracker.try(&.transition!(Notify::AgentStatus::Idle))
 
           # A cancelled turn ends the dispatch chain: drop queued messages
@@ -440,7 +440,7 @@ module Hcode
         @status = "Waiting for approval: #{tool_name}"
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
-          Hcode.t("ui.approval_required"), tool_name))
+          H2code.t("ui.approval_required"), tool_name))
         select
         when choice = @approval_channel.receive
           @approval_pending = nil
@@ -462,7 +462,7 @@ module Hcode
         @status = "Waiting for sudo approval"
         @dirty = true
         @status_tracker.try(&.transition!(Notify::AgentStatus::InputRequired,
-          Hcode.t("ui.approval_required"), "Bash (sudo)"))
+          H2code.t("ui.approval_required"), "Bash (sudo)"))
         choice = @sudo_approval_channel.receive
         @sudo_approval_list.hide
         @sudo_approval_pending = nil

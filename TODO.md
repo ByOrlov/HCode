@@ -1,4 +1,4 @@
-# hcode — TODO (сравнение с kimi-code TS)
+# h2code — TODO (сравнение с kimi-code TS)
 
 Состояние на 2026-07-30. Источник: прямая проверка `src/` (Crystal) + билд.
 Билд собирается (`crystal build` зелёный). Ядро агента готово.
@@ -8,7 +8,7 @@
 Многое из того, что числилось отсутствующим, УЖЕ реализовано:
 
 - **Workspace file tree** (2 уровня) — есть, `directory_listing` в
-  `prompt/system_prompt.cr:188`, подставляется в `{{HCODE_WORK_DIR_LS}}`.
+  `prompt/system_prompt.cr:188`, подставляется в `{{H2CODE_WORK_DIR_LS}}`.
 - **Syntax highlighting** (8 языков: crystal/ruby/python/js/ts/go/rust/bash/json)
   — есть, `highlight_code` в `tui/markdown.cr:721`.
 - **Paste markers** `[paste #N ...]` — есть, `tui/editor.cr:4` + `@pastes`.
@@ -16,7 +16,7 @@
 - **Light theme** — есть, `Theme.light` (`theme.cr:79`).
 - **Runtime selectors** `/provider` `/model` `/theme` `/permission` `/effort`
   через `SelectList` — есть, `open_*_selector` (`app.cr:1801+`), привязаны к
-  колбэкам `on_provider_change`/`on_model_change`/... в `hcode.cr`.
+  колбэкам `on_provider_change`/`on_model_change`/... в `h2code.cr`.
 - **`/add-dir`** — частично: только пишет "Added directory: X", НЕ хранит
   список и НЕ инжектит в system prompt (см. §3).
 - **`Setup::Wizard`** — есть (148 строк), onboarding-флоу для первого запуска.
@@ -49,7 +49,7 @@
       (`plugin/github_resolver.cr`): codeload tarball resolution (no
       api.github.com). `CommandLoader` (`plugin/commands.cr`): .md frontmatter
       parse + $ARGUMENTS expansion. `SessionStartInjector` (`plugin/injector.cr`):
-      text injection в Context::Memory на первом turn. Startup wiring в `hcode.cr`:
+      text injection в Context::Memory на первом turn. Startup wiring в `h2code.cr`:
       merge skills/MCP/hooks/commands из plugins. TUI `/plugins` subcommands
       (list/install/info/enable/disable/remove/reload/mcp). Plugin slash commands
       `/<plugin_id>:<command>`. 40 тестов (manifest/store/source/commands/manager).
@@ -73,9 +73,9 @@
 - `/add-dir <path>`: `File.expand_path`, проверка `Dir.exists?`, дедуп,
   добавление, вызов колбэка
 - `SystemPrompt.build(work_dir, additional_dirs)` — рендерит listing
-  каждого каталога в `HCODE_ADDITIONAL_DIRS_INFO` → блок
+  каждого каталога в `H2CODE_ADDITIONAL_DIRS_INFO` → блок
   `## Additional Directories` в system prompt
-- `hcode.cr` привязывает колбэк: ре-билд `system_prompt` при изменении
+- `h2code.cr` привязывает колбэк: ре-билд `system_prompt` при изменении
   (замкнутая переменная обновляется → следующий turn видит новый prompt)
 - Тесты: 2 новых (omits section / includes listing)
 - Note: permission-scope уже не нужен — `PathAccess` разрешает абсолютные
@@ -88,7 +88,7 @@ undo_dialog, question_dialog, session_picker, help_panel, SelectList-диало�
 
 Не хватает:
 - [x] `goal_panel` — частично: goal tools (CreateGoal/GetGoal/UpdateGoal/
-      SetGoalBudget) + `AgentGoalService` подключены в `hcode.cr` (раньше
+      SetGoalBudget) + `AgentGoalService` подключены в `h2code.cr` (раньше
       сервис не инициализировался → tools падали). Команда `/goal` добавлена
       (status/pause/resume/cancel). Отдельной визуальной панели пока нет —
       статус показывается в messages. 4 новых теста (lifecycle).
@@ -127,7 +127,7 @@ undo_dialog, question_dialog, session_picker, help_panel, SelectList-диало�
 
 ✅ **ГОТОВО** — skills загружаются с диска:
 - `SkillDiscovery.discover(home, work_dir)` — сканирует стандартные каталоги
-  (`~/skills`, `~/.agents/skills`, `<project>/.hcode/skills`,
+  (`~/skills`, `~/.agents/skills`, `<project>/.h2code/skills`,
   `<project>/.agents/skills`), обходит подкаталоги с `SKILL.md`, дедуплит
 - `Parser.parse` — парсит frontmatter (упрощённый YAML: name, description,
   type, when-to-use, arguments[], disable-model-invocation) + body
@@ -137,7 +137,7 @@ undo_dialog, question_dialog, session_picker, help_panel, SelectList-диало�
 - `SkillDefinition#description` / `#when_to_use` getters
 - `SystemPrompt.build(work_dir, additional_dirs, skills_listing)` — рендерит
   секцию `# Skills` в system prompt когда listing непустой
-- Wire-up в `hcode.cr`: discover при старте → `Skill.catalog=` → listing
+- Wire-up в `h2code.cr`: discover при старте → `Skill.catalog=` → listing
   в system prompt → пересборка при `/add-dir`
 - Тесты: 7 новых (parser frontmatter/body/name-fallback/arguments-array,
   catalog listing skip-disabled/empty, discovery project/user/none)

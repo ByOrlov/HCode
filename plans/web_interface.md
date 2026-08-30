@@ -1,14 +1,14 @@
-# Web Interface — план реализации для hcode
+# Web Interface — план реализации для h2code
 
 > **Статус: исследование.** Архитектурный анализ завершён, реализация не начата.
 
 ## Контекст
 
-Цель — добавить к hcode веб-интерфейс по образцу Kimi Web: браузерный SPA,
+Цель — добавить к h2code веб-интерфейс по образцу Kimi Web: браузерный SPA,
 который общается с локальным сервером по REST + WebSocket и получает
 стриминг ответов агента в реальном времени.
 
-В hcode ядро (`Loop::Agent`) уже отвязано от TUI через event-колбэк, что
+В h2code ядро (`Loop::Agent`) уже отвязано от TUI через event-колбэк, что
 делает задачу реализуемой без переписывания движка. Этот план фиксирует
 разрыв между текущей архитектурой и тем, что нужно для web, и описывает
 путь минимальными изменениями.
@@ -18,22 +18,22 @@
 ### TUI — одна активная сессия на процесс
 
 В TUI физически существует один `Loop::Agent` и один `Context::Memory`
-(`src/hcode.cr:372`). «Новая сессия» и «resume» — это не открытие вкладки,
+(`src/h2code.cr:372`). «Новая сессия» и «resume» — это не открытие вкладки,
 а переключение того самого единственного агента на другой session-store:
 
 ```crystal
-# on_new_session (src/hcode.cr:863)
+# on_new_session (src/h2code.cr:863)
 agent.context.clear
 store.session_dir = new_store.session_dir   # перенаправили указатель
 store.wire_path   = new_store.wire_path
 
-# on_resume_session (src/hcode.cr:886)
+# on_resume_session (src/h2code.cr:886)
 agent.context.clear
 resumed.replay(agent.context)               # перечитали историю в ту же Memory
 store.session_dir = resumed.session_dir
 ```
 
-Сессии хранятся на диске (`~/.hcode/sessions/<id>/wire.jsonl`), а в
+Сессии хранятся на диске (`~/.h2code/sessions/<id>/wire.jsonl`), а в
 оперативке живёт ровно одна. Переключение = очистить `Memory`, поменять
 пути у `store`, перечитать `wire.jsonl` через `replay`. Никаких
 параллельных вкладок.
@@ -44,10 +44,10 @@ store.session_dir = resumed.session_dir
 инстанс агента:
 
 ```crystal
-Tools::Goal.service     = goal_service        # src/hcode.cr:392
-Tools::PlanMode.plan_service = plan_service   # src/hcode.cr:760
-Tools::Task.service     = task_service        # src/hcode.cr:389
-Tools::SwarmMode.service = ...                # src/hcode.cr:762
+Tools::Goal.service     = goal_service        # src/h2code.cr:392
+Tools::PlanMode.plan_service = plan_service   # src/h2code.cr:760
+Tools::Task.service     = task_service        # src/h2code.cr:389
+Tools::SwarmMode.service = ...                # src/h2code.cr:762
 ```
 
 Инструменты обращаются к ним как `Tools::Goal.service.get_goal`
@@ -74,7 +74,7 @@ event-стрима:
 
 - TUI: `app.on_event(event)` (`src/tui/app.cr:678`)
 - Headless: блок в `run_headless` печатает события в stdout
-  (`src/hcode.cr:591-653`)
+  (`src/h2code.cr:591-653`)
 
 Поток стриминга от LLM уже разложен на дельты: провайдер
 (`LLM::Provider#chat`) yields `TextPart` / `ThinkPart` / `ToolCallPart`,
@@ -150,7 +150,7 @@ GET    /sessions/{id}/children  ← форки
 
 ## Архитектурный разрыв: TUI vs сервер
 
-| Компонент | hcode сейчас | Kimi Web |
+| Компонент | h2code сейчас | Kimi Web |
 |---|---|---|
 | HTTP/WS сервер | нет, один процесс = один агент | `kap-server` — отдельный daemon |
 | Event-транспорт | синхронный колбэк в том же процессе | JSON-конверты по WS с `{seq, epoch}` watermark |
@@ -163,10 +163,10 @@ GET    /sessions/{id}/children  ← форки
 
 ### Фаза 1 — Process-per-session сервер (MVP)
 
-**Цель:** рабочий web без изменений в ядре hcode.
+**Цель:** рабочий web без изменений в ядре h2code.
 
-Один `hcode --serve` как супервизор, который на `POST /sessions` запускает
-child-процесс `hcode -s <new-id> --listen-unix <socket>` и пробрасывает
+Один `h2code --serve` как супервизор, который на `POST /sessions` запускает
+child-процесс `h2code -s <new-id> --listen-unix <socket>` и пробрасывает
 WS. Получаешь мультисессию из коробки, веб-клиент работает, а ядро не
 трогаешь вообще.
 
@@ -177,7 +177,7 @@ WS. Получаешь мультисессию из коробки, веб-кл
    (stdlib Crystal, новых зависимостей нет).
 
 2. **Child-процесс на сессию:**
-   - `POST /sessions` → `Process.new("hcode", ["-s", id, "--listen-unix",
+   - `POST /sessions` → `Process.new("h2code", ["-s", id, "--listen-unix",
      socket_path])`, supervisior держит `{session_id → Process}` map.
    - `POST /sessions/:id/prompt` → пишет в unix-socket child'а.
    - WS `/api/v1/ws` → proxy событий от child'а к браузеру.
@@ -200,7 +200,7 @@ WS. Получаешь мультисессию из коробки, веб-кл
    - REST `POST /approvals/:id/respond` кладёт ответ в канал → fiber
      просыпается → агент продолжает.
 
-   hcode уже на Crystal-фиберах, `Channel(T).receive` блокирует корректно.
+   h2code уже на Crystal-фиберах, `Channel(T).receive` блокирует корректно.
    Существующие интерфейсы (`approval_callback`,
    `AskUserQuestion.service`) не меняются — меняется только реализация.
 
@@ -222,7 +222,7 @@ WS. Получаешь мультисессию из коробки, веб-кл
 
 **Плюсы:** ноль изменений в ядре, идеальная изоляция сессий, быстрый MVP.
 
-**Минусы:** RAM-оверхед — один процесс hcode на сессию (~десятки MB RSS
+**Минусы:** RAM-оверхед — один процесс h2code на сессию (~десятки MB RSS
 каждый, Boehm GC). При 10 параллельных юзерах это 10 × RSS.
 
 ### Фаза 2 — In-process мультисессия

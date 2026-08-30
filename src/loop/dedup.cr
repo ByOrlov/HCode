@@ -1,6 +1,6 @@
 require "digest/sha256"
 
-module Hcode
+module H2code
   module Loop
     class DedupTracker
       MAX_STREAK  = 12

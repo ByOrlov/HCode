@@ -2,20 +2,20 @@ require "../spec_helper"
 require "../../src/tools/ask_user_question"
 
 # Тестовый QuestionService: возвращает заданный результат.
-private class FakeService < Hcode::Tools::QuestionService
-  def initialize(&block : Hcode::Tools::QuestionRequest, Hcode::Loop::AbortController? -> Hcode::Tools::QuestionResult?)
+private class FakeService < H2code::Tools::QuestionService
+  def initialize(&block : H2code::Tools::QuestionRequest, H2code::Loop::AbortController? -> H2code::Tools::QuestionResult?)
     @block = block
   end
 
-  def request(req : Hcode::Tools::QuestionRequest, signal : Hcode::Loop::AbortController?) : Hcode::Tools::QuestionResult?
+  def request(req : H2code::Tools::QuestionRequest, signal : H2code::Loop::AbortController?) : H2code::Tools::QuestionResult?
     @block.call(req, signal)
   end
 end
 
-private class FakeTasks < Hcode::Tools::AgentTaskService
+private class FakeTasks < H2code::Tools::AgentTaskService
   getter registered = [] of {String, Int32}
 
-  def register_question_task(description : String, question_count : Int32, &_run : Hcode::Loop::AbortController? -> String) : String
+  def register_question_task(description : String, question_count : Int32, &_run : H2code::Loop::AbortController? -> String) : String
     @registered << {description, question_count}
     "task-#{registered.size}"
   end
@@ -25,15 +25,15 @@ private class FakeTasks < Hcode::Tools::AgentTaskService
   end
 end
 
-describe Hcode::Tools::AskUserQuestion do
+describe H2code::Tools::AskUserQuestion do
   after_each do
-    Hcode::Tools::AskUserQuestion.service = nil
-    Hcode::Tools::AskUserQuestion.tasks = nil
+    H2code::Tools::AskUserQuestion.service = nil
+    H2code::Tools::AskUserQuestion.tasks = nil
   end
 
   it "exposes the JS-name and identical schema" do
-    tool = Hcode::Tools::AskUserQuestion.new
-    tool.name.should eq(Hcode::Tools::Names::ASK_USER_QUESTION)
+    tool = H2code::Tools::AskUserQuestion.new
+    tool.name.should eq(H2code::Tools::Names::ASK_USER_QUESTION)
     tool.description.should contain("structured options")
 
     props = tool.parameters["properties"].as_h
@@ -53,14 +53,14 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "fails when questions is missing" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_true
     result.content.should contain("questions")
   end
 
   it "fails when there are too many questions" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     qs = (1..5).map { |i| %( {"question":"Q#{i}?","options":[{"label":"a"},{"label":"b"}]} ) }.join(",")
     result = tool.execute(JSON.parse(%({ "questions": [#{qs}] })))
     result.is_error?.should be_true
@@ -68,7 +68,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "fails when an option array has fewer than 2 entries" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question": "Q?", "options": [{"label": "alone"}]}]
     })))
@@ -77,7 +77,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "fails when question text is empty" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question": "", "options": [{"label":"a"},{"label":"b"}]}]
     })))
@@ -86,7 +86,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "fails on duplicate question text" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [
         {"question": "Same?", "options": [{"label":"a"},{"label":"b"}]},
@@ -99,7 +99,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "fails on duplicate option label within a question" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [
         {"question": "Q?", "options": [{"label":"a"},{"label":"a"}]}
@@ -110,14 +110,14 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "allows the same label across different questions" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      h = Hcode::Tools::QuestionResult.new
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      h = H2code::Tools::QuestionResult.new
       h["Q1?"] = "a"
       h["Q2?"] = "a"
       h
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [
         {"question": "Q1?", "options": [{"label":"a"},{"label":"b"}]},
@@ -130,13 +130,13 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders answered JSON without method field" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      h = Hcode::Tools::QuestionResult.new
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      h = H2code::Tools::QuestionResult.new
       h["DB?"] = "SQLite"
       h
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"DB?","options":[{"label":"SQLite"},{"label":"Postgres"}]}]
     })))
@@ -147,9 +147,9 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders dismissed when service returns nil" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new { |_req, _sig| nil }
+    H2code::Tools::AskUserQuestion.service = FakeService.new { |_req, _sig| nil }
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
@@ -160,11 +160,11 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders dismissed when service returns empty hash" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      Hcode::Tools::QuestionResult.new
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      H2code::Tools::QuestionResult.new
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
@@ -173,11 +173,11 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "returns UNSUPPORTED error on NotImplementedError" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       raise NotImplementedError.new("not supported")
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
@@ -186,11 +186,11 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "returns dismissed (not error) on a generic service exception" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
       raise Exception.new("connection lost")
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
@@ -200,7 +200,7 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "returns unsupported failure when no service is registered" do
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
     })))
@@ -209,12 +209,12 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "re-raises AbortError" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      raise Hcode::Tools::AbortError.new("aborted")
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      raise H2code::Tools::AbortError.new("aborted")
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
-    expect_raises(Hcode::Tools::AbortError) do
+    tool = H2code::Tools::AskUserQuestion.new
+    expect_raises(H2code::Tools::AbortError) do
       tool.execute(JSON.parse(%({
         "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
       })))
@@ -222,13 +222,13 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "renders immediate background response with task_id" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      Hcode::Tools::QuestionResult.new
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      H2code::Tools::QuestionResult.new
     end
     tasks = FakeTasks.new
-    Hcode::Tools::AskUserQuestion.tasks = tasks
+    H2code::Tools::AskUserQuestion.tasks = tasks
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "background": true,
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
@@ -242,13 +242,13 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "falls back to foreground when tasks service is missing despite background=true" do
-    Hcode::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
-      h = Hcode::Tools::QuestionResult.new
+    H2code::Tools::AskUserQuestion.service = FakeService.new do |_req, _sig|
+      h = H2code::Tools::QuestionResult.new
       h["Q?"] = "a"
       h
     end
 
-    tool = Hcode::Tools::AskUserQuestion.new
+    tool = H2code::Tools::AskUserQuestion.new
     result = tool.execute(JSON.parse(%({
       "background": true,
       "questions": [{"question":"Q?","options":[{"label":"a"},{"label":"b"}]}]
@@ -258,25 +258,25 @@ describe Hcode::Tools::AskUserQuestion do
   end
 
   it "builds question description with +N more suffix" do
-    tool = Hcode::Tools::AskUserQuestion.new
-    q1 = Hcode::Tools::QuestionItem.new(question: "First?", options: [
-      Hcode::Tools::QuestionOption.new(label: "a"),
-      Hcode::Tools::QuestionOption.new(label: "b"),
+    tool = H2code::Tools::AskUserQuestion.new
+    q1 = H2code::Tools::QuestionItem.new(question: "First?", options: [
+      H2code::Tools::QuestionOption.new(label: "a"),
+      H2code::Tools::QuestionOption.new(label: "b"),
     ])
     tool.question_description([q1]).should eq("First?")
 
-    q2 = Hcode::Tools::QuestionItem.new(question: "Second?", options: [
-      Hcode::Tools::QuestionOption.new(label: "a"),
-      Hcode::Tools::QuestionOption.new(label: "b"),
+    q2 = H2code::Tools::QuestionItem.new(question: "Second?", options: [
+      H2code::Tools::QuestionOption.new(label: "a"),
+      H2code::Tools::QuestionOption.new(label: "b"),
     ])
     tool.question_description([q1, q2]).should eq("First? (+1 more)")
   end
 
   it "uses fallback description when questions have empty text" do
-    tool = Hcode::Tools::AskUserQuestion.new
-    q = Hcode::Tools::QuestionItem.new(question: "   ", options: [
-      Hcode::Tools::QuestionOption.new(label: "a"),
-      Hcode::Tools::QuestionOption.new(label: "b"),
+    tool = H2code::Tools::AskUserQuestion.new
+    q = H2code::Tools::QuestionItem.new(question: "   ", options: [
+      H2code::Tools::QuestionOption.new(label: "a"),
+      H2code::Tools::QuestionOption.new(label: "b"),
     ])
     tool.question_description([q]).should eq("Ask user question")
   end

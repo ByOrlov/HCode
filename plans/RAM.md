@@ -2,7 +2,7 @@
 
 ## Problem
 
-`hcode` RSS grows linearly with chat length. Idle usage is ~3–4 MB, but long
+`h2code` RSS grows linearly with chat length. Idle usage is ~3–4 MB, but long
 sessions easily reach 100+ MB. Initial suspicion pointed to context history /
 LLM request serialization, but benchmarks show that the real culprit is the
 TUI transcript.
@@ -68,7 +68,7 @@ Keep only the most recent N messages or M total rendered lines. When the limit
 is exceeded, drop the oldest messages (or their heavy `tool_result` payloads).
 
 Suggested initial limit: **200 messages** or **2000 rendered lines**, whichever
-is smaller. This is configurable via an env var, e.g. `HCODE_TUI_MAX_HISTORY`.
+is smaller. This is configurable via an env var, e.g. `H2CODE_TUI_MAX_HISTORY`.
 
 ### 2. Prune old tool result payloads
 
@@ -161,7 +161,7 @@ This alone should cap RSS growth.
 - [ ] Running the realistic benchmark (`tmp/realistic_memory_benchmark.cr`) with
       2000 turns shows RSS capped below ~30 MB after the transcript limit is
       reached.
-- [ ] Long-running headless mode (`hcode -p`) does not exhibit the same growth
+- [ ] Long-running headless mode (`h2code -p`) does not exhibit the same growth
       (confirms the issue is TUI-specific).
 - [ ] TUI scrollback still works for at least the configured limit.
 - [ ] Streaming markdown and tool cards render correctly after pruning.

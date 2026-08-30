@@ -4,7 +4,7 @@ require "./client"
 require "./tool_naming"
 require "./output"
 
-module Hcode
+module H2code
   module Mcp
     # A proxy tool registered from the on-disk cache, before the MCP server
     # has connected. Identity (name/description/parameters) is static and

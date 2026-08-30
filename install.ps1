@@ -1,20 +1,20 @@
-# HCode installer — Windows (PowerShell).
-# Usage:  irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
+# H2Code installer — Windows (PowerShell).
+# Usage:  irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex
 #Requires -Version 5.1
 [CmdletBinding()] param()
 
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'ByOrlov/HCode'
-$InstallDir = if ($env:HCODE_INSTALL_DIR) { $env:HCODE_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'hcode\bin' }
-$BinName = 'hcode.exe'
+$Repo = 'ByOrlov/H2Code'
+$InstallDir = if ($env:H2CODE_INSTALL_DIR) { $env:H2CODE_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'h2code\bin' }
+$BinName = 'h2code.exe'
 
 function Write-Info($msg) { Write-Host "  $msg" }
 function Write-Err($msg)  { Write-Host "✗ $msg" -ForegroundColor Red }
 
 # Returns $true if the binary starts and prints a version (i.e. all its DLL
 # dependencies resolve). Used to decide whether we need to install deps.
-function Test-HcodeStarts($path) {
+function Test-H2codeStarts($path) {
     try {
         $out = & $path --version 2>&1
         return ($LASTEXITCODE -eq 0)
@@ -24,11 +24,11 @@ function Test-HcodeStarts($path) {
 }
 
 # Installs the Windows runtime dependencies (OpenSSL, libyaml, pcre2) required
-# by hcode.exe. Tries winget/choco for OpenSSL first, then unconditionally
+# by h2code.exe. Tries winget/choco for OpenSSL first, then unconditionally
 # extracts the pinned DLL bundle next to the binary so all four DLLs are
 # present regardless of which package manager (if any) is available.
 function Ensure-WindowsDeps($binPath) {
-    if (Test-HcodeStarts $binPath) {
+    if (Test-H2codeStarts $binPath) {
         Write-Info "Runtime dependencies already available."
         return
     }
@@ -49,14 +49,14 @@ function Ensure-WindowsDeps($binPath) {
     }
 
     # Guaranteed fallback: the pinned DLL bundle from the latest release.
-    $depsUrl = "https://github.com/$Repo/releases/latest/download/hcode-deps-windows.zip"
-    $depsZip = Join-Path $installDir "hcode-deps-windows.zip"
+    $depsUrl = "https://github.com/$Repo/releases/latest/download/h2code-deps-windows.zip"
+    $depsZip = Join-Path $installDir "h2code-deps-windows.zip"
     try {
         Write-Info "Downloading runtime DLL bundle: $depsUrl"
         Invoke-WebRequest -Uri $depsUrl -OutFile $depsZip -UseBasicParsing
     } catch {
         Write-Err "Could not download runtime DLL bundle."
-        Write-Err "Install OpenSSL (libcrypto/libssl), libyaml and pcre2 manually next to hcode.exe."
+        Write-Err "Install OpenSSL (libcrypto/libssl), libyaml and pcre2 manually next to h2code.exe."
         return
     }
     try {
@@ -69,7 +69,7 @@ function Ensure-WindowsDeps($binPath) {
         Remove-Item $depsZip -ErrorAction SilentlyContinue
     }
 
-    if (Test-HcodeStarts $binPath) {
+    if (Test-H2codeStarts $binPath) {
         Write-Info "Runtime dependencies installed."
     } else {
         Write-Err "Binary still fails to start after installing dependencies."
@@ -80,7 +80,7 @@ function Ensure-WindowsDeps($binPath) {
 # Installs ripgrep (rg.exe), required by the Grep and Glob tools. Tries
 # winget/choco first; if neither is available (or they fail), downloads
 # rg.exe directly from the ripgrep GitHub release into the install directory
-# so it sits next to hcode.exe and is found via PATH.
+# so it sits next to h2code.exe and is found via PATH.
 function Ensure-Ripgrep($installDir) {
     if (Get-Command rg -ErrorAction SilentlyContinue) {
         Write-Info "ripgrep (rg) is available."
@@ -110,7 +110,7 @@ function Ensure-Ripgrep($installDir) {
     }
 
     # Fallback: download rg.exe from the latest ripgrep GitHub release and
-    # drop it next to hcode.exe so PATH picks it up.
+    # drop it next to h2code.exe so PATH picks it up.
     Write-Info "Downloading rg.exe from ripgrep GitHub releases…"
     try {
         $apiUrl = "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest"
@@ -149,15 +149,15 @@ if ($Arch -eq 'AMD64' -or $Arch -eq 'x64') {
     exit 1
 }
 
-$Asset = "hcode-${arch}-windows.zip"
+$Asset = "h2code-${arch}-windows.zip"
 $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
 
-Write-Host "Installing HCode for ${arch}-windows…" -ForegroundColor White
+Write-Host "Installing H2Code for ${arch}-windows…" -ForegroundColor White
 Write-Info "Release asset: $Asset"
 Write-Info "Install dir:   $InstallDir"
 
 # --- Download -----------------------------------------------------------------
-$Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "hcode-$(New-Guid)") -Force
+$Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "h2code-$(New-Guid)") -Force
 try {
     $ZipPath = Join-Path $Tmp.FullName $Asset
     Write-Info "Downloading $Url…"
@@ -182,7 +182,7 @@ try {
     Write-Info "Installed $Dest"
 
     # --- Runtime dependencies -------------------------------------------------
-    # hcode.exe links dynamically against OpenSSL (libcrypto/libssl), libyaml
+    # h2code.exe links dynamically against OpenSSL (libcrypto/libssl), libyaml
     # and pcre2. These DLLs are not present on a stock Windows install, so we
     # detect a missing-DLL failure by trying to run the binary and, on failure,
     # install the dependencies: OpenSSL via winget/choco when available, then
@@ -206,14 +206,14 @@ try {
     }
 
     # --- Done -----------------------------------------------------------------
-    Write-Host "✓ HCode installed." -ForegroundColor Green
+    Write-Host "✓ H2Code installed." -ForegroundColor Green
     try {
         $Version = & $Dest --version 2>$null
         Write-Info "Version: $Version"
     } catch {
         Write-Info "Version: unknown"
     }
-    Write-Info "Run 'hcode' to start. Use '/upgrade' inside the TUI to update later."
+    Write-Info "Run 'h2code' to start. Use '/upgrade' inside the TUI to update later."
 }
 finally {
     Remove-Item -Recurse -Force $Tmp.FullName -ErrorAction SilentlyContinue

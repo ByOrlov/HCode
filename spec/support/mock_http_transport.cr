@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   # Fake transport for offline tests. Records the last request and returns a
   # scripted response, or raises a scripted error to simulate a network drop.
   class MockHttpTransport < HttpTransport

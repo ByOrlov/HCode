@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Zone-balance contract for the two-zone TUI renderer.
     #

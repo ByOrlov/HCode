@@ -1,12 +1,12 @@
 #!/usr/bin/env crystal
 #
-# mockfast-hcode — standalone test binary that drives the real TUI with
+# mockfast-h2code — standalone test binary that drives the real TUI with
 # simulated LLM output. Runs just a couple of tool calls (plus one big
 # plan block into the Log zone) so you can quickly eyeball rendering
-# without waiting through 100 iterations like mock-hcode.
+# without waiting through 100 iterations like mock-h2code.
 #
-# Build:   crystal build bin/mockfast_hcode.cr -o bin/mockfast_hcode --release
-# Run:     ./bin/mock-hcode
+# Build:   crystal build bin/mockfast_h2code.cr -o bin/mockfast_h2code --release
+# Run:     ./bin/mock-h2code
 
 require "../src/version"
 require "../src/version_compare"
@@ -69,6 +69,7 @@ require "../src/loop/abort"
 require "../src/loop/dedup"
 require "../src/loop/tool_batch"
 require "../src/loop/agent"
+require "../src/remote/sync"
 require "../src/loop/subagent_registry"
 require "../src/loop/subagent_agent_runner"
 require "../src/loop/subagent_swarm_runner"
@@ -100,6 +101,7 @@ require "../src/tui/tasks_browser"
 require "../src/tui/setup_controller"
 require "../src/tui/command_controller"
 require "../src/tui/app_models"
+require "../src/tui/telemetry"
 require "../src/tui/event_controller"
 require "../src/tui/input_controller"
 require "../src/tui/turn_controller"
@@ -132,12 +134,12 @@ require "../src/plugin/manifest"
 require "../src/plugin/commands"
 require "../src/plugin/manager"
 
-Hcode::I18n.init("en")
+H2code::I18n.init("en")
 
-module Hcode
-  module MockFastHcode
+module H2code
+  module MockFastH2code
     # Just a couple of tool calls — enough to eyeball rendering without
-    # waiting through the full 100-iteration mock-hcode run.
+    # waiting through the full 100-iteration mock-h2code run.
     TOOLS = [
       {"Read", %({"path": "src/store/auth.ts"}), "1  import { defineStore } from 'pinia'\n2  import { ref, computed } from 'vue'\n3  \n4  export const useAuthStore = defineStore('auth', () => {\n5    const token = ref<string | null>(null)\n6    const isActive = computed(() => !!token.value)\n7    return { token, isActive }\n8  })"},
       {"Grep", %({"pattern": "isActive", "path": "src"}), "src/store/auth.ts:6:  const isActive = computed(() => !!token.value)\nsrc/components/Header.vue:12:  const { isActive } = useAuth()\nsrc/views/Dashboard.vue:8:  v-if=\"isActive\""},
@@ -160,7 +162,7 @@ module Hcode
     # where a long streamed LLM answer (the chat-icon block) overflows the
     # Active area and produces redraw artifacts.
     def self.build_big_streamed_response : String
-      rows = Hcode::TUI::Terminal.current.rows
+      rows = H2code::TUI::Terminal.current.rows
       target = (rows * 2) + 20
       String.build do |s|
         s << "Here is a detailed explanation that is intentionally longer than the viewport "
@@ -177,7 +179,7 @@ module Hcode
     # terminal viewport, so the Log zone receives a chunk bigger than the
     # screen — used to exercise large-block emission and scroll behavior.
     def self.build_big_plan : String
-      rows = Hcode::TUI::Terminal.current.rows
+      rows = H2code::TUI::Terminal.current.rows
       target = (rows * 2) + 30
       String.build do |s|
         s << "## Plan — large render test (#{target} lines, viewport #{rows})\n"
@@ -190,16 +192,16 @@ module Hcode
     end
 
     def self.run : Nil
-      config = Hcode::Config::Config.load
+      config = H2code::Config::Config.load
 
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.model = "mock-model"
       app.provider_name = "mock"
       app.permission_mode = "yolo"
       app.work_dir = Dir.current
       app.debug_zones = config.debug_zones?
 
-      puts "mockfast-hcode: simulating a couple of tool calls. Press Ctrl+C to exit."
+      puts "mockfast-h2code: simulating a couple of tool calls. Press Ctrl+C to exit."
 
       app.run(initial_prompt: "Fix the frontend key validation — key should become invalid when the deadline passes.") do |_text, _persisted|
         spawn do
@@ -208,9 +210,9 @@ module Hcode
           # for the small repainted region (spinner, live preview, editor), and a
           # viewport-sized streaming block violates the two-zone model.
           plan = build_big_plan
-          app.on_event(Hcode::Loop::Event.step_begin(0))
+          app.on_event(H2code::Loop::Event.step_begin(0))
           sleep 80.milliseconds
-          app.on_event(Hcode::Loop::Event.assistant_text(plan))
+          app.on_event(H2code::Loop::Event.assistant_text(plan))
           sleep 50.milliseconds
 
           # Reproduce the Active-zone overflow bug: stream a large assistant
@@ -218,15 +220,15 @@ module Hcode
           # finished block. The Active area holds the in-progress chat-icon
           # block, and a response taller than the viewport causes redraw
           # artifacts as the repainted region exceeds its budget.
-          app.on_event(Hcode::Loop::Event.step_begin(0))
+          app.on_event(H2code::Loop::Event.step_begin(0))
           sleep 80.milliseconds
           big_response = build_big_streamed_response
           big_response.split(" ").each_with_index do |word, wi|
-            app.on_event(Hcode::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
+            app.on_event(H2code::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
             sleep 15.milliseconds
           end
           sleep 50.milliseconds
-          app.on_event(Hcode::Loop::Event.assistant_text(big_response))
+          app.on_event(H2code::Loop::Event.assistant_text(big_response))
           sleep 50.milliseconds
 
           TOOLS.each_with_index do |tool, i|
@@ -236,13 +238,13 @@ module Hcode
             step = i
 
             # Step begin
-            app.on_event(Hcode::Loop::Event.step_begin(step))
+            app.on_event(H2code::Loop::Event.step_begin(step))
             sleep 80.milliseconds
 
             # Thinking (stream a few tokens)
             thinking = THINKING_SNIPPETS[i % THINKING_SNIPPETS.size]
             thinking.split(" ").each_with_index do |word, wi|
-              app.on_event(Hcode::Loop::Event.thinking_delta(word + (wi == 0 ? "" : " ")))
+              app.on_event(H2code::Loop::Event.thinking_delta(word + (wi == 0 ? "" : " ")))
               sleep 30.milliseconds
             end
             sleep 50.milliseconds
@@ -251,35 +253,35 @@ module Hcode
             text = TEXT_SNIPPETS[i % TEXT_SNIPPETS.size]
             words = text.split(" ")
             words.each_with_index do |word, wi|
-              app.on_event(Hcode::Loop::Event.text_delta(word + (wi == words.size - 1 ? "" : " ")))
+              app.on_event(H2code::Loop::Event.text_delta(word + (wi == words.size - 1 ? "" : " ")))
               sleep 25.milliseconds
             end
             sleep 50.milliseconds
 
             # Tool call
             tool_id = "tc_#{i}"
-            app.on_event(Hcode::Loop::Event.tool_call_start(tool_id, tool_name, tool_args))
+            app.on_event(H2code::Loop::Event.tool_call_start(tool_id, tool_name, tool_args))
             sleep 100.milliseconds
 
             # Tool result
-            app.on_event(Hcode::Loop::Event.tool_result(tool_id, tool_result_text, false))
+            app.on_event(H2code::Loop::Event.tool_result(tool_id, tool_result_text, false))
             sleep 80.milliseconds
           end
 
           # Final assistant text
           final = "Done. The frontend now validates key expiry — when the deadline passes, the key becomes invalid."
           final.split(" ").each_with_index do |word, wi|
-            app.on_event(Hcode::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
+            app.on_event(H2code::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
             sleep 30.milliseconds
           end
           sleep 50.milliseconds
 
-          app.on_event(Hcode::Loop::Event.assistant_text(final))
-          app.on_event(Hcode::Loop::Event.turn_end)
+          app.on_event(H2code::Loop::Event.assistant_text(final))
+          app.on_event(H2code::Loop::Event.turn_end)
         end
       end
     end
   end
 end
 
-Hcode::MockFastHcode.run
+H2code::MockFastH2code.run

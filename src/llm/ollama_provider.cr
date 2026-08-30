@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # Ollama backend over the OpenAI Chat Completions protocol. Ollama runs
     # locally and needs no API key — the `token` is always empty and the

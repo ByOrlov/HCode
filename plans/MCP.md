@@ -63,7 +63,7 @@ MCP — JSON-RPC 2.0. Каждое сообщение — JSON-объект с `
    {"jsonrpc":"2.0","id":1,"method":"initialize","params":{
      "protocolVersion":"2025-06-18",
      "capabilities":{},
-     "clientInfo":{"name":"hcode","version":"X.Y.Z"}
+     "clientInfo":{"name":"h2code","version":"X.Y.Z"}
    }}
    ```
 2. **`notifications/initialized`** (notification) — сразу после `initialize`.
@@ -97,7 +97,7 @@ MCP — JSON-RPC 2.0. Каждое сообщение — JSON-объект с `
 
 | Где | Что | Сложность |
 |---|---|---|
-| `src/hcode.cr:256-283` | Запуск MCP-серверов после регистрации встроенных инструментов | Низкая |
+| `src/h2code.cr:256-283` | Запуск MCP-серверов после регистрации встроенных инструментов | Низкая |
 | `src/tools/registry.cr` | `registry.register(McpProxyTool.new(...))` — без изменений в реестре | Нулевая |
 | `src/tools/tool.cr:3-14` | `McpProxyTool < Tool` — реализует 4 абстрактных метода | Низкая |
 | `src/loop/tool_batch.cr:85,161` | Диспетчеризация — без изменений, прокси-инструмент проходит тот же путь | Нулевая |
@@ -137,7 +137,7 @@ class Registry
 end
 ```
 
-Регистрация встроенных инструментов — в `src/hcode.cr:256-283`. Естественная
+Регистрация встроенных инструментов — в `src/h2code.cr:256-283`. Естественная
 точка инъекции MCP: после встроенных, итерировать `config.mcp_servers`,
 подключать каждый, вызвать `tools/list`, и `tools.register(McpProxyTool.new(...))`
 для каждого удалённого инструмента.
@@ -156,10 +156,10 @@ end
 
 ### Последовательность запуска
 
-`src/hcode.cr:153-347` (`CLI.run`):
+`src/h2code.cr:153-347` (`CLI.run`):
 
 1. Парсинг аргументов (166–202).
-2. `Config::Config.load` (214) — `~/.hcode/config.toml` + env.
+2. `Config::Config.load` (214) — `~/.h2code/config.toml` + env.
 3. Создание провайдера (246).
 4. **Создание реестра инструментов (256–283)** — ← здесь подключаются MCP-серверы.
 5. `Loop::Agent.new(provider, memory, tools, permission)` (322).
@@ -196,7 +196,7 @@ MCP-серверы спавнятся между строками 283 и 322. Ж
 | Конвертация результата | ~50 | text-only: `MCPContentBlock` → `ToolResult.content : String` |
 | Загрузка конфига | ~100 | Парсинг секции `[[mcp_servers]]` в `config.toml` (по аналогии с `[[hooks]]`) или `mcp.json` |
 | Прокси-инструмент | ~100 | `McpProxyTool < Tool` — реализует `name`, `description`, `parameters`, `execute` |
-| Интеграция в startup | ~100 | Запуск серверов между `registry` и `Agent.new` в `hcode.cr:283→322` |
+| Интеграция в startup | ~100 | Запуск серверов между `registry` и `Agent.new` в `h2code.cr:283→322` |
 | Shutdown/cleanup | ~50 | `Process#kill` при выходе, hook в `Signal::INT.trap` |
 
 **Покрывает:** подключение любого stdio MCP-сервера
@@ -236,7 +236,7 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
 ```
 
-Или файл `~/.hcode/mcp.json` (формат как в JS):
+Или файл `~/.h2code/mcp.json` (формат как в JS):
 
 ```json
 {

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     module UIPanels
       private def render_sudo_approval_panel(cols : Int32) : Array(String)
@@ -115,9 +115,9 @@ module Hcode
           placeholder_text = if @setup_mode && (w = @wizard) && !w.done?
                                w.placeholder
                              elsif @plan_mode
-                               Hcode.t("ui.send_a_message") + " (" + Hcode.t("ui.plan_mode_placeholder") + ")"
+                               H2code.t("ui.send_a_message") + " (" + H2code.t("ui.plan_mode_placeholder") + ")"
                              else
-                               Hcode.t("ui.send_a_message")
+                               H2code.t("ui.send_a_message")
                              end
           body = "#{dc}#{placeholder_text}#{r}"
           lines << build_editor_row(box_w, bc, r, prompt, body)
@@ -200,7 +200,7 @@ module Hcode
 
       # Placeholder shown in the input box while the query is empty.
       private def search_placeholder : String
-        Hcode.t("ui.search_model")
+        H2code.t("ui.search_model")
       end
 
       # Renders the fuzzy query as a single-line editor content row, with the
@@ -364,7 +364,7 @@ module Hcode
       # percent. The percent is recomputed from the raw counts so it does
       # not lag a step behind `@context_percent`.
       private def build_context_status : String
-        label = Hcode.t("ui.context_label").downcase
+        label = H2code.t("ui.context_label").downcase
         if @max_context_tokens > 0 && @context_tokens > 0
           pct = (@context_tokens.to_f64 / @max_context_tokens * 100).ceil.to_i
           pct = 100 if pct > 100
@@ -375,7 +375,7 @@ module Hcode
       end
 
       # Returns the current TodoList items via the `on_fetch_todos` callback
-      # (wired in `hcode.cr` to `Tools::TodoList#todos`). Returns nil if the
+      # (wired in `h2code.cr` to `Tools::TodoList#todos`). Returns nil if the
       # tool isn't registered or no todos exist, so the panel is hidden.
       private def current_todos : Array({String, String})?
         return nil unless cb = @on_fetch_todos
@@ -454,7 +454,7 @@ module Hcode
         # user confirms (second press) or cancels (Esc), preventing collisions
         # where a background render swapped the last line back to context info.
         if @exit_confirm
-          return "#{ANSI.color(@theme.colors.warning, nil)} #{Hcode.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
+          return "#{ANSI.color(@theme.colors.warning, nil)} #{H2code.t("ui.press_to_exit", btn: @exit_key)}#{ANSI.reset}"
         end
 
         parts = [
@@ -521,7 +521,7 @@ module Hcode
         title = @model_list.title
         lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  #{title}#{ANSI.reset}"
 
-        active_label = Hcode.t("ui.model_active")
+        active_label = H2code.t("ui.model_active")
         start, count = @model_list.visible_window
         if @model_list.scrolled_up?
           lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↑ #{start} more#{ANSI.reset}"
@@ -545,9 +545,9 @@ module Hcode
         shown = count
         total = @model_list.filtered_size
         if shown < total
-          status = Hcode.t("ui.models_shown_of", shown: shown, total: total)
+          status = H2code.t("ui.models_shown_of", shown: shown, total: total)
         else
-          status = Hcode.t("ui.models_shown_all")
+          status = H2code.t("ui.models_shown_all")
         end
         lines << "#{ANSI.color(@theme.colors.dim, nil)}  #{status}#{ANSI.reset}"
         lines << "#{ANSI.color(@theme.colors.dim, nil)}  #{model_picker_hint(searching)}#{ANSI.reset}"
@@ -557,14 +557,14 @@ module Hcode
       # Builds the key-hint line from translated action words. The bracketed
       # key symbols are universal; only the action text is localized.
       private def model_picker_hint(searching : Bool) : String
-        nav = "[↑↓] #{Hcode.t("ui.picker_navigate")}"
-        pick = "[Enter] #{Hcode.t("ui.picker_select")}"
-        cancel = "[Esc] #{Hcode.t("ui.picker_cancel")}"
+        nav = "[↑↓] #{H2code.t("ui.picker_navigate")}"
+        pick = "[Enter] #{H2code.t("ui.picker_select")}"
+        cancel = "[Esc] #{H2code.t("ui.picker_cancel")}"
         if searching
-          clear = "[⌫] #{Hcode.t("ui.picker_clear")}"
+          clear = "[⌫] #{H2code.t("ui.picker_clear")}"
           "#{nav}  #{clear}  #{pick}  #{cancel}"
         else
-          search = "[#{Hcode.t("ui.picker_search")}]"
+          search = "[#{H2code.t("ui.picker_search")}]"
           "#{nav}  #{search}  #{pick}  #{cancel}"
         end
       end

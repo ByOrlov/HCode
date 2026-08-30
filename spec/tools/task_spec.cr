@@ -1,15 +1,15 @@
 require "../spec_helper"
 require "../../src/tools/task"
 
-def make_task(id : String, status : Hcode::Tools::AgentTaskStatus = Hcode::Tools::AgentTaskStatus::Running,
+def make_task(id : String, status : H2code::Tools::AgentTaskStatus = H2code::Tools::AgentTaskStatus::Running,
               description : String = "test task",
               started_at : Int64 = 1_i64,
               command : String? = nil,
               pid : Int64? = nil,
               exit_code : Int32? = nil,
               stop_reason : String? = nil,
-              ended_at : Int64? = nil) : Hcode::Tools::AgentTaskInfo
-  Hcode::Tools::AgentTaskInfo.new(
+              ended_at : Int64? = nil) : H2code::Tools::AgentTaskInfo
+  H2code::Tools::AgentTaskInfo.new(
     task_id: id,
     description: description,
     status: status,
@@ -22,17 +22,17 @@ def make_task(id : String, status : Hcode::Tools::AgentTaskStatus = Hcode::Tools
   )
 end
 
-describe Hcode::Tools::TaskList do
+describe H2code::Tools::TaskList do
   before_each do
-    Hcode::Tools::Task.service = Hcode::Tools::InMemoryTaskService.new
+    H2code::Tools::Task.service = H2code::Tools::InMemoryTaskService.new
   end
   after_each do
-    Hcode::Tools::Task.service = nil
+    H2code::Tools::Task.service = nil
   end
 
   it "exposes JS-name and identical schema" do
-    tool = Hcode::Tools::TaskList.new
-    tool.name.should eq(Hcode::Tools::Names::TASK_LIST)
+    tool = H2code::Tools::TaskList.new
+    tool.name.should eq(H2code::Tools::Names::TASK_LIST)
     props = tool.parameters["properties"].as_h
     props.has_key?("active_only").should be_true
     props.has_key?("limit").should be_true
@@ -40,14 +40,14 @@ describe Hcode::Tools::TaskList do
   end
 
   it "returns 'No background tasks' when empty" do
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_false
     result.content.should eq("active_background_tasks: 0\nNo background tasks found.")
   end
 
   it "uses 'background_tasks' label when active_only=false" do
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "active_only": false })))
     result.is_error?.should be_false
     result.content.should contain("background_tasks: 0")
@@ -55,14 +55,14 @@ describe Hcode::Tools::TaskList do
   end
 
   it "lists tasks with all key fields" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(
       id: "bash-1",
       description: "npm run build",
       command: "npm run build",
       pid: 12345_i64,
     ))
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_false
     result.content.should contain("active_background_tasks: 1")
@@ -74,10 +74,10 @@ describe Hcode::Tools::TaskList do
   end
 
   it "filters out terminal tasks when active_only=true (default)" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    service.register(make_task(id: "bash-2", status: Hcode::Tools::AgentTaskStatus::Completed))
-    tool = Hcode::Tools::TaskList.new
+    service.register(make_task(id: "bash-2", status: H2code::Tools::AgentTaskStatus::Completed))
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.content.should contain("active_background_tasks: 1")
     result.content.should contain("task_id: bash-1")
@@ -85,46 +85,46 @@ describe Hcode::Tools::TaskList do
   end
 
   it "includes terminal tasks when active_only=false" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    service.register(make_task(id: "bash-2", status: Hcode::Tools::AgentTaskStatus::Completed))
-    tool = Hcode::Tools::TaskList.new
+    service.register(make_task(id: "bash-2", status: H2code::Tools::AgentTaskStatus::Completed))
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "active_only": false })))
     result.content.should contain("background_tasks: 2")
   end
 
   it "respects limit parameter" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2"))
     service.register(make_task(id: "bash-3"))
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "limit": 2 })))
     result.content.should contain("active_background_tasks: 2")
   end
 
   it "rejects limit=0 (clamped to 1)" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({ "limit": 0 })))
     result.is_error?.should be_false
     result.content.should contain("active_background_tasks: 1")
   end
 
   it "records separated by ---" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
     service.register(make_task(id: "bash-2"))
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.content.should contain("\n---\n")
   end
 
   it "converts CamelCase keys to snake_case" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1", pid: 123_i64, command: "x", exit_code: nil, stop_reason: "killed"))
-    tool = Hcode::Tools::TaskList.new
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.content.should contain("task_id:")
     result.content.should contain("started_at:")
@@ -132,25 +132,25 @@ describe Hcode::Tools::TaskList do
   end
 
   it "fails when no service is registered" do
-    Hcode::Tools::Task.service = nil
-    tool = Hcode::Tools::TaskList.new
+    H2code::Tools::Task.service = nil
+    tool = H2code::Tools::TaskList.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end
 
-describe Hcode::Tools::TaskOutput do
+describe H2code::Tools::TaskOutput do
   before_each do
-    Hcode::Tools::Task.service = Hcode::Tools::InMemoryTaskService.new
+    H2code::Tools::Task.service = H2code::Tools::InMemoryTaskService.new
   end
   after_each do
-    Hcode::Tools::Task.service = nil
+    H2code::Tools::Task.service = nil
   end
 
   it "exposes JS-name and identical schema" do
-    tool = Hcode::Tools::TaskOutput.new
-    tool.name.should eq(Hcode::Tools::Names::TASK_OUTPUT)
+    tool = H2code::Tools::TaskOutput.new
+    tool.name.should eq(H2code::Tools::Names::TASK_OUTPUT)
     props = tool.parameters["properties"].as_h
     props.has_key?("task_id").should be_true
     props.has_key?("block").should be_true
@@ -160,9 +160,9 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns not_ready for running task (default block=false)" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.is_error?.should be_false
     result.content.should contain("retrieval_status: not_ready")
@@ -170,9 +170,9 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns timeout for running task with block=true" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "block": true })))
     result.is_error?.should be_false
     result.content.should contain("retrieval_status: timeout")
@@ -181,9 +181,9 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "returns success for terminal task" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
-    service.register(make_task(id: "bash-1", status: Hcode::Tools::AgentTaskStatus::Completed, exit_code: 0))
-    tool = Hcode::Tools::TaskOutput.new
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
+    service.register(make_task(id: "bash-1", status: H2code::Tools::AgentTaskStatus::Completed, exit_code: 0))
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("retrieval_status: success")
     result.content.should contain("status: completed")
@@ -191,45 +191,45 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits terminal_reason=stopped for killed task with stop_reason" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Killed,
+      status: H2code::Tools::AgentTaskStatus::Killed,
       stop_reason: "Killed manually"))
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("terminal_reason: stopped")
     result.content.should contain("stop_reason: Killed manually")
   end
 
   it "emits terminal_reason=timed_out for TimedOut task" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
-    service.register(make_task(id: "bash-1", status: Hcode::Tools::AgentTaskStatus::TimedOut))
-    tool = Hcode::Tools::TaskOutput.new
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
+    service.register(make_task(id: "bash-1", status: H2code::Tools::AgentTaskStatus::TimedOut))
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("terminal_reason: timed_out")
   end
 
   it "omits terminal_reason for plain completed exit" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should_not contain("terminal_reason")
   end
 
   it "emits truncation banner when truncated with output_path" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
     service.set_output("bash-1",
-      "a" * (Hcode::Tools::Task::OUTPUT_PREVIEW_BYTES + 100),
+      "a" * (H2code::Tools::Task::OUTPUT_PREVIEW_BYTES + 100),
       output_path: "/tmp/x.log",
       full_output_available: true,
       truncated: true)
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("[Truncated. Full output: /tmp/x.log]")
     result.content.should contain("output_truncated: true")
@@ -239,61 +239,61 @@ describe Hcode::Tools::TaskOutput do
   end
 
   it "emits no-full-log banner when truncated without persisted log" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
     service.set_output("bash-1",
-      "a" * (Hcode::Tools::Task::OUTPUT_PREVIEW_BYTES + 100),
+      "a" * (H2code::Tools::Task::OUTPUT_PREVIEW_BYTES + 100),
       output_path: nil,
       full_output_available: false,
       truncated: true)
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("[Truncated. No persisted full log is available for this task.]")
   end
 
   it "emits [no output available] when preview is empty" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("[output]")
     result.content.should contain("[no output available]")
   end
 
   it "renders preview after [output] marker" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
     service.set_output("bash-1", "Hello world")
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("[output]\nHello world")
   end
 
   it "returns Task not found for unknown id" do
-    tool = Hcode::Tools::TaskOutput.new
+    tool = H2code::Tools::TaskOutput.new
     result = tool.execute(JSON.parse(%({ "task_id": "nope" })))
     result.is_error?.should be_true
     result.content.should contain("Task not found: nope")
   end
 end
 
-describe Hcode::Tools::TaskStop do
+describe H2code::Tools::TaskStop do
   before_each do
-    Hcode::Tools::Task.service = Hcode::Tools::InMemoryTaskService.new
+    H2code::Tools::Task.service = H2code::Tools::InMemoryTaskService.new
   end
   after_each do
-    Hcode::Tools::Task.service = nil
+    H2code::Tools::Task.service = nil
   end
 
   it "exposes JS-name and identical schema" do
-    tool = Hcode::Tools::TaskStop.new
-    tool.name.should eq(Hcode::Tools::Names::TASK_STOP)
+    tool = H2code::Tools::TaskStop.new
+    tool.name.should eq(H2code::Tools::Names::TASK_STOP)
     props = tool.parameters["properties"].as_h
     props.has_key?("task_id").should be_true
     props.has_key?("reason").should be_true
@@ -302,9 +302,9 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "stops a running task with default reason" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.is_error?.should be_false
     result.content.should contain("task_id: bash-1")
@@ -313,27 +313,27 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "stops a running task with custom reason" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "reason": "User killed" })))
     result.content.should contain("reason: User killed")
   end
 
   it "treats whitespace-only reason as default" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1"))
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1", "reason": "   " })))
     result.content.should contain("reason: Stopped by TaskStop")
   end
 
   it "returns status when task already terminal" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       exit_code: 0))
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.is_error?.should be_false
     result.content.should contain("task_id: bash-1")
@@ -342,63 +342,63 @@ describe Hcode::Tools::TaskStop do
   end
 
   it "uses stored stop_reason when task already terminal and has one" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     service.register(make_task(id: "bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Failed,
+      status: H2code::Tools::AgentTaskStatus::Failed,
       stop_reason: "timed out"))
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     result.content.should contain("reason: timed out")
   end
 
   it "suppresses terminal notification before stopping" do
-    service = Hcode::Tools::Task.service || raise "Task.service not initialized"
+    service = H2code::Tools::Task.service || raise "Task.service not initialized"
     info = service.register(make_task(id: "bash-1"))
     info.terminal_notification_suppressed.should be_nil
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     tool.execute(JSON.parse(%({ "task_id": "bash-1" })))
     info.terminal_notification_suppressed.should be_true
   end
 
   it "returns Task not found for unknown id" do
-    tool = Hcode::Tools::TaskStop.new
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "nope" })))
     result.is_error?.should be_true
     result.content.should contain("Task not found: nope")
   end
 
   it "fails when no service is registered" do
-    Hcode::Tools::Task.service = nil
-    tool = Hcode::Tools::TaskStop.new
+    H2code::Tools::Task.service = nil
+    tool = H2code::Tools::TaskStop.new
     result = tool.execute(JSON.parse(%({ "task_id": "x" })))
     result.is_error?.should be_true
     result.content.should contain("not initialized")
   end
 end
 
-describe "Hcode::Tools::AgentTaskStatus" do
+describe "H2code::Tools::AgentTaskStatus" do
   it "to_wire emits snake_case" do
-    Hcode::Tools::AgentTaskStatus::Running.to_wire.should eq("running")
-    Hcode::Tools::AgentTaskStatus::Completed.to_wire.should eq("completed")
-    Hcode::Tools::AgentTaskStatus::Failed.to_wire.should eq("failed")
-    Hcode::Tools::AgentTaskStatus::TimedOut.to_wire.should eq("timed_out")
-    Hcode::Tools::AgentTaskStatus::Killed.to_wire.should eq("killed")
-    Hcode::Tools::AgentTaskStatus::Lost.to_wire.should eq("lost")
+    H2code::Tools::AgentTaskStatus::Running.to_wire.should eq("running")
+    H2code::Tools::AgentTaskStatus::Completed.to_wire.should eq("completed")
+    H2code::Tools::AgentTaskStatus::Failed.to_wire.should eq("failed")
+    H2code::Tools::AgentTaskStatus::TimedOut.to_wire.should eq("timed_out")
+    H2code::Tools::AgentTaskStatus::Killed.to_wire.should eq("killed")
+    H2code::Tools::AgentTaskStatus::Lost.to_wire.should eq("lost")
   end
 
   it "terminal? returns true for non-Running statuses" do
-    Hcode::Tools::AgentTaskStatus::Running.terminal?.should be_false
-    Hcode::Tools::AgentTaskStatus::Completed.terminal?.should be_true
-    Hcode::Tools::AgentTaskStatus::Failed.terminal?.should be_true
-    Hcode::Tools::AgentTaskStatus::TimedOut.terminal?.should be_true
-    Hcode::Tools::AgentTaskStatus::Killed.terminal?.should be_true
-    Hcode::Tools::AgentTaskStatus::Lost.terminal?.should be_true
+    H2code::Tools::AgentTaskStatus::Running.terminal?.should be_false
+    H2code::Tools::AgentTaskStatus::Completed.terminal?.should be_true
+    H2code::Tools::AgentTaskStatus::Failed.terminal?.should be_true
+    H2code::Tools::AgentTaskStatus::TimedOut.terminal?.should be_true
+    H2code::Tools::AgentTaskStatus::Killed.terminal?.should be_true
+    H2code::Tools::AgentTaskStatus::Lost.terminal?.should be_true
   end
 end
 
-describe "Hcode::Tools.render_notification_xml" do
+describe "H2code::Tools.render_notification_xml" do
   it "renders a full notification block" do
-    xml = Hcode::Tools.render_notification_xml({
+    xml = H2code::Tools.render_notification_xml({
       "id"          => JSON::Any.new("task-1"),
       "category"    => JSON::Any.new("task_completion"),
       "type"        => JSON::Any.new("agent_completed"),
@@ -417,7 +417,7 @@ describe "Hcode::Tools.render_notification_xml" do
   end
 
   it "falls back to 'unknown' for missing required attrs" do
-    xml = Hcode::Tools.render_notification_xml({} of String => JSON::Any)
+    xml = H2code::Tools.render_notification_xml({} of String => JSON::Any)
     xml.should contain(%(id="unknown"))
     xml.should contain(%(category="unknown"))
     xml.should contain(%(type="unknown"))
@@ -429,7 +429,7 @@ describe "Hcode::Tools.render_notification_xml" do
   end
 
   it "escapes XML special chars in attribute values" do
-    xml = Hcode::Tools.render_notification_xml({
+    xml = H2code::Tools.render_notification_xml({
       "id"   => JSON::Any.new(%(a "b" & <c>)),
       "type" => JSON::Any.new("x"),
     } of String => JSON::Any)
@@ -437,7 +437,7 @@ describe "Hcode::Tools.render_notification_xml" do
   end
 
   it "renders children when provided" do
-    xml = Hcode::Tools.render_notification_xml({
+    xml = H2code::Tools.render_notification_xml({
       "id"       => JSON::Any.new("x"),
       "children" => JSON::Any.new([JSON::Any.new("line1"), JSON::Any.new("line2")] of JSON::Any),
     } of String => JSON::Any)
@@ -446,20 +446,20 @@ describe "Hcode::Tools.render_notification_xml" do
   end
 end
 
-describe "Hcode::Tools.snake_case_key" do
+describe "H2code::Tools.snake_case_key" do
   it "converts CamelCase to snake_case" do
-    Hcode::Tools.snake_case_key("taskId").should eq("task_id")
-    Hcode::Tools.snake_case_key("outputPath").should eq("output_path")
-    Hcode::Tools.snake_case_key("startedAt").should eq("started_at")
-    Hcode::Tools.snake_case_key("fullOutputAvailable").should eq("full_output_available")
-    Hcode::Tools.snake_case_key("simple").should eq("simple")
+    H2code::Tools.snake_case_key("taskId").should eq("task_id")
+    H2code::Tools.snake_case_key("outputPath").should eq("output_path")
+    H2code::Tools.snake_case_key("startedAt").should eq("started_at")
+    H2code::Tools.snake_case_key("fullOutputAvailable").should eq("full_output_available")
+    H2code::Tools.snake_case_key("simple").should eq("simple")
   end
 end
 
-describe Hcode::Tools::AgentTaskInfo do
+describe H2code::Tools::AgentTaskInfo do
   it "round-trips through JSON serialization" do
     info = make_task("bash-1",
-      status: Hcode::Tools::AgentTaskStatus::Completed,
+      status: H2code::Tools::AgentTaskStatus::Completed,
       command: "echo hello",
       pid: 12345_i64,
       exit_code: 0,
@@ -473,9 +473,9 @@ describe Hcode::Tools::AgentTaskInfo do
     parsed["pid"].as_i64.should eq(12345)
     parsed["exit_code"].as_i.should eq(0)
 
-    restored = Hcode::Tools::AgentTaskInfo.from_json_obj(parsed)
+    restored = H2code::Tools::AgentTaskInfo.from_json_obj(parsed)
     restored.task_id.should eq("bash-1")
-    restored.status.should eq(Hcode::Tools::AgentTaskStatus::Completed)
+    restored.status.should eq(H2code::Tools::AgentTaskStatus::Completed)
     restored.command.should eq("echo hello")
     restored.pid.should eq(12345)
     restored.exit_code.should eq(0)
@@ -483,26 +483,26 @@ describe Hcode::Tools::AgentTaskInfo do
 
   it "handles nil fields in JSON round-trip" do
     info = make_task("agent-2",
-      status: Hcode::Tools::AgentTaskStatus::Running,
+      status: H2code::Tools::AgentTaskStatus::Running,
     )
     json = info.to_json_str
     parsed = JSON.parse(json)
     parsed.as_h.has_key?("ended_at").should be_false
     parsed.as_h.has_key?("command").should be_false
 
-    restored = Hcode::Tools::AgentTaskInfo.from_json_obj(parsed)
+    restored = H2code::Tools::AgentTaskInfo.from_json_obj(parsed)
     restored.ended_at.should be_nil
     restored.command.should be_nil
   end
 end
 
-describe Hcode::Tools::InMemoryTaskService do
+describe H2code::Tools::InMemoryTaskService do
   it "persists task metadata to the store" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "task-persist-#{Random::Secure.hex(4)}"))
-      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      store = H2code::Session::Store.new(File.join(tmp, "task-persist-#{Random::Secure.hex(4)}"))
+      svc = H2code::Tools::InMemoryTaskService.new(store)
 
-      info = make_task("bash-1", status: Hcode::Tools::AgentTaskStatus::Running, command: "sleep 10")
+      info = make_task("bash-1", status: H2code::Tools::AgentTaskStatus::Running, command: "sleep 10")
       svc.register(info)
 
       path = store.task_meta_path("bash-1")
@@ -515,31 +515,31 @@ describe Hcode::Tools::InMemoryTaskService do
 
   it "marks non-terminal tasks as lost on resume" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "task-lost-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "task-lost-#{Random::Secure.hex(4)}"))
 
       # Simulate a previous session writing a Running task.
-      info = make_task("bash-old", status: Hcode::Tools::AgentTaskStatus::Running)
+      info = make_task("bash-old", status: H2code::Tools::AgentTaskStatus::Running)
       store.write_task_meta("bash-old", info.to_json_str)
 
       # New session: load + reconcile.
-      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      svc = H2code::Tools::InMemoryTaskService.new(store)
       lost = svc.mark_lost_on_resume
 
       lost.size.should eq(1)
       lost.first.task_id.should eq("bash-old")
-      lost.first.status.should eq(Hcode::Tools::AgentTaskStatus::Lost)
+      lost.first.status.should eq(H2code::Tools::AgentTaskStatus::Lost)
       svc.get_task("bash-old").try(&.status.lost?).should be_true
     end
   end
 
   it "does not mark terminal tasks as lost on resume" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "task-term-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "task-term-#{Random::Secure.hex(4)}"))
 
-      info = make_task("bash-done", status: Hcode::Tools::AgentTaskStatus::Completed, exit_code: 0)
+      info = make_task("bash-done", status: H2code::Tools::AgentTaskStatus::Completed, exit_code: 0)
       store.write_task_meta("bash-done", info.to_json_str)
 
-      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      svc = H2code::Tools::InMemoryTaskService.new(store)
       lost = svc.mark_lost_on_resume
 
       lost.empty?.should be_true
@@ -549,15 +549,15 @@ describe Hcode::Tools::InMemoryTaskService do
 
   it "kills a real process on stop" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "task-kill-#{Random::Secure.hex(4)}"))
-      svc = Hcode::Tools::InMemoryTaskService.new(store)
+      store = H2code::Session::Store.new(File.join(tmp, "task-kill-#{Random::Secure.hex(4)}"))
+      svc = H2code::Tools::InMemoryTaskService.new(store)
 
       # Spawn a real sleep process.
       process = Process.new("sleep", ["100"], input: Process::Redirect::Close,
         output: Process::Redirect::Close, error: Process::Redirect::Close)
       exit_ch = Channel(Process::Status).new
 
-      info = make_task("bash-proc", status: Hcode::Tools::AgentTaskStatus::Running, pid: process.pid.to_i64)
+      info = make_task("bash-proc", status: H2code::Tools::AgentTaskStatus::Running, pid: process.pid.to_i64)
       svc.register(info)
       svc.register_process("bash-proc", process, exit_ch)
 
@@ -569,10 +569,10 @@ describe Hcode::Tools::InMemoryTaskService do
   end
 end
 
-describe Hcode::Session::Store do
+describe H2code::Session::Store do
   it "writes and reads cron tasks atomically" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "cron-store-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "cron-store-#{Random::Secure.hex(4)}"))
       store.write_cron_tasks(%([{"id":"abc","cron":"* * * * *","prompt":"hi","recurring":true,"created_at":1000}]))
 
       tasks = store.read_cron_tasks
@@ -584,14 +584,14 @@ describe Hcode::Session::Store do
 
   it "returns empty array for missing cron file" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "cron-missing-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "cron-missing-#{Random::Secure.hex(4)}"))
       store.read_cron_tasks.should be_empty
     end
   end
 
   it "writes and reads task metadata" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "meta-store-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "meta-store-#{Random::Secure.hex(4)}"))
       store.write_task_meta("task-1", %({"task_id":"task-1","status":"running"}))
 
       meta = store.read_task_meta("task-1") || raise "read_task_meta should not be nil"
@@ -602,7 +602,7 @@ describe Hcode::Session::Store do
 
   it "lists all task metadata files" do
     Dir.tempdir.tap do |tmp|
-      store = Hcode::Session::Store.new(File.join(tmp, "list-store-#{Random::Secure.hex(4)}"))
+      store = H2code::Session::Store.new(File.join(tmp, "list-store-#{Random::Secure.hex(4)}"))
       store.write_task_meta("task-1", %({"task_id":"task-1","status":"running"}))
       store.write_task_meta("task-2", %({"task_id":"task-2","status":"completed"}))
 

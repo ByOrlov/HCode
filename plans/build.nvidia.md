@@ -1,4 +1,4 @@
-# Интеграция build.nvidia.com (NVIDIA NIM) в Hcode
+# Интеграция build.nvidia.com (NVIDIA NIM) в H2code
 
 ## Контекст
 
@@ -9,7 +9,7 @@ NVIDIA build.nvidia.com (NIM API) — полностью OpenAI-совмести
 - модели именуются как `vendor/model` (`meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-r1`, …)
 - `GET /models` работает из коробки
 
-В Hcode уже есть общий движок `OpenAIChatProvider` (транспорт, SSE-парсинг, накопление tool-call-ов).
+В H2code уже есть общий движок `OpenAIChatProvider` (транспорт, SSE-парсинг, накопление tool-call-ов).
 Поэтому интеграция — это ещё один провайдер-наследник по образцу `ZaiProvider`, плюс улучшения
 обработки 429, который у NIM ожидается часто из-за агрессивных лимитов.
 
@@ -50,10 +50,10 @@ NVIDIA build.nvidia.com (NIM API) — полностью OpenAI-совмести
 | `src/config/config.cr:12` | Поля `nvidia_api_key : String`, `nvidia_endpoint : String`, `nvidia_model : String` (рядом с zai) |
 | `src/config/config.cr:137` | Парсинг TOML: кейсы `[provider.nvidia] api_key/endpoint/model` |
 | `src/config/config.cr:43` | Env-маппинг: `NVIDIA_API_KEY`, `NVIDIA_ENDPOINT`, `NVIDIA_MODEL` |
-| `src/config/config.cr` | Новая секция `[retry]` с полями `max_retries` (default 3), `base_delay` (default 2), `max_delay` (default 30) + env `HCODE_RETRY_MAX` и т.п. |
+| `src/config/config.cr` | Новая секция `[retry]` с полями `max_retries` (default 3), `base_delay` (default 2), `max_delay` (default 30) + env `H2CODE_RETRY_MAX` и т.п. |
 | `src/config/config.cr:287` | `provider_configured?`: `when "nvidia" then !nvidia_api_key.empty?` |
-| `src/hcode.cr:389` | В `build_named_provider` ветка `when "nvidia"` → `LLM::NvidiaProvider.new(...)` + проверка наличия ключа |
-| `src/hcode.cr` | `require` для `nvidia_provider.cr` (там, где уже `require` остальных провайдеров) |
+| `src/h2code.cr:389` | В `build_named_provider` ветка `when "nvidia"` → `LLM::NvidiaProvider.new(...)` + проверка наличия ключа |
+| `src/h2code.cr` | `require` для `nvidia_provider.cr` (там, где уже `require` остальных провайдеров) |
 | `src/setup/wizard.cr:23` | В `PROVIDER_CHOICES`: `ProviderChoice.new("nvidia", "NVIDIA NIM (build.nvidia.com)", true, "https://integrate.api.nvidia.com/v1", "meta/llama-3.3-70b-instruct", "Get a key at https://build.nvidia.com")` |
 | `src/setup/wizard.cr:147` | Ветка `when "nvidia"` для ввода ключа |
 
@@ -74,5 +74,5 @@ Moonshot, не нужно.
 
 - `crystal spec` — запустить существующие спеки, убедиться что ничего не сломано.
 - Добавить спек на парсинг `Retry-After` в `ApiError` (если есть spec-файл для types/retry).
-- Ручной тест: `HCODE_PROVIDER=nvidia NVIDIA_API_KEY=nvapi-... hcode` → отправить запрос,
+- Ручной тест: `H2CODE_PROVIDER=nvidia NVIDIA_API_KEY=nvapi-... h2code` → отправить запрос,
   убедиться что `/model` показывает список NIM-моделей через `GET /models`.

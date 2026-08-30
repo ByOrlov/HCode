@@ -1,14 +1,14 @@
 # Pull in the tool-name constants so any file that loads `Tool` (directly
 # or via the centralized require chain) can reference `Names::*` without a
-# separate require. Idempotent with the explicit require in hcode.cr.
+# separate require. Idempotent with the explicit require in h2code.cr.
 require "./names"
 
-module Hcode
+module H2code
   module Tools
     abstract class Tool
       # Composition root for cross-platform process termination. Tools that
       # spawn subprocesses use this instead of `LibC.kill` (POSIX-only).
-      PROCESS_PORT = ::Hcode::ProcessPort.default
+      PROCESS_PORT = ::H2code::ProcessPort.default
 
       abstract def name : String
       abstract def description : String

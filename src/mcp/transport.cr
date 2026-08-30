@@ -1,6 +1,6 @@
 require "../process_port"
 
-module Hcode
+module H2code
   module Mcp
     # A line-delimited, bidirectional byte transport for JSON-RPC. The stdio
     # transport (a child process) is the only MVP implementation; the abstract
@@ -78,7 +78,7 @@ module Hcode
           # Give the server a brief grace window, then force-kill so a hung
           # child never pins the agent process open. `Process#wait` cannot be
           # used in a `select` directly, so race it against a timer channel.
-          port = ::Hcode::ProcessPort.default
+          port = ::H2code::ProcessPort.default
           wait_ch = Channel(Process::Status).new
           spawn { wait_ch.send(process.wait) rescue nil }
           select

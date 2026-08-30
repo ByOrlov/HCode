@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # Raised when a provider cannot be built from the current config (missing
     # credentials, unknown name, ...). At startup it is rescued and turned into

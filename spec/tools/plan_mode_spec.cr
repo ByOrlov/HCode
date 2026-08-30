@@ -5,24 +5,24 @@ require "file_utils"
 private def with_plan_service(&)
   dir = File.join(ENV["TMPDIR"]? || "/tmp", "plan_mode_spec_#{Random::Secure.hex(8)}")
   Dir.mkdir_p(dir)
-  service = Hcode::Tools::AgentPlanService.new(dir, "agent-test", File.join(dir, "plan.md"))
-  Hcode::Tools::PlanMode.plan_service = service
-  Hcode::Tools::PlanMode.permission_mode = nil
-  Hcode::Tools::PlanMode.plan_review_service = nil
+  service = H2code::Tools::AgentPlanService.new(dir, "agent-test", File.join(dir, "plan.md"))
+  H2code::Tools::PlanMode.plan_service = service
+  H2code::Tools::PlanMode.permission_mode = nil
+  H2code::Tools::PlanMode.plan_review_service = nil
   begin
     yield service, dir
   ensure
-    Hcode::Tools::PlanMode.plan_service = nil
-    Hcode::Tools::PlanMode.permission_mode = nil
-    Hcode::Tools::PlanMode.plan_review_service = nil
+    H2code::Tools::PlanMode.plan_service = nil
+    H2code::Tools::PlanMode.permission_mode = nil
+    H2code::Tools::PlanMode.plan_review_service = nil
     FileUtils.rm_rf(dir)
   end
 end
 
-describe Hcode::Tools::EnterPlanMode do
+describe H2code::Tools::EnterPlanMode do
   it "exposes JS-name and identical schema" do
-    tool = Hcode::Tools::EnterPlanMode.new
-    tool.name.should eq(Hcode::Tools::Names::ENTER_PLAN_MODE)
+    tool = H2code::Tools::EnterPlanMode.new
+    tool.name.should eq(H2code::Tools::Names::ENTER_PLAN_MODE)
     tool.description.should contain("non-trivial implementation")
 
     tool.parameters["properties"].as_h.empty?.should be_true
@@ -32,7 +32,7 @@ describe Hcode::Tools::EnterPlanMode do
   it "fails when plan mode is already active" do
     with_plan_service do |service|
       service.enter
-      tool = Hcode::Tools::EnterPlanMode.new
+      tool = H2code::Tools::EnterPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_true
       result.content.should contain("already active")
@@ -41,7 +41,7 @@ describe Hcode::Tools::EnterPlanMode do
 
   it "enters plan mode and returns message with plan file" do
     with_plan_service do |service|
-      tool = Hcode::Tools::EnterPlanMode.new
+      tool = H2code::Tools::EnterPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("Plan mode is now active")
@@ -53,28 +53,28 @@ describe Hcode::Tools::EnterPlanMode do
 
   it "renders message without path when plan_path is nil" do
     # Custom service that keeps path nil even after enter.
-    service = Hcode::Tools::PlanServiceSpecHelper::NoPathPlanService.new
-    Hcode::Tools::PlanMode.plan_service = service
-    tool = Hcode::Tools::EnterPlanMode.new
+    service = H2code::Tools::PlanServiceSpecHelper::NoPathPlanService.new
+    H2code::Tools::PlanMode.plan_service = service
+    tool = H2code::Tools::EnterPlanMode.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_false
     result.content.should contain("no plan file path is available")
-    Hcode::Tools::PlanMode.plan_service = nil
+    H2code::Tools::PlanMode.plan_service = nil
   end
 
   it "fails when no service is registered" do
-    Hcode::Tools::PlanMode.plan_service = nil
-    tool = Hcode::Tools::EnterPlanMode.new
+    H2code::Tools::PlanMode.plan_service = nil
+    tool = H2code::Tools::EnterPlanMode.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_true
     result.content.should contain("Plan service is not initialized")
   end
 end
 
-describe Hcode::Tools::ExitPlanMode do
+describe H2code::Tools::ExitPlanMode do
   it "exposes JS-name and identical schema" do
-    tool = Hcode::Tools::ExitPlanMode.new
-    tool.name.should eq(Hcode::Tools::Names::EXIT_PLAN_MODE)
+    tool = H2code::Tools::ExitPlanMode.new
+    tool.name.should eq(H2code::Tools::Names::EXIT_PLAN_MODE)
     tool.description.should contain("plan mode")
     props = tool.parameters["properties"].as_h
     props.has_key?("options").should be_true
@@ -83,7 +83,7 @@ describe Hcode::Tools::ExitPlanMode do
 
   it "auto-enters plan mode when not active, then reports the missing plan file" do
     with_plan_service do |service|
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       # Принудительно вошли в plan mode.
       service.status.should_not be_nil
@@ -97,7 +97,7 @@ describe Hcode::Tools::ExitPlanMode do
   it "fails when plan file is empty (path known)" do
     with_plan_service do |service, _|
       service.enter
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_true
       result.content.should contain("No plan file found")
@@ -111,9 +111,9 @@ describe Hcode::Tools::ExitPlanMode do
       File.write(path, "## Plan\n\nStep 1: do thing.\n")
       service.enter
 
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: true)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: true)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
@@ -130,9 +130,9 @@ describe Hcode::Tools::ExitPlanMode do
       File.write(path, "Plan body.")
       service.enter
 
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
@@ -147,12 +147,12 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "The plan.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::Approve)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::Approve)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("Exited plan mode")
@@ -166,13 +166,13 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "Multi-approach plan.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::Approve,
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::Approve,
           selected_label: "Approach A")
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({
         "options": [{"label": "Approach A", "description": "first"}, {"label": "Approach B"}]
       })))
@@ -187,13 +187,13 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "Draft.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::Revise,
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::Revise,
           feedback: "Add more detail to step 2")
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("User rejected the plan. Feedback:")
@@ -207,12 +207,12 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "Draft.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::Revise)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::Revise)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("User requested revisions. Plan mode remains active.")
@@ -224,12 +224,12 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "Bad plan.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::RejectAndExit)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::RejectAndExit)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_true
       result.content.should contain("Plan rejected by user. Plan mode deactivated.")
@@ -241,12 +241,12 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "Plan.")
       service.enter
-      Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(auto: false)
-      Hcode::Tools::PlanMode.plan_review_service =
-        Hcode::Tools::PlanServiceSpecHelper::MockReviewService.new(
-          Hcode::Tools::PlanReviewDecision::Dismissed)
+      H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(auto: false)
+      H2code::Tools::PlanMode.plan_review_service =
+        H2code::Tools::PlanServiceSpecHelper::MockReviewService.new(
+          H2code::Tools::PlanReviewDecision::Dismissed)
 
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({})))
       result.is_error?.should be_false
       result.content.should contain("Plan approval dismissed. Plan mode remains active.")
@@ -258,7 +258,7 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "x")
       service.enter
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({
         "options": [
           {"label": "Approach A"},
@@ -274,7 +274,7 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "x")
       service.enter
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({
         "options": [{"label": "Reject"}]
       })))
@@ -287,7 +287,7 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "x")
       service.enter
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({
         "options": [{"label":"A"},{"label":"B"},{"label":"C"},{"label":"D"}]
       })))
@@ -300,7 +300,7 @@ describe Hcode::Tools::ExitPlanMode do
     with_plan_service do |service, dir|
       File.write(File.join(dir, "plan.md"), "x")
       service.enter
-      tool = Hcode::Tools::ExitPlanMode.new
+      tool = H2code::Tools::ExitPlanMode.new
       result = tool.execute(JSON.parse(%({
         "options": [{"label": ""}]
       })))
@@ -310,8 +310,8 @@ describe Hcode::Tools::ExitPlanMode do
   end
 
   it "fails when no service is registered" do
-    Hcode::Tools::PlanMode.plan_service = nil
-    tool = Hcode::Tools::ExitPlanMode.new
+    H2code::Tools::PlanMode.plan_service = nil
+    tool = H2code::Tools::ExitPlanMode.new
     result = tool.execute(JSON.parse(%({})))
     result.is_error?.should be_true
     result.content.should contain("Plan service is not initialized")
@@ -319,14 +319,14 @@ describe Hcode::Tools::ExitPlanMode do
 end
 
 # Helpers for plan-mode specs.
-module Hcode::Tools::PlanServiceSpecHelper
-  class NoPathPlanService < Hcode::Tools::PlanService
+module H2code::Tools::PlanServiceSpecHelper
+  class NoPathPlanService < H2code::Tools::PlanService
     @active : Bool = false
     @id : String = "test-plan-id"
 
-    def status : Hcode::Tools::PlanData?
+    def status : H2code::Tools::PlanData?
       return nil unless @active
-      Hcode::Tools::PlanData.new(id: @id, content: "", path: nil)
+      H2code::Tools::PlanData.new(id: @id, content: "", path: nil)
     end
 
     def enter(id : String? = nil, create_file : Bool = false) : Nil
@@ -348,18 +348,18 @@ module Hcode::Tools::PlanServiceSpecHelper
 
   # Scripted PlanReviewService: returns a fixed result, ignoring its inputs.
   # Lets the ExitPlanMode review branches be tested without a TUI.
-  class MockReviewService < Hcode::Tools::PlanReviewService
-    def initialize(@result : Hcode::Tools::PlanReviewResult)
+  class MockReviewService < H2code::Tools::PlanReviewService
+    def initialize(@result : H2code::Tools::PlanReviewResult)
     end
 
-    def self.new(decision : Hcode::Tools::PlanReviewDecision,
+    def self.new(decision : H2code::Tools::PlanReviewDecision,
                  selected_label : String? = nil,
                  feedback : String = "")
-      new(Hcode::Tools::PlanReviewResult.new(decision, selected_label, feedback))
+      new(H2code::Tools::PlanReviewResult.new(decision, selected_label, feedback))
     end
 
     def request(plan : String, path : String?,
-                options : Array(Hcode::Tools::PlanOption)?) : Hcode::Tools::PlanReviewResult?
+                options : Array(H2code::Tools::PlanOption)?) : H2code::Tools::PlanReviewResult?
       @result
     end
   end

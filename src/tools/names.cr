@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Single source of truth for the public names of built-in tools.
     #

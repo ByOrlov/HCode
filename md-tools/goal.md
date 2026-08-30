@@ -6,7 +6,7 @@
 > `serialize.ts`, `outcome-prompts.ts`, `goal.ts`, `goalService.ts`,
 > `types.ts`, `goalOps.ts`, `errors.ts`.
 
-Цель — 4 тула в `hcode.cr/src/tools/goal.cr` (`Tools::CreateGoal`,
+Цель — 4 тула в `h2code.cr/src/tools/goal.cr` (`Tools::CreateGoal`,
 `Tools::GetGoal`, `Tools::UpdateGoal`, `Tools::SetGoalBudget`) с
 идентичными контрактами. Состояние цели — в `GoalService`.
 
@@ -506,7 +506,7 @@ merged.
   - [ ] `Tools::SetGoalBudget` (§5) с `normalize_budget_input` /
         `budget_limits_from_input` / `would_exceed_budget` / `format_budget`.
 - [ ] `GoalService` инжекченный в тулы через `@@service : GoalService?`.
-- [ ] Регистрация только для main agent (в `src/hcode.cr` — main-агент
+- [ ] Регистрация только для main agent (в `src/h2code.cr` — main-агент
       инициализация).
 - [ ] Тесты в `spec/tools/goal_spec.cr`:
   - [ ] CreateGoal — создание с заменой / без; objective_empty /

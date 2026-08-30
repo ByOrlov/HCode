@@ -1,9 +1,9 @@
 require "../spec_helper"
 
-describe Hcode::Tools::Bash do
+describe H2code::Tools::Bash do
   it "exposes command, cwd, timeout, and description in the schema" do
-    bash = Hcode::Tools::Bash.new("/tmp")
-    bash.name.should eq(Hcode::Tools::Names::BASH)
+    bash = H2code::Tools::Bash.new("/tmp")
+    bash.name.should eq(H2code::Tools::Names::BASH)
 
     props = bash.parameters["properties"].as_h
     props.has_key?("command").should be_true
@@ -15,7 +15,7 @@ describe Hcode::Tools::Bash do
   end
 
   it "describes cwd, timeout cap, and the kill-on-timeout behavior" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     bash.description.should contain("cwd")
     bash.description.should contain("absolute paths")
     bash.description.should contain("hits its timeout is killed")
@@ -24,29 +24,29 @@ describe Hcode::Tools::Bash do
   end
 
   it "runs a command and returns stdout" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"printf hello"})))
     result.is_error?.should be_false
     result.content.should contain("hello")
   end
 
   it "combines stdout and stderr" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"printf out; printf err 1>&2"})))
     result.content.should contain("out")
     result.content.should contain("err")
   end
 
   it "honors the cwd argument" do
-    Dir.mkdir_p("/tmp/hcode-bash-cwd")
-    bash = Hcode::Tools::Bash.new("/tmp")
-    result = bash.execute(JSON.parse(%({"command":"pwd","cwd":"/tmp/hcode-bash-cwd"})))
+    Dir.mkdir_p("/tmp/h2code-bash-cwd")
+    bash = H2code::Tools::Bash.new("/tmp")
+    result = bash.execute(JSON.parse(%({"command":"pwd","cwd":"/tmp/h2code-bash-cwd"})))
     result.is_error?.should be_false
-    result.content.should contain("/tmp/hcode-bash-cwd")
+    result.content.should contain("/tmp/h2code-bash-cwd")
   end
 
   it "marks non-zero exit codes as errors with an [exit code: N] trailer" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"exit 2"})))
     result.is_error?.should be_true
     result.content.should contain("[exit code: 2]")
@@ -56,7 +56,7 @@ describe Hcode::Tools::Bash do
     prev = ENV["GIT_TERMINAL_PROMPT"]?
     ENV.delete("GIT_TERMINAL_PROMPT")
     begin
-      bash = Hcode::Tools::Bash.new("/tmp")
+      bash = H2code::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv NO_COLOR; printenv TERM; printenv GIT_TERMINAL_PROMPT"})))
       lines = result.content.strip.split('\n')
       lines.should contain("1")    # NO_COLOR=1
@@ -68,19 +68,19 @@ describe Hcode::Tools::Bash do
   end
 
   it "honors an ambient GIT_TERMINAL_PROMPT instead of forcing 0" do
-    prev = Hcode::Tools::Bash.git_terminal_prompt
-    Hcode::Tools::Bash.git_terminal_prompt = "1"
+    prev = H2code::Tools::Bash.git_terminal_prompt
+    H2code::Tools::Bash.git_terminal_prompt = "1"
     begin
-      bash = Hcode::Tools::Bash.new("/tmp")
+      bash = H2code::Tools::Bash.new("/tmp")
       result = bash.execute(JSON.parse(%({"command":"printenv GIT_TERMINAL_PROMPT"})))
       result.content.strip.should eq("1")
     ensure
-      Hcode::Tools::Bash.git_terminal_prompt = prev
+      H2code::Tools::Bash.git_terminal_prompt = prev
     end
   end
 
   it "closes stdin so an interactive command sees EOF instead of hanging" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     # `cat` with no input reads stdin; if stdin stayed open it would hang.
     result = bash.execute(JSON.parse(%({"command":"cat"})))
     result.is_error?.should be_false
@@ -88,20 +88,20 @@ describe Hcode::Tools::Bash do
   end
 
   it "clamps an over-limit timeout to MAX_TIMEOUT_S" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"true","timeout":99999})))
     result.is_error?.should be_false
   end
 
   it "kills a command that exceeds its timeout" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 30","timeout":1})))
     result.is_error?.should be_true
     result.content.should contain("timed out after 1s")
   end
 
   it "kills its subprocess promptly when the abort check fires" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     # Always-aborted: the wait_for_exit poll fires within ~100ms, then the
     # process is SIGTERM/SIGKILL'd. Previously the bare select left the child
     # running for the full Loop.execute_tool grace period.
@@ -119,21 +119,21 @@ describe Hcode::Tools::Bash do
   end
 
   it "rejects an empty command" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":""})))
     result.is_error?.should be_true
     result.content.should contain("empty")
   end
 
   it "rejects run_in_background=true when no task service is wired" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     result = bash.execute(JSON.parse(%({"command":"sleep 10","run_in_background":true})))
     result.is_error?.should be_true
     result.content.should contain("Background execution is not available")
   end
 
   it "truncates runaway output with a [...truncated] sentinel" do
-    bash = Hcode::Tools::Bash.new("/tmp")
+    bash = H2code::Tools::Bash.new("/tmp")
     # Generate well over the 10 MB in-tool cap.
     result = bash.execute(JSON.parse(%({"command":"yes x | head -c 12000000"})))
     result.content.should contain("[...truncated]")
@@ -141,13 +141,13 @@ describe Hcode::Tools::Bash do
   end
 end
 
-describe Hcode::Tools::Bash do
+describe H2code::Tools::Bash do
   it "runs a background command and captures output" do
     Dir.tempdir.tap do |tmp|
       session_dir = File.join(tmp, "bg-test-#{Random::Secure.hex(4)}")
       Dir.mkdir_p(session_dir)
-      task_svc = Hcode::Tools::InMemoryTaskService.new
-      bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir)
+      task_svc = H2code::Tools::InMemoryTaskService.new
+      bash = H2code::Tools::Bash.new("/tmp", task_svc, session_dir)
 
       result = bash.execute(JSON.parse(%({"command":"echo hello-bg","run_in_background":true})))
       result.is_error?.should be_false
@@ -173,10 +173,10 @@ describe Hcode::Tools::Bash do
     Dir.tempdir.tap do |tmp|
       session_dir = File.join(tmp, "bg-notify-#{Random::Secure.hex(4)}")
       Dir.mkdir_p(session_dir)
-      task_svc = Hcode::Tools::InMemoryTaskService.new
+      task_svc = H2code::Tools::InMemoryTaskService.new
       delivered = [] of String
       delivery = ->(xml : String) { delivered << xml; nil }
-      bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir, delivery)
+      bash = H2code::Tools::Bash.new("/tmp", task_svc, session_dir, delivery)
 
       result = bash.execute(JSON.parse(%({"command":"echo done","run_in_background":true})))
       task_id = result.content.match(/task_id: (\S+)/).try(&.[1]) || raise "task_id not found"
@@ -201,8 +201,8 @@ describe Hcode::Tools::Bash do
     Dir.tempdir.tap do |tmp|
       session_dir = File.join(tmp, "bg-stop-#{Random::Secure.hex(4)}")
       Dir.mkdir_p(session_dir)
-      task_svc = Hcode::Tools::InMemoryTaskService.new
-      bash = Hcode::Tools::Bash.new("/tmp", task_svc, session_dir)
+      task_svc = H2code::Tools::InMemoryTaskService.new
+      bash = H2code::Tools::Bash.new("/tmp", task_svc, session_dir)
 
       result = bash.execute(JSON.parse(%({"command":"sleep 100","run_in_background":true})))
       task_id = result.content.match(/task_id: (\S+)/).try(&.[1]) || raise "task_id not found"
@@ -221,41 +221,41 @@ describe Hcode::Tools::Bash do
 
   describe "per-instance sudo state" do
     it "defaults sudo_mode to Off" do
-      bash = Hcode::Tools::Bash.new("/tmp")
-      bash.sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Off)
+      bash = H2code::Tools::Bash.new("/tmp")
+      bash.sudo_mode.should eq(H2code::Tools::Bash::SudoMode::Off)
     end
 
     it "isolates sudo_mode between instances (subagents don't inherit parent)" do
-      parent = Hcode::Tools::Bash.new("/tmp")
-      parent.sudo_mode = Hcode::Tools::Bash::SudoMode::Always
+      parent = H2code::Tools::Bash.new("/tmp")
+      parent.sudo_mode = H2code::Tools::Bash::SudoMode::Always
 
-      child = Hcode::Tools::Bash.new("/tmp")
-      child.sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Off)
+      child = H2code::Tools::Bash.new("/tmp")
+      child.sudo_mode.should eq(H2code::Tools::Bash::SudoMode::Off)
     end
 
     it "starts new instances from the app-wide default_sudo_mode" do
-      prev = Hcode::Tools::Bash.default_sudo_mode
+      prev = H2code::Tools::Bash.default_sudo_mode
       begin
-        Hcode::Tools::Bash.default_sudo_mode = Hcode::Tools::Bash::SudoMode::Request
-        Hcode::Tools::Bash.new("/tmp").sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Request)
+        H2code::Tools::Bash.default_sudo_mode = H2code::Tools::Bash::SudoMode::Request
+        H2code::Tools::Bash.new("/tmp").sudo_mode.should eq(H2code::Tools::Bash::SudoMode::Request)
         # Runtime changes on one instance do not leak into the default.
-        parent = Hcode::Tools::Bash.new("/tmp")
-        parent.sudo_mode = Hcode::Tools::Bash::SudoMode::Always
-        Hcode::Tools::Bash.new("/tmp").sudo_mode.should eq(Hcode::Tools::Bash::SudoMode::Request)
+        parent = H2code::Tools::Bash.new("/tmp")
+        parent.sudo_mode = H2code::Tools::Bash::SudoMode::Always
+        H2code::Tools::Bash.new("/tmp").sudo_mode.should eq(H2code::Tools::Bash::SudoMode::Request)
       ensure
-        Hcode::Tools::Bash.default_sudo_mode = prev
+        H2code::Tools::Bash.default_sudo_mode = prev
       end
     end
 
     it "holds terminal_exec and sudo_approval per instance" do
-      a = Hcode::Tools::Bash.new("/tmp")
-      b = Hcode::Tools::Bash.new("/tmp")
+      a = H2code::Tools::Bash.new("/tmp")
+      b = H2code::Tools::Bash.new("/tmp")
 
       a.terminal_exec.should be_nil
       a.sudo_approval.should be_nil
       b.terminal_exec.should be_nil
 
-      a.sudo_approval = ->(_cmd : String) { Hcode::Tools::Bash::SudoApprovalChoice::Deny }
+      a.sudo_approval = ->(_cmd : String) { H2code::Tools::Bash::SudoApprovalChoice::Deny }
       a.sudo_approval.should_not be_nil
       b.sudo_approval.should be_nil
     end
@@ -263,15 +263,15 @@ describe Hcode::Tools::Bash do
 
   describe "background-parameter schema" do
     it "omits run_in_background when no TaskService is wired" do
-      bash = Hcode::Tools::Bash.new("/tmp")
+      bash = H2code::Tools::Bash.new("/tmp")
       props = bash.parameters["properties"].as_h
       props.has_key?("run_in_background").should be_false
       props.has_key?("disable_timeout").should be_false
     end
 
     it "advertises run_in_background when a TaskService is wired" do
-      task_svc = Hcode::Tools::InMemoryTaskService.new
-      bash = Hcode::Tools::Bash.new("/tmp", task_svc, "/tmp")
+      task_svc = H2code::Tools::InMemoryTaskService.new
+      bash = H2code::Tools::Bash.new("/tmp", task_svc, "/tmp")
       props = bash.parameters["properties"].as_h
       props.has_key?("run_in_background").should be_true
       props.has_key?("disable_timeout").should be_true

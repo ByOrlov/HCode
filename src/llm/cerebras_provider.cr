@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # Cerebras backend over the OpenAI Chat Completions protocol. Auth is a
     # plain API key — no OAuth. Shares the SSE transport through

@@ -1,10 +1,10 @@
 require "../spec_helper"
 require "../../src/config/config"
 
-describe Hcode::Config::Config do
+describe H2code::Config::Config do
   describe "defaults" do
     it "starts with nil provider/model/endpoint/api_key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name.should be_nil
       config.model.should be_nil
       config.endpoint.should be_nil
@@ -12,14 +12,14 @@ describe Hcode::Config::Config do
     end
 
     it "keeps non-nil defaults for thinking/permission/max_context" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.thinking_effort.should eq("medium")
       config.permission_mode.should eq("manual")
       config.max_context_tokens.should eq(262144)
     end
 
     it "defaults behavioral flags to safe values" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.debug?.should be_false
       config.cron_enabled?.should be_true
       config.cron_no_stale?.should be_false
@@ -33,7 +33,7 @@ describe Hcode::Config::Config do
     end
 
     it "allows behavioral flags to be set" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.debug = true
       config.cron_enabled = false
       config.cron_no_stale = true
@@ -60,31 +60,31 @@ describe Hcode::Config::Config do
   describe ".load" do
     it "maps behavioral ENV overrides to config fields" do
       prev = {
-        "HCODE_DEBUG"               => ENV["HCODE_DEBUG"]?,
-        "HCODE_DISABLE_CRON"        => ENV["HCODE_DISABLE_CRON"]?,
-        "HCODE_CRON_NO_STALE"       => ENV["HCODE_CRON_NO_STALE"]?,
-        "HCODE_SUBAGENT_TIMEOUT_MS" => ENV["HCODE_SUBAGENT_TIMEOUT_MS"]?,
-        "HCODE_EXPERIMENTAL_FLAG"   => ENV["HCODE_EXPERIMENTAL_FLAG"]?,
-        "HCODE_MOCK_SCRIPT"         => ENV["HCODE_MOCK_SCRIPT"]?,
-        "EDITOR"                    => ENV["EDITOR"]?,
-        "TMPDIR"                    => ENV["TMPDIR"]?,
-        "GIT_TERMINAL_PROMPT"       => ENV["GIT_TERMINAL_PROMPT"]?,
-        "SHELL"                     => ENV["SHELL"]?,
+        "H2CODE_DEBUG"               => ENV["H2CODE_DEBUG"]?,
+        "H2CODE_DISABLE_CRON"        => ENV["H2CODE_DISABLE_CRON"]?,
+        "H2CODE_CRON_NO_STALE"       => ENV["H2CODE_CRON_NO_STALE"]?,
+        "H2CODE_SUBAGENT_TIMEOUT_MS" => ENV["H2CODE_SUBAGENT_TIMEOUT_MS"]?,
+        "H2CODE_EXPERIMENTAL_FLAG"   => ENV["H2CODE_EXPERIMENTAL_FLAG"]?,
+        "H2CODE_MOCK_SCRIPT"         => ENV["H2CODE_MOCK_SCRIPT"]?,
+        "EDITOR"                     => ENV["EDITOR"]?,
+        "TMPDIR"                     => ENV["TMPDIR"]?,
+        "GIT_TERMINAL_PROMPT"        => ENV["GIT_TERMINAL_PROMPT"]?,
+        "SHELL"                      => ENV["SHELL"]?,
       }
       begin
-        ENV["HCODE_DEBUG"] = "1"
-        ENV["HCODE_DISABLE_CRON"] = "1"
-        ENV["HCODE_CRON_NO_STALE"] = "1"
-        ENV["HCODE_SUBAGENT_TIMEOUT_MS"] = "9000"
-        ENV["HCODE_EXPERIMENTAL_FLAG"] = "on"
-        ENV["HCODE_MOCK_SCRIPT"] = "plan"
+        ENV["H2CODE_DEBUG"] = "1"
+        ENV["H2CODE_DISABLE_CRON"] = "1"
+        ENV["H2CODE_CRON_NO_STALE"] = "1"
+        ENV["H2CODE_SUBAGENT_TIMEOUT_MS"] = "9000"
+        ENV["H2CODE_EXPERIMENTAL_FLAG"] = "on"
+        ENV["H2CODE_MOCK_SCRIPT"] = "plan"
         ENV["EDITOR"] = "emacs"
         ENV["TMPDIR"] = "/custom-tmp"
         ENV["GIT_TERMINAL_PROMPT"] = "1"
         ENV["SHELL"] = "/bin/fish"
 
         # Load from a nonexistent path so only ENV overrides apply.
-        config = Hcode::Config::Config.load("/tmp/hcode-spec-nonexistent-#{Random::Secure.hex(4)}.json")
+        config = H2code::Config::Config.load("/tmp/h2code-spec-nonexistent-#{Random::Secure.hex(4)}.json")
         config.debug?.should be_true
         config.cron_enabled?.should be_false
         config.cron_no_stale?.should be_true
@@ -109,30 +109,30 @@ describe Hcode::Config::Config do
 
   describe "#provider_configured?" do
     it "returns false when no provider is set" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_configured?.should be_false
     end
 
     it "returns true for ollama with no key (local)" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "ollama"
       config.provider_configured?.should be_true
     end
 
     it "returns true for lmstudio with no key (local)" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "lmstudio"
       config.provider_configured?.should be_true
     end
 
     it "returns true for mock with no key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "mock"
       config.provider_configured?.should be_true
     end
 
     it "returns false for moonshot without a key when no oauth file exists" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "moonshot"
       config.api_key = ""
       # Depends on whether ~/.kimi-code/credentials exists; either way,
@@ -144,35 +144,35 @@ describe Hcode::Config::Config do
     end
 
     it "returns true for moonshot with an api key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "moonshot"
       config.api_key = "sk-test"
       config.provider_configured?.should be_true
     end
 
     it "returns false for zai without a key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "zai"
       config.zai_api_key = ""
       config.provider_configured?.should be_false
     end
 
     it "returns true for zai with a key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "zai"
       config.zai_api_key = "sk-test"
       config.provider_configured?.should be_true
     end
 
     it "returns false for an unknown provider with no key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "custom"
       config.api_key = ""
       config.provider_configured?.should be_false
     end
 
     it "returns true for an unknown provider with a key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "custom"
       config.api_key = "sk-test"
       config.provider_configured?.should be_true
@@ -181,7 +181,7 @@ describe Hcode::Config::Config do
 
   describe "#provider_configured?(name)" do
     it "checks an arbitrary provider name independent of provider_name" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "ollama"
       config.api_key = "sk-test"
       config.provider_configured?("moonshot").should be_true
@@ -190,14 +190,14 @@ describe Hcode::Config::Config do
     end
 
     it "returns false for nil" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_configured?(nil).should be_false
     end
   end
 
   describe "#auto_mcp_servers" do
     it "returns Z.AI Web Search MCP server for zai-coding-plan" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "zai-coding-plan"
       config.zai_api_key = "test-key"
 
@@ -210,19 +210,19 @@ describe Hcode::Config::Config do
       server.url.should eq("https://api.z.ai/api/mcp/web_search_prime/mcp")
       server.headers["Authorization"].should eq("Bearer test-key")
       server.providers.should eq(["zai-coding-plan"])
-      server.tool_aliases.should eq({"web_search_prime" => Hcode::Tools::Names::WEB_SEARCH})
-      server.aliased_tool_name("web_search_prime").should eq(Hcode::Tools::Names::WEB_SEARCH)
+      server.tool_aliases.should eq({"web_search_prime" => H2code::Tools::Names::WEB_SEARCH})
+      server.aliased_tool_name("web_search_prime").should eq(H2code::Tools::Names::WEB_SEARCH)
       server.aliased_tool_name("other_tool").should eq("other_tool")
     end
 
     it "returns empty for zai-coding-plan without an API key" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "zai-coding-plan"
       config.auto_mcp_servers.should be_empty
     end
 
     it "returns empty for other providers" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "zai"
       config.zai_api_key = "test-key"
       config.auto_mcp_servers.should be_empty
@@ -240,7 +240,7 @@ describe Hcode::Config::Config do
           }
         }
       JSON
-      config = Hcode::Config::Config.parse_json(json)
+      config = H2code::Config::Config.parse_json(json)
       config.provider_name.should eq("ollama")
       config.model.should eq("llama3.2")
       config.ollama_endpoint.should eq("http://gpu:11434/v1")
@@ -249,7 +249,7 @@ describe Hcode::Config::Config do
 
     it "leaves nil-able fields nil when absent" do
       json = %({"model": {"thinking_effort": "high"}})
-      config = Hcode::Config::Config.parse_json(json)
+      config = H2code::Config::Config.parse_json(json)
       config.provider_name.should be_nil
       config.model.should be_nil
       config.api_key.should be_nil
@@ -258,11 +258,11 @@ describe Hcode::Config::Config do
     end
 
     it "saves ollama/lmstudio sections only when set" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.provider_name = "ollama"
       config.ollama_endpoint = "http://localhost:11434/v1"
 
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
         content = File.read(path)
@@ -277,13 +277,13 @@ describe Hcode::Config::Config do
     end
 
     it "round-trips the debug_zones ui flag" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.debug_zones = true
 
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
-        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        reloaded = H2code::Config::Config.parse_json(File.read(path))
         reloaded.debug_zones?.should be_true
       ensure
         File.delete(path) rescue nil
@@ -291,20 +291,20 @@ describe Hcode::Config::Config do
     end
 
     it "round-trips permission.sudo_mode and rejects unknown values" do
-      config = Hcode::Config::Config.new
+      config = H2code::Config::Config.new
       config.sudo_mode.should eq("off")
 
       config.sudo_mode = "request"
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
         content = File.read(path)
         content.should contain("\"sudo_mode\": \"request\"")
-        reloaded = Hcode::Config::Config.parse_json(content)
+        reloaded = H2code::Config::Config.parse_json(content)
         reloaded.sudo_mode.should eq("request")
 
         # Unknown values fall back to the default instead of poisoning startup.
-        reloaded = Hcode::Config::Config.parse_json(%({"permission":{"mode":"manual","sudo_mode":"yolo"}}))
+        reloaded = H2code::Config::Config.parse_json(%({"permission":{"mode":"manual","sudo_mode":"yolo"}}))
         reloaded.sudo_mode.should eq("off")
       ensure
         File.delete(path) rescue nil
@@ -313,17 +313,17 @@ describe Hcode::Config::Config do
 
     it "round-trips the transcription section" do
       json = %({"transcription":{"enabled":true,"socket":"/tmp/voice.sock","engine":"gigaam","language":"ru","max_duration_sec":60}})
-      config = Hcode::Config::Config.parse_json(json)
+      config = H2code::Config::Config.parse_json(json)
       config.transcription.enabled?.should be_true
       config.transcription.socket.should eq("/tmp/voice.sock")
       config.transcription.engine.should eq("gigaam")
       config.transcription.language.should eq("ru")
       config.transcription.max_duration_sec.should eq(60)
 
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
-        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        reloaded = H2code::Config::Config.parse_json(File.read(path))
         reloaded.transcription.enabled?.should be_true
         reloaded.transcription.socket.should eq("/tmp/voice.sock")
         reloaded.transcription.engine.should eq("gigaam")
@@ -335,42 +335,42 @@ describe Hcode::Config::Config do
     end
 
     it "defaults the transcription section" do
-      config = Hcode::Config::Config.parse_json(%({}))
+      config = H2code::Config::Config.parse_json(%({}))
       config.transcription.enabled?.should be_false
-      config.transcription.socket.should eq("~/.hcode/voice.sock")
+      config.transcription.socket.should eq("~/.h2code/voice.sock")
       config.transcription.engine.should eq("auto")
       config.transcription.max_duration_sec.should eq(120)
     end
 
-    it "maps HCODE_VOICE_SOCKET to the transcription socket" do
-      prev = ENV["HCODE_VOICE_SOCKET"]?
+    it "maps H2CODE_VOICE_SOCKET to the transcription socket" do
+      prev = ENV["H2CODE_VOICE_SOCKET"]?
       begin
-        ENV["HCODE_VOICE_SOCKET"] = "/tmp/other-voice.sock"
-        config = Hcode::Config::Config.load(
-          "/tmp/hcode-spec-nonexistent-#{Random::Secure.hex(4)}.json")
+        ENV["H2CODE_VOICE_SOCKET"] = "/tmp/other-voice.sock"
+        config = H2code::Config::Config.load(
+          "/tmp/h2code-spec-nonexistent-#{Random::Secure.hex(4)}.json")
         config.transcription.socket.should eq("/tmp/other-voice.sock")
       ensure
         if prev
-          ENV["HCODE_VOICE_SOCKET"] = prev
+          ENV["H2CODE_VOICE_SOCKET"] = prev
         else
-          ENV.delete("HCODE_VOICE_SOCKET")
+          ENV.delete("H2CODE_VOICE_SOCKET")
         end
       end
     end
 
     it "round-trips services.moonshot_search" do
-      ms = Hcode::Config::MoonshotServiceConfig.new(
+      ms = H2code::Config::MoonshotServiceConfig.new(
         base_url: "https://search.example.com",
         api_key: "search-key",
         custom_headers: {"X-Foo" => "bar"},
       )
-      config = Hcode::Config::Config.new
-      config.services = Hcode::Config::ServicesConfig.new(moonshot_search: ms)
+      config = H2code::Config::Config.new
+      config.services = H2code::Config::ServicesConfig.new(moonshot_search: ms)
 
-      path = File.join(Dir.tempdir, "hcode-config-test-#{Random::Secure.hex(8)}.json")
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
       begin
         config.save(path)
-        reloaded = Hcode::Config::Config.parse_json(File.read(path))
+        reloaded = H2code::Config::Config.parse_json(File.read(path))
         ms = reloaded.services.moonshot_search
         ms.should_not be_nil
         if ms
@@ -385,10 +385,10 @@ describe Hcode::Config::Config do
   end
 end
 
-describe "Hcode.build_named_provider with nil" do
-  # build_named_provider lives in hcode.cr which auto-runs the CLI on require,
-  # so these are covered by the integration test in spec/hcode_spec.cr instead.
-  it "placeholder — see hcode integration tests" do
+describe "H2code.build_named_provider with nil" do
+  # build_named_provider lives in h2code.cr which auto-runs the CLI on require,
+  # so these are covered by the integration test in spec/h2code_spec.cr instead.
+  it "placeholder — see h2code integration tests" do
     true.should be_true
   end
 end

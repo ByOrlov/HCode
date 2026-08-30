@@ -1,6 +1,6 @@
 require "../spec_helper"
 
-module Hcode
+module H2code
   class SleepTool < Tools::Tool
     def name : String
       "Sleep"
@@ -80,18 +80,18 @@ module Hcode
   end
 end
 
-describe Hcode::Loop::ToolBatch do
-  helper = Hcode::ToolBatchSpecHelper
+describe H2code::Loop::ToolBatch do
+  helper = H2code::ToolBatchSpecHelper
 
   it "executes independent tool calls in parallel" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":150,"result":"a"})),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":150,"result":"b"})),
     ]
 
-    events = [] of Hcode::Loop::Event
+    events = [] of H2code::Loop::Event
     started = Time.monotonic
     results = batch.run(calls) { |e| events << e }
     elapsed = Time.monotonic - started
@@ -103,7 +103,7 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "preserves result order regardless of completion order" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":200,"result":"slow-first"})),
@@ -120,14 +120,14 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "emits tool_result events as results arrive" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":150,"result":"a"})),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"b"})),
     ]
 
-    result_events = [] of Hcode::Loop::Event
+    result_events = [] of H2code::Loop::Event
     batch.run(calls) do |e|
       result_events << e if e.type.tool_result?
     end
@@ -139,14 +139,14 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "returns an error for unknown tools without affecting others" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "MissingTool"),
       helper.tool_call("call_2", "Sleep", %({"duration_ms":20,"result":"ok"})),
     ]
 
-    events = [] of Hcode::Loop::Event
+    events = [] of H2code::Loop::Event
     results = batch.run(calls) { |e| events << e }
 
     results.size.should eq(2)
@@ -155,7 +155,7 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "deduplicates identical calls within the same step" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":20,"result":"only-once"})),
@@ -170,7 +170,7 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "aborts running tool fibers" do
-    batch = helper.make_batch([Hcode::SleepTool.new])
+    batch = helper.make_batch([H2code::SleepTool.new])
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":5000,"result":"never"})),
@@ -192,8 +192,8 @@ describe Hcode::Loop::ToolBatch do
   end
 
   it "appends tool results to context in input order" do
-    context = Hcode::Context::Memory.new
-    batch = helper.make_batch([Hcode::SleepTool.new], context: context)
+    context = H2code::Context::Memory.new
+    batch = helper.make_batch([H2code::SleepTool.new], context: context)
 
     calls = [
       helper.tool_call("call_1", "Sleep", %({"duration_ms":200,"result":"slow"})),
@@ -214,14 +214,14 @@ describe Hcode::Loop::ToolBatch do
     # ELF magic + invalid continuation bytes + a NUL, exactly the failure mode
     # behind "Chat API error 400" when an agent `cat`s a compiled binary.
     binary = String.new(Bytes[0x7F, 0x45, 0x4C, 0x46, 0xFF, 0xFE, 0x00, 0x1B])
-    context = Hcode::Context::Memory.new
-    batch = helper.make_batch([Hcode::BinaryTool.new(binary)], context: context)
+    context = H2code::Context::Memory.new
+    batch = helper.make_batch([H2code::BinaryTool.new(binary)], context: context)
 
     results = batch.run([helper.tool_call("call_1", "Binary")]) { |_| }
 
     content = results[0].text
     content.valid_encoding?.should be_true
-    content.should contain(Hcode::Tools::Tool::SANITIZE_NOTICE)
+    content.should contain(H2code::Tools::Tool::SANITIZE_NOTICE)
 
     # The persisted tool message must also be clean and JSON-serializable.
     msg = context.messages.find! { |m| m.role == "tool" }

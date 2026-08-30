@@ -4,7 +4,7 @@ require "./client"
 require "./tool_naming"
 require "./output"
 
-module Hcode
+module H2code
   module Mcp
     class McpProxyTool < Tools::Tool
       @tool_timeout : Time::Span?

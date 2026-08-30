@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # AgentSwarm — параллельный запуск до 128 дочерних субагентов.
     #

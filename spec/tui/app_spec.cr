@@ -14,7 +14,7 @@ def app_strip_ansi(str : String) : String
   str.gsub(/\e\[[0-9;]*m/, "")
 end
 
-def app_render_lines(app : Hcode::TUI::App, width = 80) : Array(String)
+def app_render_lines(app : H2code::TUI::App, width = 80) : Array(String)
   # App#build_rendered_lines is private; reach the same output through render_message.
   app.@messages.flat_map { |msg| app.render_message(msg, width) }
 end
@@ -23,17 +23,17 @@ def help_strip_ansi(str : String) : String
   str.gsub(/\e\[[0-9;]*m/, "")
 end
 
-describe Hcode::TUI::App do
+describe H2code::TUI::App do
   it "routes parallel tool results to the correct messages" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
 
     app.add_message("user", "hello")
-    app.on_event(Hcode::Loop::Event.tool_call_start("c1", Hcode::Tools::Names::GLOB, %({"pattern":"*.cr"})))
-    app.on_event(Hcode::Loop::Event.tool_call_start("c2", Hcode::Tools::Names::BASH, %({"command":"echo hi"})))
+    app.on_event(H2code::Loop::Event.tool_call_start("c1", H2code::Tools::Names::GLOB, %({"pattern":"*.cr"})))
+    app.on_event(H2code::Loop::Event.tool_call_start("c2", H2code::Tools::Names::BASH, %({"command":"echo hi"})))
 
     # Results arrive in reverse order; the handler must still find c1.
-    app.on_event(Hcode::Loop::Event.tool_result("c2", "hi", false))
-    app.on_event(Hcode::Loop::Event.tool_result("c1", "a.cr", false))
+    app.on_event(H2code::Loop::Event.tool_result("c2", "hi", false))
+    app.on_event(H2code::Loop::Event.tool_result("c1", "a.cr", false))
 
     glob = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
     bash = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c2" }
@@ -56,10 +56,10 @@ describe Hcode::TUI::App do
   # tool_result, it has migrated to the log zone. The @dirty flag is checked
   # to confirm on_event processes events (sets dirty=true at the end).
   it "tool transitions through active zone before log" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
 
     # tool_call_start → tool is pending (no result), goes to active zone.
-    app.on_event(Hcode::Loop::Event.tool_call_start("c1", Hcode::Tools::Names::READ, %({"path":"f.ts"})))
+    app.on_event(H2code::Loop::Event.tool_call_start("c1", H2code::Tools::Names::READ, %({"path":"f.ts"})))
     tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
     tool.should_not be_nil
     (tool || raise "tool should not be nil").tool_result.should be_nil
@@ -71,7 +71,7 @@ describe Hcode::TUI::App do
     active_stripped.join('\n').should contain("Using")
 
     # tool_result → tool now has result, goes to log zone.
-    app.on_event(Hcode::Loop::Event.tool_result("c1", "content", false))
+    app.on_event(H2code::Loop::Event.tool_result("c1", "content", false))
     tool = app.@messages.find { |m| m.role == "tool" && m.tool_call_id == "c1" }
     (tool || raise "tool should not be nil").tool_result.should eq("content")
 
@@ -91,7 +91,7 @@ describe Hcode::TUI::App do
   # to the panel) and the tool's state is cleared so a fresh list can start.
   # Partially-done lists stay in the active zone. See `snapshot_todo_if_complete!`.
   it "snapshots a fully-done TodoList into the log and clears it" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     todos = [] of {String, String}
 
     app.on_fetch_todos = -> : Array({String, String})? do
@@ -104,15 +104,15 @@ describe Hcode::TUI::App do
 
     # Partially done → stays in the active zone, no snapshot.
     todos.replace([{"Task A", "done"}, {"Task B", "in_progress"}])
-    app.on_event(Hcode::Loop::Event.tool_call_start("t1", Hcode::Tools::Names::TODO_LIST, %({"todos":[]})))
-    app.on_event(Hcode::Loop::Event.tool_result("t1", "ok", false))
+    app.on_event(H2code::Loop::Event.tool_call_start("t1", H2code::Tools::Names::TODO_LIST, %({"todos":[]})))
+    app.on_event(H2code::Loop::Event.tool_result("t1", "ok", false))
     app.@messages.any? { |m| m.role == "todo_snapshot" }.should be_false
     todos.should_not be_empty
 
     # All done → snapshot appended, tool cleared.
     todos.replace([{"Task A", "done"}, {"Task B", "done"}])
-    app.on_event(Hcode::Loop::Event.tool_call_start("t2", Hcode::Tools::Names::TODO_LIST, %({"todos":[]})))
-    app.on_event(Hcode::Loop::Event.tool_result("t2", "ok", false))
+    app.on_event(H2code::Loop::Event.tool_call_start("t2", H2code::Tools::Names::TODO_LIST, %({"todos":[]})))
+    app.on_event(H2code::Loop::Event.tool_result("t2", "ok", false))
 
     snapshot = app.@messages.find { |m| m.role == "todo_snapshot" }
     snapshot.should_not be_nil
@@ -132,8 +132,8 @@ describe Hcode::TUI::App do
   end
 
   it "on_event sets dirty after processing" do
-    app = Hcode::TUI::App.new
-    app.on_event(Hcode::Loop::Event.step_begin(0))
+    app = H2code::TUI::App.new
+    app.on_event(H2code::Loop::Event.step_begin(0))
     app.@dirty.should be_true
   end
 
@@ -142,7 +142,7 @@ describe Hcode::TUI::App do
   # app stuck in Busy — the safety net reports the error and runs the
   # turn_end cleanup so the user can keep typing.
   it "resets busy and surfaces the error when the turn fiber crashes" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.run_turn_cb = ->(_text : String, _persisted : Bool) { raise "boom" }
 
     app.deliver_external_prompt("hello")
@@ -161,10 +161,10 @@ describe Hcode::TUI::App do
   # be committed to the transcript. Otherwise a large finalized block (e.g. a
   # plan) emitted straight into the Log zone would silently disappear.
   it "finalizes assistant_text into the log zone even without streaming deltas" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     plan = (1..30).map { |i| "#{i}. plan line" }.join("\n")
 
-    app.on_event(Hcode::Loop::Event.assistant_text(plan))
+    app.on_event(H2code::Loop::Event.assistant_text(plan))
 
     app.@messages.size.should eq(1)
     app.@messages[0].role.should eq("assistant")
@@ -182,9 +182,9 @@ describe Hcode::TUI::App do
   # the next token re-absorbed it into a list item and the blank line vanished,
   # causing SyncBugsCount to increment.
   it "keeps SyncBugsCount at zero for broken-token markdown list streaming" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.debug_zones = true
-    app.on_event(Hcode::Loop::Event.step_begin(0))
+    app.on_event(H2code::Loop::Event.step_begin(0))
 
     chunks = [
       "Here ", "is ", "a ", "broken-token ", "markdown ", "list:\n", "\n",
@@ -203,7 +203,7 @@ describe Hcode::TUI::App do
     ]
 
     chunks.each do |chunk|
-      app.on_event(Hcode::Loop::Event.text_delta(chunk))
+      app.on_event(H2code::Loop::Event.text_delta(chunk))
       app.build_rendered_lines(80)
     end
 
@@ -211,9 +211,9 @@ describe Hcode::TUI::App do
   end
 end
 
-describe Hcode::TUI::SelectList do
+describe H2code::TUI::SelectList do
   it "shows all items when they fit within max_visible" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.show("Pick", ["a", "b", "c"])
     list.max_visible = 8
     start, count = list.visible_window
@@ -224,7 +224,7 @@ describe Hcode::TUI::SelectList do
   end
 
   it "scrolls down when the selection moves past the viewport bottom" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     items = (1..12).map(&.to_s).to_a
     list.show("Pick", items)
     list.max_visible = 5
@@ -237,7 +237,7 @@ describe Hcode::TUI::SelectList do
   end
 
   it "scrolls to the last page when selection is near the end" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     items = (1..10).map(&.to_s).to_a
     list.show("Pick", items)
     list.max_visible = 5
@@ -250,7 +250,7 @@ describe Hcode::TUI::SelectList do
   end
 
   it "wraps around with scrolled_up false on selection 0" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     items = (1..10).map(&.to_s).to_a
     list.show("Pick", items)
     list.max_visible = 5
@@ -262,7 +262,7 @@ describe Hcode::TUI::SelectList do
   end
 
   it "resets scroll when show is called" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     items = (1..10).map(&.to_s).to_a
     list.show("Pick", items)
     list.max_visible = 5
@@ -275,12 +275,12 @@ describe Hcode::TUI::SelectList do
   end
 end
 
-describe Hcode::TUI::App do
+describe H2code::TUI::App do
   it "rebuilds the transcript from a replayed context memory" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.add_message("user", "old conversation that should be cleared")
 
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("hello")
     memory.add_assistant("world")
     app.load_transcript_from(memory)
@@ -293,12 +293,12 @@ describe Hcode::TUI::App do
   end
 
   it "maps tool calls and tool results in the rebuilt transcript" do
-    app = Hcode::TUI::App.new
-    memory = Hcode::Context::Memory.new
+    app = H2code::TUI::App.new
+    memory = H2code::Context::Memory.new
     memory.add_user("list files")
-    memory.add_assistant("", [Hcode::LLM::ToolCall.new(
+    memory.add_assistant("", [H2code::LLM::ToolCall.new(
       "tc1",
-      Hcode::LLM::ToolCallFunction.new(Hcode::Tools::Names::GLOB, %({"pattern":"*.cr"}))
+      H2code::LLM::ToolCallFunction.new(H2code::Tools::Names::GLOB, %({"pattern":"*.cr"}))
     )])
     memory.add_tool_result("tc1", "a.cr\nb.cr")
     app.load_transcript_from(memory)
@@ -307,13 +307,13 @@ describe Hcode::TUI::App do
     roles.should eq(["user", "tool"])
     tool_msg = app.@messages.find { |m| m.role == "tool" } || raise "tool message not found"
     tool_msg.tool_call_id.should eq("tc1")
-    tool_msg.tool_name.should eq(Hcode::Tools::Names::GLOB)
+    tool_msg.tool_name.should eq(H2code::Tools::Names::GLOB)
     tool_msg.tool_result.should eq("a.cr\nb.cr")
   end
 
   it "skips injection messages when rebuilding the transcript" do
-    app = Hcode::TUI::App.new
-    memory = Hcode::Context::Memory.new
+    app = H2code::TUI::App.new
+    memory = H2code::Context::Memory.new
     memory.add_injection("system prompt injected for tooling")
     memory.add_user("real user message")
     app.load_transcript_from(memory)
@@ -324,11 +324,11 @@ describe Hcode::TUI::App do
   end
 
   it "renders compaction summaries as system messages" do
-    app = Hcode::TUI::App.new
-    memory = Hcode::Context::Memory.new
+    app = H2code::TUI::App.new
+    memory = H2code::Context::Memory.new
     memory.add_user("first turn")
     memory.add_assistant("response")
-    memory.apply_compaction("[summary of earlier turns]", [] of Hcode::Context::ContextMessage)
+    memory.apply_compaction("[summary of earlier turns]", [] of H2code::Context::ContextMessage)
     app.load_transcript_from(memory)
 
     sys_msg = app.@messages.find { |m| m.role == "system" }
@@ -337,13 +337,13 @@ describe Hcode::TUI::App do
   end
 end
 
-describe Hcode::TUI::App do
+describe H2code::TUI::App do
   it "splits a multi-line system message into one render line per source line" do
     # Regression: the renderer invariant is "one Array(String) entry == one
     # terminal row". A multi-line system message previously landed as a single
     # entry with embedded `\n`, which broke diff_render's row math and made the
     # screen scramble (the original /help bug).
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.add_message("system", "first line\nsecond line\nthird line")
 
     rendered = app.render_message(app.@messages.last, 80)
@@ -356,7 +356,7 @@ describe Hcode::TUI::App do
   end
 
   it "splits multi-line error and status messages the same way" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.add_message("error", "boom-a\nboom-b")
     app.add_message("status", "s-a\ns-b")
 
@@ -370,7 +370,7 @@ describe Hcode::TUI::App do
   end
 
   it "starts with the help panel hidden" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
     app.@help_panel.visible?.should be_false
   end
 
@@ -380,11 +380,11 @@ describe Hcode::TUI::App do
   # interface crumbling. This is the visual half of the BoomTool loop test in
   # spec/loop/agent_spec.cr.
   it "renders an exception event as a red exception block" do
-    app = Hcode::TUI::App.new
+    app = H2code::TUI::App.new
 
     # Simulate the exact event the loop interceptor emits (Event.exception
     # formats class + message + backtrace into a single multi-line string).
-    app.on_event(Hcode::Loop::Event.exception(
+    app.on_event(H2code::Loop::Event.exception(
       Exception.new("kaboom from BoomTool")
     ))
 
@@ -408,9 +408,9 @@ describe Hcode::TUI::App do
   end
 end
 
-describe Hcode::TUI::HelpPanel do
+describe H2code::TUI::HelpPanel do
   it "toggles visibility via show / hide" do
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.visible?.should be_false
     panel.show
     panel.visible?.should be_true
@@ -419,49 +419,49 @@ describe Hcode::TUI::HelpPanel do
   end
 
   it "dismisses on Esc, Enter, q, and Q" do
-    [{Hcode::TUI::Key::Escape, "Esc"},
-     {Hcode::TUI::Key::Enter, "Enter"}].each do |key, _|
-      panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    [{H2code::TUI::Key::Escape, "Esc"},
+     {H2code::TUI::Key::Enter, "Enter"}].each do |key, _|
+      panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
       panel.show
-      consumed = panel.handle_input(Hcode::TUI::KeyEvent.new(key))
+      consumed = panel.handle_input(H2code::TUI::KeyEvent.new(key))
       consumed.should be_true
       panel.visible?.should be_false
     end
 
     ['q', 'Q'].each do |c|
-      panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+      panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
       panel.show
-      panel.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Char, c)).should be_true
+      panel.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Char, c)).should be_true
       panel.visible?.should be_false
     end
   end
 
   it "ignores unrelated printable keys without closing" do
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.show
-    panel.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Char, 'x')).should be_false
+    panel.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Char, 'x')).should be_false
     panel.visible?.should be_true
   end
 
   it "scrolls down on Down / PageDown and clamps at the bottom" do
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.max_visible = 5
     panel.show
     panel.render(80)
 
     # Pressing Down past the end must not blow up — render clamps the offset.
-    50.times { panel.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Down)) }
+    50.times { panel.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Down)) }
     lines_after = panel.render(80)
     lines_after.size.should be > 0
 
-    panel.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::PageDown))
+    panel.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::PageDown))
     panel.render(80).size.should be > 0
   end
 
   it "never emits an embedded newline in any rendered line" do
     # The renderer-level invariant: every Array(String) entry is one terminal
     # row. Verify across several widths so truncation paths are exercised.
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.show
     [200, 120, 80, 40, 20].each do |w|
       rendered = panel.render(w)
@@ -472,28 +472,28 @@ describe Hcode::TUI::HelpPanel do
   end
 
   it "lists every registered slash command" do
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     # Expand the viewport so every command is on screen at once; the scroll
     # path is covered by the windowing spec below.
     panel.max_visible = 200
     panel.show
     body = panel.render(120).map { |l| help_strip_ansi(l) }.join("\n")
-    Hcode::TUI::CommandRegistry::COMMANDS.each do |cmd|
+    H2code::TUI::CommandRegistry::COMMANDS.each do |cmd|
       body.should contain(cmd.name)
     end
   end
 
   it "fires on_close when dismissed via a key" do
     fired = false
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.on_close = -> { fired = true; nil }
     panel.show
-    panel.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Escape))
+    panel.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Escape))
     fired.should be_true
   end
 
   it "windows content to max_visible and shows a scroll indicator when overflowing" do
-    panel = Hcode::TUI::HelpPanel.new(Hcode::TUI::Theme.dark)
+    panel = H2code::TUI::HelpPanel.new(H2code::TUI::Theme.dark)
     panel.max_visible = 5
     panel.show
     rendered = panel.render(120)
@@ -509,24 +509,24 @@ describe Hcode::TUI::HelpPanel do
     # 2 columns) overflowed. Now wraps by visible_width and hard-breaks
     # overwide tokens.
     it "wrap_text wraps CJK content by visible width" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       # 20 Japanese chars = 40 columns; at cols=24 the bullet takes ~2 cols,
       # so the body must wrap into multiple lines each <= cols.
       cjk = "あ" * 20
-      lines = app.render_message(Hcode::TUI::Message.new("user", cjk), 24)
+      lines = app.render_message(H2code::TUI::Message.new("user", cjk), 24)
       lines.each do |l|
-        Hcode::TUI::CharWidth.visible_width(l).should be <= 24
+        H2code::TUI::CharWidth.visible_width(l).should be <= 24
       end
       lines.size.should be > 1
     end
 
     it "wrap_text hard-breaks a single overwide token" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       # A single 40-char ASCII word (no spaces) wider than the column.
       word = "a" * 40
-      lines = app.render_message(Hcode::TUI::Message.new("user", word), 10)
+      lines = app.render_message(H2code::TUI::Message.new("user", word), 10)
       lines.each do |l|
-        Hcode::TUI::CharWidth.visible_width(l).should be <= 10
+        H2code::TUI::CharWidth.visible_width(l).should be <= 10
       end
       lines.size.should be > 1
     end
@@ -535,30 +535,30 @@ describe Hcode::TUI::HelpPanel do
     # and appends a trailing SGR reset. Reach it via render_message output
     # piped through the same post-processing.
     it "build_rendered_lines truncates overwide lines to cols" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       # Inject a long CJK line that a renderer would emit wider than cols.
       app.add_message("user", "あ" * 60)
       cols = 20
       new_lines, _, _ = app.build_rendered_lines(cols)
       new_lines.each do |l|
-        Hcode::TUI::CharWidth.visible_width(l).should be <= cols
+        H2code::TUI::CharWidth.visible_width(l).should be <= cols
       end
     end
 
     it "build_rendered_lines ends every line with an SGR reset" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.add_message("user", "hello")
       new_lines, _, _ = app.build_rendered_lines(80)
       new_lines.each do |l|
-        l.should end_with(Hcode::TUI::ANSI.reset)
+        l.should end_with(H2code::TUI::ANSI.reset)
       end
     end
 
     # Issue #3: plan-box title with an ANSI Rejected badge miscomputed width
     # via .size, shrinking the top border. Now uses visible_len.
     it "render_plan_box keeps top and bottom borders aligned with ANSI title" do
-      app = Hcode::TUI::App.new
-      msg = Hcode::TUI::Message.new("plan_box", "do something")
+      app = H2code::TUI::App.new
+      msg = H2code::TUI::Message.new("plan_box", "do something")
       msg.plan_kind = "rejected"
       lines = app.render_plan_box(msg, 40)
       # Find the top (┌) and bottom (└) border lines; both end with ┐/┘.
@@ -566,8 +566,8 @@ describe Hcode::TUI::HelpPanel do
       bottom = lines.find { |l| l.includes?('└') }
       top.should_not be_nil
       bottom.should_not be_nil
-      Hcode::TUI::CharWidth.visible_width(top || raise "top not found").should eq(
-        Hcode::TUI::CharWidth.visible_width(bottom || raise "bottom not found")
+      H2code::TUI::CharWidth.visible_width(top || raise "top not found").should eq(
+        H2code::TUI::CharWidth.visible_width(bottom || raise "bottom not found")
       )
     end
 
@@ -575,9 +575,9 @@ describe Hcode::TUI::HelpPanel do
     # content_width and pushed the right border onto the next terminal row,
     # reading as a stray blank line. Now clamped via slice_by_column.
     it "render_plan_box clamps body lines so the right border stays on-row" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       long_line = "body = output[(idx + auto_marker.size)..].strip"
-      msg = Hcode::TUI::Message.new("plan_box", "```crystal\n#{long_line}\n```")
+      msg = H2code::TUI::Message.new("plan_box", "```crystal\n#{long_line}\n```")
       lines = app.render_plan_box(msg, 40)
       # Every body row (between top ┌ and bottom └) must contain both the
       # left and right border on the SAME line — no overflow wrap.
@@ -585,34 +585,34 @@ describe Hcode::TUI::HelpPanel do
       body.each do |row|
         row.should contain('│')
         # Right border present exactly once on the row
-        Hcode::TUI::CharWidth.visible_width(row).should be <= 40
+        H2code::TUI::CharWidth.visible_width(row).should be <= 40
       end
     end
 
     # Issue #4: single CJK grapheme at max_w=1 should not be split into an
     # empty chunk — it stays as one indivisible chunk.
     it "wrap_editor_line keeps an overwide single grapheme intact" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       chunks = app.wrap_editor_line("あ", 1)
       chunks.size.should eq(1)
-      Hcode::TUI::CharWidth.visible_width(chunks[0][0]).should eq(2)
+      H2code::TUI::CharWidth.visible_width(chunks[0][0]).should eq(2)
     end
 
     # Issue #10: welcome box logo is 14 cols wide; clamp box_w so the border
     # doesn't collapse on very narrow terminals.
     it "render_welcome_box clamps box width to logo width" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       lines = app.render_welcome_box(8)
       # The top border line should be at least 14 visible columns wide so
       # the logo fits inside without pushing the right border off-screen.
       top = lines.find { |l| l.includes?('╭') }
       top.should_not be_nil
-      Hcode::TUI::CharWidth.visible_width(top || raise "top not found").should be >= 14
+      H2code::TUI::CharWidth.visible_width(top || raise "top not found").should be >= 14
     end
   end
 end
 
-describe Hcode::TUI::App do
+describe H2code::TUI::App do
   # SwarmMember is a struct. The terminal/progress handlers used to iterate it
   # with `each`, which yields a copy — so `sm.phase = ...` / `sm.ticks = ...`
   # mutated a throwaway clone and the array element stayed "Running" forever.
@@ -620,20 +620,20 @@ describe Hcode::TUI::App do
   # terminal scroll even after every subagent had finished.
   describe "subagent lifecycle phase updates" do
     it "marks members Completed/Failed and clears swarm_active" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       tc = "call_swarm_1"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT_SWARM, "{}"))
-      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
-      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-b", 2, "item b"))
+      app.on_event(H2code::Loop::Event.tool_call_start(tc, H2code::Tools::Names::AGENT_SWARM, "{}"))
+      app.on_event(H2code::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
+      app.on_event(H2code::Loop::Event.subagent_started(tc, "agent-b", 2, "item b"))
 
       members = app.@messages.last.swarm_members
       members.size.should eq(2)
       members.all?(&.running?).should be_true
       app.@swarm_active.should be_true
 
-      app.on_event(Hcode::Loop::Event.subagent_progress(tc, "agent-a", 5))
-      app.on_event(Hcode::Loop::Event.subagent_completed(tc, "agent-a"))
-      app.on_event(Hcode::Loop::Event.subagent_failed(tc, "agent-b", "boom"))
+      app.on_event(H2code::Loop::Event.subagent_progress(tc, "agent-a", 5))
+      app.on_event(H2code::Loop::Event.subagent_completed(tc, "agent-a"))
+      app.on_event(H2code::Loop::Event.subagent_failed(tc, "agent-b", "boom"))
 
       members = app.@messages.last.swarm_members
       members[0].phase.should eq("Completed")
@@ -651,21 +651,21 @@ describe Hcode::TUI::App do
   # a final snapshot, exactly like a regular tool call. See docs/TUI_ZONES.md.
   describe "swarm progress zone routing" do
     it "renders a pending swarm in the active zone, then migrates to log on result" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       tc = "call_swarm_routing"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT_SWARM, %({"description":"do work"})))
-      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
+      app.on_event(H2code::Loop::Event.tool_call_start(tc, H2code::Tools::Names::AGENT_SWARM, %({"description":"do work"})))
+      app.on_event(H2code::Loop::Event.subagent_started(tc, "agent-a", 1, "item a"))
 
       # Pending (no tool_result yet): swarm progress lives in the active zone.
       log, active, _ = app.build_rendered_lines_split(80)
-      log.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_false
-      active.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_true
+      log.any?(&.includes?(H2code::Tools::Names::AGENT_SWARM)).should be_false
+      active.any?(&.includes?(H2code::Tools::Names::AGENT_SWARM)).should be_true
 
       # Result arrives: the entry migrates into the append-only log.
-      app.on_event(Hcode::Loop::Event.tool_result(tc, "all done", false))
+      app.on_event(H2code::Loop::Event.tool_result(tc, "all done", false))
       log, active, _ = app.build_rendered_lines_split(80)
-      log.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_true
-      active.any?(&.includes?(Hcode::Tools::Names::AGENT_SWARM)).should be_false
+      log.any?(&.includes?(H2code::Tools::Names::AGENT_SWARM)).should be_true
+      active.any?(&.includes?(H2code::Tools::Names::AGENT_SWARM)).should be_false
     end
   end
 
@@ -675,16 +675,16 @@ describe Hcode::TUI::App do
   # kimi-code's latestModelText.
   describe "subagent streaming text preview" do
     it "accumulates latest_text and renders it in the active zone" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       tc = "call_stream"
-      app.on_event(Hcode::Loop::Event.tool_call_start(tc, Hcode::Tools::Names::AGENT, %({"description":"review"})))
-      app.on_event(Hcode::Loop::Event.subagent_started(tc, "agent-1"))
+      app.on_event(H2code::Loop::Event.tool_call_start(tc, H2code::Tools::Names::AGENT, %({"description":"review"})))
+      app.on_event(H2code::Loop::Event.subagent_started(tc, "agent-1"))
 
       member = app.@messages.last.swarm_members.first
       member.latest_text.should eq("")
 
       # Simulate streaming deltas forwarded by the runner.
-      app.on_event(Hcode::Loop::Event.subagent_text(tc, "agent-1", "First line\nSecond line"))
+      app.on_event(H2code::Loop::Event.subagent_text(tc, "agent-1", "First line\nSecond line"))
       member = app.@messages.last.swarm_members.first
       member.latest_text.should eq("First line\nSecond line")
 
@@ -700,14 +700,14 @@ describe Hcode::TUI::App do
   #  shrink content, trigger a full repaint, and visually "clear" the screen).
   describe "welcome banner persistence" do
     it "is visible on a fresh app" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.@show_welcome.should be_true
       lines, _, _ = app.build_rendered_lines(80)
       lines.any?(&.includes?("Welcome")).should be_true
     end
 
     it "stays in the render array after the first user message" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.add_message("user", "hello")
       app.@show_welcome.should be_true
       lines, _, _ = app.build_rendered_lines(80)
@@ -715,15 +715,15 @@ describe Hcode::TUI::App do
     end
 
     it "stays in the render array after loading a transcript" do
-      app = Hcode::TUI::App.new
-      memory = Hcode::Context::Memory.new
+      app = H2code::TUI::App.new
+      memory = H2code::Context::Memory.new
       memory.add_user("previous message")
       app.load_transcript_from(memory)
       app.@show_welcome.should be_true
     end
 
     it "is present even as multiple messages accumulate" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       5.times { |i| app.add_message("user", "message #{i}") }
       app.@show_welcome.should be_true
       lines, _, _ = app.build_rendered_lines(80)
@@ -738,7 +738,7 @@ describe Hcode::TUI::App do
     # NOTE: full_render is currently disabled; this test is kept commented out
     # alongside the method in app.cr.
     # it "full_render does not emit \\e[2J" do
-    #   app = Hcode::TUI::App.new
+    #   app = H2code::TUI::App.new
     #   app.add_message("user", "hello")
     #   # @first_render is true on a fresh app, so build_render_output takes
     #   # the full_render path.
@@ -753,7 +753,7 @@ describe Hcode::TUI::App do
     # Plan mode also swaps the placeholder to "Plan mode" instead of pushing
     # a transcript system message.
     it "uses the white colour for the border in normal mode" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.plan_mode = false
       lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
@@ -762,7 +762,7 @@ describe Hcode::TUI::App do
     end
 
     it "tints the border yellow when plan mode is on" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.plan_mode = true
       lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
@@ -770,7 +770,7 @@ describe Hcode::TUI::App do
     end
 
     it "shows the plan mode placeholder and no system message" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.plan_mode = true
       lines, _, _ = app.build_rendered_lines(40)
       joined = lines.join('\n')
@@ -784,9 +784,9 @@ describe Hcode::TUI::App do
     # because of wrapped long text, then the text was cleared), the leftover
     # rows below the new zone bottom must be cleared.
     it "clears stale rows when the active zone shrinks" do
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.@terminal.set_size(40, 24)
-      mock = Hcode::TUI::TerminalMock.new(rows: 24, cols: 80)
+      mock = H2code::TUI::TerminalMock.new(rows: 24, cols: 80)
 
       # Frame 1: tall editor box (long text wraps to many rows).
       app.@editor.set("x" * 200)

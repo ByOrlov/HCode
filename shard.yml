@@ -1,4 +1,4 @@
-name: hcode
+name: h2code
 version: 0.1.0
 
 authors:
@@ -9,8 +9,8 @@ crystal: 1.21.0
 license: GPL-2.0-or-later
 
 targets:
-  hcode:
-    main: src/hcode.cr
+  h2code:
+    main: src/h2code.cr
 
 dependencies:
   goban:

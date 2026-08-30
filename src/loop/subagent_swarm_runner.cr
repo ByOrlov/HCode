@@ -3,7 +3,7 @@ require "./abort"
 require "../tools/agent_swarm"
 require "../tools/task"
 
-module Hcode
+module H2code
   module Loop
     # `Tools::SwarmRunner` implementation. The `AgentSwarm` tool already fans
     # specs out into parallel fibers and collects results in order; this class

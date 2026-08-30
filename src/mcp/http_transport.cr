@@ -4,7 +4,7 @@ require "base64"
 require "./transport"
 require "./config"
 
-module Hcode
+module H2code
   module Mcp
     # Streamable HTTP transport (MCP spec, 2025-03-26 edition). Each JSON-RPC
     # message is sent as an HTTP POST to the configured endpoint. The server

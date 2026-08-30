@@ -36,11 +36,11 @@ USER_SIZE      =    200
 MAX_TOKENS     = 262144
 COMPACT_KEEP   =      6
 
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = MAX_TOKENS
 
 messages = [] of TUIMessage
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 
 compaction_count = 0
 json_peak = 0.0
@@ -67,7 +67,7 @@ N_TURNS.times do |i|
     compaction_count += 1
     old = memory.history.dup
     kept_count = Math.min(COMPACT_KEEP, old.size)
-    kept = old[-kept_count..] || [] of Hcode::Context::ContextMessage
+    kept = old[-kept_count..] || [] of H2code::Context::ContextMessage
     summary = "[compaction summary for turns #{i - old.size + 1}..#{i}]"
     memory.apply_compaction(summary, kept)
 
@@ -78,7 +78,7 @@ N_TURNS.times do |i|
 
   if i % 500 == 0 && i > 0
     # measure JSON request size at this point
-    req = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+    req = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
     json = req.to_json
     json_peak = {json_peak, json.bytesize / 1_048_576.0}.max
     gc_and_measure("After #{i} turns, compactions=#{compaction_count}")

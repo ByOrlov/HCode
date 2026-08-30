@@ -1,16 +1,16 @@
 require "../spec_helper"
 
-describe Hcode::Plugin::Store do
+describe H2code::Plugin::Store do
   it "returns empty array when installed.json does not exist" do
     with_tmpdir do |home|
-      Hcode::Plugin::Store.read(home).should eq([] of Hcode::Plugin::Store::InstalledRecord)
+      H2code::Plugin::Store.read(home).should eq([] of H2code::Plugin::Store::InstalledRecord)
     end
   end
 
   it "round-trips records through write + read" do
     with_tmpdir do |home|
       records = [
-        Hcode::Plugin::Store::InstalledRecord.new(
+        H2code::Plugin::Store::InstalledRecord.new(
           id: "my-plugin",
           root: "/some/path",
           source: "local-path",
@@ -18,7 +18,7 @@ describe Hcode::Plugin::Store do
           installed_at: "2026-01-01T00:00:00Z",
           original_source: "/original",
         ),
-        Hcode::Plugin::Store::InstalledRecord.new(
+        H2code::Plugin::Store::InstalledRecord.new(
           id: "disabled-plugin",
           root: "/other/path",
           source: "github",
@@ -26,9 +26,9 @@ describe Hcode::Plugin::Store do
           installed_at: "2026-02-01T00:00:00Z",
         ),
       ]
-      Hcode::Plugin::Store.write(home, records)
+      H2code::Plugin::Store.write(home, records)
 
-      read_back = Hcode::Plugin::Store.read(home)
+      read_back = H2code::Plugin::Store.read(home)
       read_back.size.should eq(2)
 
       r0 = read_back[0]
@@ -43,16 +43,16 @@ describe Hcode::Plugin::Store do
 
   it "persists and reads back capabilities" do
     with_tmpdir do |home|
-      caps = Hcode::Plugin::PluginCapabilityState.new(
-        {"server1" => Hcode::Plugin::PluginMcpServerState.new(false)}
+      caps = H2code::Plugin::PluginCapabilityState.new(
+        {"server1" => H2code::Plugin::PluginMcpServerState.new(false)}
       )
-      record = Hcode::Plugin::Store::InstalledRecord.new(
+      record = H2code::Plugin::Store::InstalledRecord.new(
         id: "cap-plugin", root: "/path", source: "local-path",
         enabled: true, capabilities: caps,
       )
-      Hcode::Plugin::Store.write(home, [record])
+      H2code::Plugin::Store.write(home, [record])
 
-      read_back = Hcode::Plugin::Store.read(home)
+      read_back = H2code::Plugin::Store.read(home)
       r = read_back[0]
       r.capabilities.should_not be_nil
       if caps = r.capabilities

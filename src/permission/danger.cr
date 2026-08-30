@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Permission
     # Danger detection for tool arguments. Returns a short human-readable
     # label when a tool call matches a known-dangerous pattern (recursive

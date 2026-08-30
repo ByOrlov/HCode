@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Port: block until STDIN has bytes available to read, bounded by a timeout.
     #

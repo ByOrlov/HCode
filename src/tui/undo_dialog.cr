@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Port of the TS `UndoSelectorComponent`
     # (`apps/kimi-code/src/tui/components/dialogs/undo-selector.ts`).

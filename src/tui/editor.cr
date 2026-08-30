@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     class Editor < Component
       PASTE_MARKER_RE = /\[paste #\d+(?: \+\d+ lines| \d+ chars)?\]/

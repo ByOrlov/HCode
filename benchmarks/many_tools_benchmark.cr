@@ -79,7 +79,7 @@ puts "Tool calls: #{N_TOOLS}, result each: #{TOOL_SIZE} chars"
 measurements << measure("Baseline")
 
 # Phase 1: Context::Memory with many tool results. Compaction will fire repeatedly.
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = MAX_TOKENS
 memory.add_user("Run many reads")
 memory.add_assistant("")
@@ -91,7 +91,7 @@ N_TOOLS.times do |i|
   if memory.token_count >= (MAX_TOKENS * 0.85).to_i
     old = memory.history.dup
     kept_count = Math.min(6, old.size)
-    kept = old[-kept_count..] || [] of Hcode::Context::ContextMessage
+    kept = old[-kept_count..] || [] of H2code::Context::ContextMessage
     summary = "[compaction summary after #{i} tool calls]"
     memory.apply_compaction(summary, kept)
     compaction_count += 1
@@ -109,7 +109,7 @@ tui_raw_mb = N_TOOLS * TOOL_SIZE / 1_048_576.0
 tui_m = measure("2. TUI transcript with previews", "stored #{tui_stored_mb.round(2)} MB vs full #{tui_raw_mb.round(2)} MB")
 
 # Phase 3: render markdown for all previews.
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered_bytes = 0_i64
 messages.each do |msg|
   rendered_bytes += markdown.render("```\n#{msg.content}\n```", COLS).sum(&.bytesize)
@@ -117,7 +117,7 @@ end
 render_m = measure("3. Markdown render", "#{rendered_bytes / 1_048_576.0} MB rendered")
 
 # Phase 4: JSON request from compacted context.
-_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
 _json_body = _request.to_json
 json_size_mb = _json_body.bytesize / 1_048_576.0
 json_m = measure("4. JSON request body", "#{json_size_mb.round(2)} MB")
@@ -126,7 +126,7 @@ memory.clear
 _json_body = nil
 _request = nil
 messages.clear
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 after_clear = measure("5. After clearing everything")
 final = measure("Final")
 

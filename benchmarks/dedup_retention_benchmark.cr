@@ -60,7 +60,7 @@ measure("Baseline")
 # verbatim. N_CALLS × ~200 KB would hold ~10 MB of args text forever.
 # After the fix, only 64-byte SHA256 digests are stored, ring-capped at
 # MAX_HISTORY (24) entries per tool.
-dedup = Hcode::Loop::DedupTracker.new
+dedup = H2code::Loop::DedupTracker.new
 puts "\n--- Fix 1: DedupTracker ---"
 N_CALLS.times do |i|
   payload = "x" * ARGS_BYTES
@@ -77,7 +77,7 @@ history.each do |entry|
   raise "Expected 64-char SHA256 digest, got #{entry.size} chars" unless entry.size == 64
   raise "Payload leaked into dedup history" if entry.includes?("x" * 10)
 end
-puts "history entries: #{history.size} (cap: #{Hcode::Loop::DedupTracker::MAX_HISTORY})"
+puts "history entries: #{history.size} (cap: #{H2code::Loop::DedupTracker::MAX_HISTORY})"
 puts "per-entry size : 64 bytes (SHA256 hexdigest)"
 puts "old retention : #{ARGS_BYTES * N_CALLS / 1_048_576.0} MB"
 puts "new retention : #{history.size * 64 / 1_048_576.0} MB"
@@ -87,15 +87,15 @@ puts "new retention : #{history.size * 64 / 1_048_576.0} MB"
 # Before the fix, every ApproveSession stored "tool:args" with the full
 # args JSON as the Set key. After the fix, it stores "tool:sha256(args)".
 puts "\n--- Fix 2: Permission::Manager cache ---"
-manager = Hcode::Permission::Manager.new(Hcode::Permission::Mode::Manual)
-manager.approval_callback = ->(_t : String, _a : String, _d : String?) : Hcode::Permission::ApprovalChoice {
-  Hcode::Permission::ApprovalChoice::ApproveSession
+manager = H2code::Permission::Manager.new(H2code::Permission::Mode::Manual)
+manager.approval_callback = ->(_t : String, _a : String, _d : String?) : H2code::Permission::ApprovalChoice {
+  H2code::Permission::ApprovalChoice::ApproveSession
 }
-events = [] of Hcode::Loop::Event
+events = [] of H2code::Loop::Event
 N_CALLS.times do |i|
   payload = "y" * ARGS_BYTES
   args = %({"path":"f#{i}.txt","old_string":"#{payload}","new_string":"z#{i}"})
-  manager.check("Edit", args, ->(e : Hcode::Loop::Event) { events << e })
+  manager.check("Edit", args, ->(e : H2code::Loop::Event) { events << e })
 end
 after_perm = measure("After #{N_CALLS} ApproveSession approvals")
 manager.@session_approvals.each do |key|

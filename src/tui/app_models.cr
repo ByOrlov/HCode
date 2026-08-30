@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     struct ReadGroupEntry
       property tool_call_id : String
@@ -56,12 +56,12 @@ module Hcode
     end
 
     MCP_HELP_TEXT = <<-TEXT
-      MCP (Model Context Protocol) lets you connect external tool servers to hcode.
+      MCP (Model Context Protocol) lets you connect external tool servers to h2code.
       Here is how to set one up.
 
       Step 1 — Create the config file
 
-        Open (or create) ~/.hcode/mcp.json. This is the global config.
+        Open (or create) ~/.h2code/mcp.json. This is the global config.
         Project-local overrides are also supported (see the note at the bottom).
 
       Step 2 — Add a server entry
@@ -69,7 +69,7 @@ module Hcode
         Every file has the same top-level shape: a "mcpServers" object where
         each key is a server name you choose. Two server types are supported.
 
-        a) Local server (stdio) — hcode launches a child process:
+        a) Local server (stdio) — h2code launches a child process:
 
              {
                "mcpServers": {
@@ -81,7 +81,7 @@ module Hcode
                }
              }
 
-        b) Remote server (HTTP/SSE) — hcode connects to a URL:
+        b) Remote server (HTTP/SSE) — h2code connects to a URL:
 
              {
                "mcpServers": {
@@ -106,9 +106,9 @@ module Hcode
 
         - Tools from MCP servers appear as mcp__<server>__<tool>.
         - Config file locations (later overrides earlier, by server name):
-            ~/.hcode/mcp.json            (global)
+            ~/.h2code/mcp.json            (global)
             <project-root>/.mcp.json     (nearest parent with .git)
-            <cwd>/.hcode/mcp.json        (project-local)
+            <cwd>/.h2code/mcp.json        (project-local)
         - Optional fields per server:
             "enabled": false              skip this server
             "enabledTools": ["foo"]       register only these tools

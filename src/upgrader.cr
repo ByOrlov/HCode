@@ -2,12 +2,12 @@ require "http/client"
 require "file_utils"
 require "json"
 
-module Hcode
+module H2code
   # Self-update: downloads the latest GitHub release asset that matches the
   # current binary's target and replaces the running executable in place.
   # Triggered by the `/upgrade` TUI command.
   module Upgrader
-    REPO = "ByOrlov/HCode"
+    REPO = "ByOrlov/H2Code"
 
     # Minimum interval between background update checks.
     CHECK_INTERVAL = 24.hours
@@ -39,11 +39,11 @@ module Hcode
       os = {{ flag?(:darwin) ? "darwin" : flag?(:win32) ? "windows" : "linux" }}
       arch = {{ flag?(:aarch64) ? "aarch64" : "x86_64" }}
       ext = {{ flag?(:win32) ? "zip" : "tar.gz" }}
-      "hcode-#{arch}-#{os}.#{ext}"
+      "h2code-#{arch}-#{os}.#{ext}"
     end
 
     def self.current_version : String
-      Hcode::VERSION
+      H2code::VERSION
     end
 
     # Returns the latest release tag (e.g. "2026.07.31.3"), or nil on error.
@@ -60,8 +60,8 @@ module Hcode
     # Path to the cache file storing the timestamp of the last check.
     private def self.cache_file_path : String
       home = ENV["HOME"]? || "/tmp"
-      hcode_home = ENV["HCODE_HOME"]? || File.join(home, ".hcode")
-      File.join(hcode_home, "update_check.json")
+      h2code_home = ENV["H2CODE_HOME"]? || File.join(home, ".h2code")
+      File.join(h2code_home, "update_check.json")
     end
 
     # Injectable so specs can point at a temp file.
@@ -118,7 +118,7 @@ module Hcode
       record_check(latest)
       return nil if latest.nil?
       return nil unless VersionCompare.newer?(latest, current_version)
-      Hcode.t("ui.upgrade_available", current: current_version, latest: latest)
+      H2code.t("ui.upgrade_available", current: current_version, latest: latest)
     end
 
     # Runs the full check → download → replace flow.
@@ -127,11 +127,11 @@ module Hcode
     def self.run : {Bool, String}
       latest = latest_version
       if latest.nil?
-        return {false, Hcode.t("ui.upgrade_fetch_failed")}
+        return {false, H2code.t("ui.upgrade_fetch_failed")}
       end
 
       if !VersionCompare.newer?(latest, current_version)
-        return {true, Hcode.t("ui.upgrade_uptodate", version: current_version)}
+        return {true, H2code.t("ui.upgrade_uptodate", version: current_version)}
       end
 
       asset = asset_name
@@ -139,16 +139,16 @@ module Hcode
       begin
         data = @@http_get.call(url)
       rescue ex
-        return {false, Hcode.t("ui.upgrade_download_failed", error: ex.message || ex.to_s)}
+        return {false, H2code.t("ui.upgrade_download_failed", error: ex.message || ex.to_s)}
       end
 
       begin
         replace_binary(data)
       rescue ex
-        return {false, Hcode.t("ui.upgrade_install_failed", error: ex.message || ex.to_s)}
+        return {false, H2code.t("ui.upgrade_install_failed", error: ex.message || ex.to_s)}
       end
 
-      {true, Hcode.t("ui.upgrade_done", version: latest)}
+      {true, H2code.t("ui.upgrade_done", version: latest)}
     end
 
     # --- Binary replacement -------------------------------------------------
@@ -163,7 +163,7 @@ module Hcode
         File.write(archive_path, archive_bytes)
 
         # Extract: tar handles both .tar.gz and .zip on modern systems.
-        bin_name = {{ flag?(:win32) ? "hcode.exe" : "hcode" }}
+        bin_name = {{ flag?(:win32) ? "h2code.exe" : "h2code" }}
         if archive_name.ends_with?(".zip")
           # Windows: use built-in tar (Windows 10 1803+) which reads zip.
           run_shell("tar -xf #{Process.quote(archive_path)} -C #{Process.quote(tmp_dir)}")
@@ -203,11 +203,11 @@ module Hcode
     # `move_across_fs` keeps the update working.
     private def self.make_staging_dir(target : String) : String
       dst_dir = File.dirname(target)
-      candidate = File.join(dst_dir, ".hcode-upgrade-#{Random::Secure.hex(4)}")
+      candidate = File.join(dst_dir, ".h2code-upgrade-#{Random::Secure.hex(4)}")
       Dir.mkdir_p(candidate)
       candidate
     rescue ex : File::Error
-      candidate = File.join(Dir.tempdir, "hcode-upgrade-#{Random::Secure.hex(4)}")
+      candidate = File.join(Dir.tempdir, "h2code-upgrade-#{Random::Secure.hex(4)}")
       Dir.mkdir_p(candidate)
       candidate
     end

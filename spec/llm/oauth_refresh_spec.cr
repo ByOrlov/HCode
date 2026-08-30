@@ -1,16 +1,16 @@
 require "../spec_helper"
 require "../support/mock_http_transport"
 
-describe Hcode::LLM::OAuthCredentials do
+describe H2code::LLM::OAuthCredentials do
   describe "#refresh!" do
     it "refreshes tokens via the transport on a 200 response" do
-      creds = Hcode::LLM::OAuthCredentials.new(
+      creds = H2code::LLM::OAuthCredentials.new(
         access_token: "old-access",
         refresh_token: "rt",
         expires_at: 1_i64,
       )
 
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       transport.response_status = 200
       transport.response_body = %({
         "access_token": "new-access",
@@ -27,13 +27,13 @@ describe Hcode::LLM::OAuthCredentials do
     end
 
     it "raises on non-200 status" do
-      creds = Hcode::LLM::OAuthCredentials.new(
+      creds = H2code::LLM::OAuthCredentials.new(
         access_token: "a",
         refresh_token: "rt",
         expires_at: 1_i64,
       )
 
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       transport.response_status = 401
       transport.response_body = "invalid_grant"
 
@@ -44,13 +44,13 @@ describe Hcode::LLM::OAuthCredentials do
     end
 
     it "surfaces IO::Error (network drop) from transport" do
-      creds = Hcode::LLM::OAuthCredentials.new(
+      creds = H2code::LLM::OAuthCredentials.new(
         access_token: "a",
         refresh_token: "rt",
         expires_at: 1_i64,
       )
 
-      transport = Hcode::MockHttpTransport.new
+      transport = H2code::MockHttpTransport.new
       transport.request_error = IO::Error.new("Connection refused")
 
       error = expect_raises(IO::Error) do

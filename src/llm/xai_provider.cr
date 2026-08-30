@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module LLM
     # xAI (Grok) backend over the OpenAI Chat Completions protocol. Auth is a
     # plain API key — no OAuth. Grok supports the OpenAI-style top-level

@@ -3,7 +3,7 @@ require "file"
 require "../mcp/config"
 require "./types"
 
-module Hcode
+module H2code
   module Plugin
     KIMI_PLUGIN_ROOT_PATH = "kimi.plugin.json"
     KIMI_PLUGIN_DIR_PATH  = ".kimi-plugin/plugin.json"

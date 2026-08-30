@@ -1,6 +1,6 @@
 require "http/client"
 
-module Hcode
+module H2code
   module Notify
     # Webhook delivery channel. Fires a user-configured HTTP request on a
     # transition, running in a detached fiber with a configurable timeout.
@@ -40,7 +40,7 @@ module Hcode
             body = Webhook.build_payload(payload)
             headers = HTTP::Headers{"Content-Type" => "application/json"}
             @headers.each { |k, v| headers[k] = v }
-            headers["X-HCode-Webhook-Secret"] = @secret unless @secret.empty?
+            headers["X-H2Code-Webhook-Secret"] = @secret unless @secret.empty?
 
             uri = URI.parse(@url)
             @transport.request(@method, uri, headers, body)

@@ -50,8 +50,8 @@ describe "Incremental renderer invariants" do
   it "screen matches the dumb oracle across grow-only sequences" do
     rows = 10
     500.times do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: rows, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: rows, cols: 80)
       log = [] of String
       active = [a(1)] of String
       seed = Random.new.rand(1_i64..1_000_000_000_i64)
@@ -85,8 +85,8 @@ describe "Incremental renderer invariants" do
   it "visible screen has no unexpected blank rows across grow+shrink sequences" do
     rows = 10
     500.times do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: rows, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: rows, cols: 80)
       log = [] of String
       active = [a(1)] of String
       seed = Random.new.rand(1_i64..1_000_000_000_i64)
@@ -144,8 +144,8 @@ describe "Incremental renderer invariants" do
   # them blank.
   it "rewrites temporarily-scrolled rows on viewport grow-then-shrink" do
     rows = 10
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: rows, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: rows, cols: 80)
 
     # Phase 1: fill log to exactly fill the screen (total = rows).
     drain(app, mock, (1..9).map { |n| l(n) }, [a(1)] of String)
@@ -169,8 +169,8 @@ describe "Incremental renderer invariants" do
   # ── Regression: Bug 1 (clear_below wipes last line at screen bottom) ──
   it "preserves the last active line when zone shrinks at screen bottom" do
     rows = 13
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: rows, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: rows, cols: 80)
 
     app.render_zones(mock, (1..5).map { |n| l(n) }, (1..8).map { |n| a(n) })
     mock.screen[12].should eq("A8")
@@ -183,8 +183,8 @@ describe "Incremental renderer invariants" do
   # ── Regression: Bug 2 (viewport shrink leaves stale active-zone rows) ──
   it "clears stale active-zone content on viewport shrink" do
     rows = 12
-    app = Hcode::TUI::App.new
-    mock = Hcode::TUI::TerminalMock.new(rows: rows, cols: 80)
+    app = H2code::TUI::App.new
+    mock = H2code::TUI::TerminalMock.new(rows: rows, cols: 80)
 
     app.render_zones(mock, (1..7).map { |n| l(n) }, (1..5).map { |n| a(n) })
     app.render_zones(mock, (1..7).map { |n| l(n) }, (1..8).map { |n| a(n) })

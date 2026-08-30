@@ -1,11 +1,11 @@
 require "socket"
 require "json"
 
-module Hcode
+module H2code
   module Remote
-    # Per-process control socket for external input (hcode-remote).
+    # Per-process control socket for external input (h2code-remote).
     #
-    # A running TUI listens on `<session_dir>/control.sock`; the hcode-remote
+    # A running TUI listens on `<session_dir>/control.sock`; the h2code-remote
     # daemon connects as a client and injects prompts/interrupts as synthetic
     # user input via `App#deliver_external_prompt` (the same path cron uses).
     # One listener per process — remote multiplexes by connecting to each
@@ -109,7 +109,7 @@ module Hcode
           @on_interrupt.call
           reply(client, ok: true)
         when "status"
-          # Authoritative busy flag for hcode-remote's session listing: the
+          # Authoritative busy flag for h2code-remote's session listing: the
           # wire log has no end-of-turn record (an interrupted turn writes
           # nothing), so the TUI process itself is the source of truth.
           reply(client, ok: true, busy: @on_status.call)

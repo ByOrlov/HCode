@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # Background-task tools — TaskList, TaskOutput, TaskStop.
     #

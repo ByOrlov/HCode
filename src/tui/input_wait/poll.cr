@@ -1,6 +1,6 @@
 {% skip_file if flag?(:win32) %}
 
-module Hcode
+module H2code
   module TUI
     # POSIX adapter: wait on STDIN readability via the poll(2) syscall.
     #

@@ -4,7 +4,7 @@
 # half-block rows with a quiet zone.
 require "goban"
 
-module Hcode
+module H2code
   module Remote
     module Qr
       # Module matrix (true = dark) for `payload`.

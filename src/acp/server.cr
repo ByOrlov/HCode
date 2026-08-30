@@ -24,13 +24,13 @@ require "./approval"
 require "./plan_review"
 require "./event_translator"
 
-module Hcode
+module H2code
   module Acp
     # ACP protocol version information.
     PROTOCOL_VERSION = 1
     SPEC_TAG         = "v0.10.x"
-    AGENT_NAME       = "HCode"
-    AGENT_VERSION    = Hcode::VERSION
+    AGENT_NAME       = "H2Code"
+    AGENT_VERSION    = H2code::VERSION
 
     # Main ACP server orchestrator. Owns the JSON-RPC frame, dispatches ACP
     # methods, and manages per-session state.
@@ -141,7 +141,7 @@ module Hcode
             }
           })),
           "authMethods" => JSON.parse(%([
-            {"id":"login","type":"terminal","name":"Login with HCode account","args":["--login"]}
+            {"id":"login","type":"terminal","name":"Login with H2Code account","args":["--login"]}
           ])),
           "agentInfo" => JSON.parse(%({
             "name": #{AGENT_NAME.to_json},
@@ -183,7 +183,7 @@ module Hcode
 
         cwd = params["cwd"]?.try(&.to_s) || Dir.current
 
-        # Convert ACP mcpServers (from IDE config) to HCode format
+        # Convert ACP mcpServers (from IDE config) to H2Code format
         mcp_servers = convert_mcp_servers(params["mcpServers"]?)
 
         # Build per-session infrastructure — the store generates its own ID,
@@ -212,7 +212,7 @@ module Hcode
 
         session_id = params["sessionId"]?.try(&.to_s) || ""
 
-        lifecycle = Hcode::Session::Lifecycle.new(@home)
+        lifecycle = H2code::Session::Lifecycle.new(@home)
         entry = lifecycle.index.get(session_id)
 
         unless entry
@@ -238,11 +238,11 @@ module Hcode
         # empty session that would lose everything on the next save.
         acp_session = begin
           build_session_from_existing(session_id, entry.path, cwd)
-        rescue Hcode::Session::FileDeletedError
+        rescue H2code::Session::FileDeletedError
           @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
             "Session files were deleted: #{session_id}") if id
           return
-        rescue ex : Hcode::Session::SessionBusyError
+        rescue ex : H2code::Session::SessionBusyError
           # Session owned by another live process (e.g. a TUI) — a second
           # writer would interleave two conversations into one wire log.
           @rpc.send_error(id, ErrorCodes::SESSION_BUSY, ex.message.to_s) if id
@@ -271,7 +271,7 @@ module Hcode
 
         session_id = params["sessionId"]?.try(&.to_s) || ""
 
-        lifecycle = Hcode::Session::Lifecycle.new(@home)
+        lifecycle = H2code::Session::Lifecycle.new(@home)
         entry = lifecycle.index.get(session_id)
 
         unless entry
@@ -296,11 +296,11 @@ module Hcode
         # empty session that would lose everything on the next save.
         acp_session = begin
           build_session_from_existing(session_id, entry.path, cwd)
-        rescue Hcode::Session::FileDeletedError
+        rescue H2code::Session::FileDeletedError
           @rpc.send_error(id, ErrorCodes::INVALID_PARAMS,
             "Session files were deleted: #{session_id}") if id
           return
-        rescue ex : Hcode::Session::SessionBusyError
+        rescue ex : H2code::Session::SessionBusyError
           # Session owned by another live process (e.g. a TUI) — a second
           # writer would interleave two conversations into one wire log.
           @rpc.send_error(id, ErrorCodes::SESSION_BUSY, ex.message.to_s) if id
@@ -360,9 +360,9 @@ module Hcode
         # workspace is listed (remote clients use this to populate their
         # workspace/folder picker from the full session history).
         cwd = params["cwd"]?.try(&.to_s).presence
-        lifecycle = Hcode::Session::Lifecycle.new(@home)
+        lifecycle = H2code::Session::Lifecycle.new(@home)
 
-        entries = cwd ? lifecycle.index.list(Hcode::Session::Index.workspace_id(cwd)) : lifecycle.index.list
+        entries = cwd ? lifecycle.index.list(H2code::Session::Index.workspace_id(cwd)) : lifecycle.index.list
 
         sessions = [] of JSON::Any
         entries.each do |entry|
@@ -482,7 +482,7 @@ module Hcode
 
       private def build_session_with_id(cwd : String,
                                         mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig) : {Acp::Session, String}
-        lifecycle = Hcode::Session::Lifecycle.new(@home)
+        lifecycle = H2code::Session::Lifecycle.new(@home)
         store = lifecycle.create(cwd)
         session_id = store.read_state.try(&.id) || store.meta_id? || Random::Secure.hex(12)
         {build_session_common(session_id, store, cwd, mcp_servers), session_id}
@@ -495,11 +495,11 @@ module Hcode
         # open_existing! takes the session lock: a session owned by
         # another live process (e.g. an interactive TUI) must not be
         # resumed here — two writers on one wire.jsonl corrupt it.
-        store = Hcode::Session::Store.open_existing!(session_dir)
+        store = H2code::Session::Store.open_existing!(session_dir)
         build_session_common(session_id, store, cwd, mcp_servers)
       end
 
-      private def build_session_common(session_id : String, store : Hcode::Session::Store,
+      private def build_session_common(session_id : String, store : H2code::Session::Store,
                                        cwd : String,
                                        mcp_servers : Array(Mcp::McpServerConfig) = [] of Mcp::McpServerConfig) : Acp::Session
         # Build provider for this session
@@ -538,7 +538,7 @@ module Hcode
         # Create the ACP session wrapper
         acp_session = Acp::Session.new(session_id, agent, store, @rpc, system_prompt)
 
-        # Wire subagent runtimes (mirrors wire_subagent_runners in hcode.cr):
+        # Wire subagent runtimes (mirrors wire_subagent_runners in h2code.cr):
         # without this Agent/AgentSwarm fail with "no subagent runtime is
         # registered" and TaskList/TaskOutput/TaskStop have no backing
         # service. Same globals caveat as PlanMode above: with several
@@ -570,16 +570,16 @@ module Hcode
         handler = ApprovalHandler.new(@rpc, session_id)
         permission.approval_callback = handler.callback
 
-        # Plan-mode wiring (mirrors the TUI path in hcode.cr): per-session
+        # Plan-mode wiring (mirrors the TUI path in h2code.cr): per-session
         # plan service + interactive review over reverse-RPC to the client.
         # NOTE: Tools::PlanMode holds GLOBAL class properties — with several
         # concurrent ACP sessions the last one created wins. Acceptable for
         # the daemon's one-chat-at-a-time usage; same simplification as the
         # TUI's AskUserQuestion.service.
-        Hcode::Tools::PlanMode.plan_service = Hcode::Tools::AgentPlanService.new(store.session_dir, "main")
-        Hcode::Tools::PlanMode.permission_mode = Hcode::Tools::PermissionModeRef.new(
+        H2code::Tools::PlanMode.plan_service = H2code::Tools::AgentPlanService.new(store.session_dir, "main")
+        H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(
           auto: permission.mode.auto?)
-        Hcode::Tools::PlanMode.plan_review_service = PlanReviewHandler.new(@rpc, session_id)
+        H2code::Tools::PlanMode.plan_review_service = PlanReviewHandler.new(@rpc, session_id)
 
         acp_session
       end
@@ -628,7 +628,7 @@ module Hcode
         !!(@config.provider_name && @config.provider_configured?)
       end
 
-      # Convert ACP mcpServers (from IDE config) to HCode McpServerConfig entries.
+      # Convert ACP mcpServers (from IDE config) to H2Code McpServerConfig entries.
       # ACP format: { name: { type?, command?, args?, env?, url?, headers? } }
       # type absent → stdio; "http" → http; "sse" → sse; "acp" → dropped.
       private def convert_mcp_servers(servers : JSON::Any?) : Array(Mcp::McpServerConfig)

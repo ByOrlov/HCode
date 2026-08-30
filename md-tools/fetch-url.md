@@ -4,7 +4,7 @@
 > + `fetch-url-types.ts`, `fetch-url.md`, `web.ts`, `webService.ts`,
 >   `providers/local-fetch-url.ts`, `providers/moonshot-fetch-url.ts`.
 
-Цель — тул `FetchURL` в `hcode.cr/src/tools/fetch_url.cr` с идентичным
+Цель — тул `FetchURL` в `h2code.cr/src/tools/fetch_url.cr` с идентичным
 LLM-контрактом. HTTP-фечинг — через инжекченный `UrlFetcher`; есть две
 реализации: `LocalFetcher` (HTTP::Client + простая HTML-очистка) и
 `MoonshotFetcher` (через managed-OAuth `/fetch` endpoint).
@@ -337,5 +337,5 @@ end
 - `custom_headers` provider'а — пока захардкодить пустой `Hash(String,String)`;
   подключение к `[providers]` TOML секции — отдельная задача.
 - Token provider для managed OAuth — пока заглушка; пока нет OAuth в
-  `hcode.cr`, `WebFetchService` остаётся local-only. Контракт тула от этого
+  `h2code.cr`, `WebFetchService` остаётся local-only. Контракт тула от этого
   не меняется.

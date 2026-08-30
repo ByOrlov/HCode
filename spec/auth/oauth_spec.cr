@@ -20,12 +20,12 @@ private class FakeOAuthServer
   end
 end
 
-describe Hcode::Auth::OAuth do
+describe H2code::Auth::OAuth do
   describe ".request_device_authorization" do
     it "parses a valid device authorization response" do
       # We can't easily mock HTTP without injecting transport; this test
       # verifies the parsing logic indirectly through the struct shape.
-      auth = Hcode::Auth::OAuth::DeviceAuthorization.new(
+      auth = H2code::Auth::OAuth::DeviceAuthorization.new(
         user_code: "ABC123",
         device_code: "dev456",
         verification_uri: "https://kimi.com/device",
@@ -39,15 +39,15 @@ describe Hcode::Auth::OAuth do
     end
   end
 
-  describe Hcode::Auth::OAuth::PollResult do
+  describe H2code::Auth::OAuth::PollResult do
     it "success? returns true for Success kind" do
-      r = Hcode::Auth::OAuth::PollResult.new(Hcode::Auth::OAuth::PollResultKind::Success)
+      r = H2code::Auth::OAuth::PollResult.new(H2code::Auth::OAuth::PollResultKind::Success)
       r.success?.should be_true
       r.pending?.should be_false
     end
 
     it "pending? returns true for Pending kind" do
-      r = Hcode::Auth::OAuth::PollResult.new(Hcode::Auth::OAuth::PollResultKind::Pending, description: "waiting")
+      r = H2code::Auth::OAuth::PollResult.new(H2code::Auth::OAuth::PollResultKind::Pending, description: "waiting")
       r.pending?.should be_true
       r.success?.should be_false
     end
@@ -55,19 +55,19 @@ describe Hcode::Auth::OAuth do
 
   describe "constants" do
     it "uses the Kimi Code auth host and client id" do
-      Hcode::Auth::OAuth::DEFAULT_OAUTH_HOST.should eq("https://auth.kimi.com")
-      Hcode::Auth::OAuth::DEFAULT_CLIENT_ID.should eq("17e5f671-d194-4dfb-9706-5516cb48c098")
+      H2code::Auth::OAuth::DEFAULT_OAUTH_HOST.should eq("https://auth.kimi.com")
+      H2code::Auth::OAuth::DEFAULT_CLIENT_ID.should eq("17e5f671-d194-4dfb-9706-5516cb48c098")
     end
 
     it "default credentials path is under ~/.kimi-code/credentials" do
-      Hcode::Auth::OAuth::DEFAULT_CREDENTIALS_PATH.should contain(".kimi-code")
-      Hcode::Auth::OAuth::DEFAULT_CREDENTIALS_PATH.should contain("credentials")
+      H2code::Auth::OAuth::DEFAULT_CREDENTIALS_PATH.should contain(".kimi-code")
+      H2code::Auth::OAuth::DEFAULT_CREDENTIALS_PATH.should contain("credentials")
     end
   end
 
-  describe Hcode::Auth::OAuth::OAuthError do
+  describe H2code::Auth::OAuth::OAuthError do
     it "is a rescuable Exception" do
-      err = Hcode::Auth::OAuth::OAuthError.new("test")
+      err = H2code::Auth::OAuth::OAuthError.new("test")
       err.message.should eq("test")
       err.should be_a(Exception)
     end

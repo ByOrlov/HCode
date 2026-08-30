@@ -48,7 +48,7 @@ puts "=== Edit tool memory benchmark ==="
 puts "#{N_EDITS} edits, old/new string ~#{(EDIT_SIZE / 1_048_576.0).round(2)} MB each"
 measure("Baseline")
 
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = 262144
 memory.add_user("Edit some files")
 memory.add_assistant("")
@@ -57,7 +57,7 @@ N_EDITS.times do |i|
   old_str = "o" * EDIT_SIZE
   new_str = "n" * EDIT_SIZE
   args = %Q{{"path": "file#{i}.txt", "old_string": "#{old_str}", "new_string": "#{new_str}"}}
-  tool_call = Hcode::LLM::ToolCall.new("tc_#{i}", Hcode::LLM::ToolCallFunction.new("Edit", args))
+  tool_call = H2code::LLM::ToolCall.new("tc_#{i}", H2code::LLM::ToolCallFunction.new("Edit", args))
   memory.add_assistant("", [tool_call])
   memory.add_tool_result("tc_#{i}", "Edited file#{i}.txt")
 end
@@ -74,7 +74,7 @@ end
 measure("After TUI previews")
 
 # JSON serialization peak with streaming vs string.
-_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
 _request.to_json
 measure("After request.to_json (string)")
 GC.collect

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     struct Style
       property fg : Int32? = nil

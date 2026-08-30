@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # Append-only emission sink for immutable history lines (user/assistant
     # messages, tool results, thinking blocks). Lines flushed here are written

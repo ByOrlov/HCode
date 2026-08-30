@@ -31,16 +31,16 @@ VIEWPORT_ROWS = 10
 describe "Zone behaviour tests (via App#render_zones)" do
   describe "Test 0: empty log + active zone" do
     it "renders active zone at row 0 with no log" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       app.render_zones(mock, [l(1)] of String, [a(1)] of String)
       mock.visible_rows.should eq(["L1", "A1"])
     end
 
     it "grows and shrinks with empty log" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       app.render_zones(mock, [] of String, [a(1), a(2), a(3)] of String)
       mock.visible_rows.should eq(["A1", "A2", "A3"])
@@ -52,8 +52,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
 
   describe "Test 1: iterative logs + grow/shrink (no viewport)" do
     it "adds L1..L10 with active=[A1], then grows and shrinks" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       # Step 1.1: add L1..L10, active=[A1]
       (1..10).each do |i|
@@ -81,8 +81,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
 
   describe "Test 2: interleaved logs and active zone (no viewport)" do
     it "shifts active zone on log growth" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       # Step 2.1: log=[L1, L2], active=[A1]
       app.render_zones(mock, [l(1), l(2)] of String, [a(1)] of String)
@@ -108,8 +108,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
 
   describe "Test 3: viewport scrolling (rows=10)" do
     it "scrolls the terminal when the log grows past the viewport" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
 
       # log=[L1..L5], active=[A1] — total 6, fits.
       app.render_zones(mock, (1..5).map { |n| l(n) }, [a(1)] of String)
@@ -126,8 +126,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
     end
 
     it "keeps the active zone at the bottom when it grows within the viewport" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
 
       app.render_zones(mock, (1..5).map { |n| l(n) }, [a(1)] of String)
       mock.visible_rows.should eq((1..5).map { |n| l(n) } + [a(1)])
@@ -139,8 +139,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
 
   describe "Test 6: log growth with active shrink — no blanks" do
     it "absorbs no space when the active zone shrinks" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       # log=[L1..L4], active=[A1..A3]
       app.render_zones(mock, (1..4).map { |n| l(n) }, (1..3).map { |n| a(n) })
@@ -162,8 +162,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
 
   describe "Test 7: cursor tracking through flush (migration scenario)" do
     it "renders correctly when content migrates from active to log" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: NO_VIEWPORT_ROWS, cols: 80)
 
       # Frame 1: log=[L1, L2], active=[A1, A2, A3]
       app.render_zones(mock, [l(1), l(2)] of String, [a(1), a(2), a(3)] of String)
@@ -182,8 +182,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
   # own. incremental_render must clear those freed rows.
   describe "Test 8: content shrink (viewport_top shrink → stale rows cleared)" do
     it "clears stale lines when the active zone shrinks after viewport scroll" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
 
       # Frame 1: log=[L1..L3], active=[D1..D20] (tall dialog). total=23 > rows,
       # so the screen shows the bottom of the dialog.
@@ -206,8 +206,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
     end
 
     it "clears the stale row when the spinner line disappears at turn end" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: VIEWPORT_ROWS, cols: 80)
 
       # log=[L1..L9], active=[S (spinner), A1] — total=11, viewport_top=1.
       app.render_zones(mock, (1..9).map { |n| l(n) }, ["S", a(1)] of String)
@@ -228,8 +228,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
   # The fix: only clear_below when content doesn't fill the screen.
   describe "Test 9: shrink at screen bottom — last active line preserved" do
     it "does not wipe the last active line when zone shrinks at bottom" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: 13, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: 13, cols: 80)
 
       # total=13 == rows, active fills to bottom
       app.render_zones(mock, (1..5).map { |n| l(n) }, (1..8).map { |n| a(n) })
@@ -244,8 +244,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
     end
 
     it "does not wipe the last active line on the first frame at bottom" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: 5, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: 5, cols: 80)
 
       app.render_zones(mock, [] of String, (1..5).map { |n| a(n) })
       mock.screen.should eq((1..5).map { |n| a(n) })
@@ -257,8 +257,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
   # on its own, so incremental_render must do a full repaint of the visible area.
   describe "Test 10: viewport shrink → full repaint" do
     it "rewrites all visible lines when viewport_top decreases" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: 12, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: 12, cols: 80)
 
       # Frame 1: log=[L1..L7], active=[A1..A5] → total=12, VT=0
       app.render_zones(mock, (1..7).map { |n| l(n) }, (1..5).map { |n| a(n) })
@@ -278,8 +278,8 @@ describe "Zone behaviour tests (via App#render_zones)" do
     end
 
     it "rewrites all visible lines on viewport shrink (partial)" do
-      app = Hcode::TUI::App.new
-      mock = Hcode::TUI::TerminalMock.new(rows: 12, cols: 80)
+      app = H2code::TUI::App.new
+      mock = H2code::TUI::TerminalMock.new(rows: 12, cols: 80)
 
       # Frame 1: log=[L1..L9], active=[A1..A5] → total=14, VT=2
       drain(app, mock, (1..9).map { |n| l(n) }, (1..5).map { |n| a(n) })

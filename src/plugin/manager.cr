@@ -11,7 +11,7 @@ require "./github_resolver"
 require "./commands"
 require "../tools/skill"
 
-module Hcode
+module H2code
   module Plugin
     class PluginRecord
       property id : String
@@ -205,13 +205,13 @@ module Hcode
 
       # --- Capability queries (called at startup) ---
 
-      def plugin_skills : Array(Hcode::Tools::SkillDefinition)
-        skills = [] of Hcode::Tools::SkillDefinition
+      def plugin_skills : Array(H2code::Tools::SkillDefinition)
+        skills = [] of H2code::Tools::SkillDefinition
         @records.each_value do |record|
           next unless record.ok?
           manifest = record.manifest || next
           manifest.skills.each do |skill_dir|
-            discovered = Hcode::Tools::SkillDiscovery.discover_from_dir(skill_dir, "plugin")
+            discovered = H2code::Tools::SkillDiscovery.discover_from_dir(skill_dir, "plugin")
             discovered.each { |s| skills << s }
           end
         end
@@ -242,7 +242,7 @@ module Hcode
             cfg.enabled = true
             if cfg.stdio?
               cfg.env = cfg.env.dup
-              cfg.env["KIMI_CODE_HOME"] = hcode_home_path
+              cfg.env["KIMI_CODE_HOME"] = h2code_home_path
               cfg.env["KIMI_PLUGIN_ROOT"] = record.root
               cfg.cwd = cfg.cwd || record.root
             end
@@ -252,16 +252,16 @@ module Hcode
         result
       end
 
-      def enabled_hooks : Array(Hcode::Hooks::HookDef)
-        result = [] of Hcode::Hooks::HookDef
+      def enabled_hooks : Array(H2code::Hooks::HookDef)
+        result = [] of H2code::Hooks::HookDef
         @records.each_value do |record|
           next unless record.ok?
           manifest = record.manifest || next
           manifest.hooks.each do |hook|
             env = {} of String => String
-            env["KIMI_CODE_HOME"] = hcode_home_path
+            env["KIMI_CODE_HOME"] = h2code_home_path
             env["KIMI_PLUGIN_ROOT"] = record.root
-            result << Hcode::Hooks::HookDef.new(
+            result << H2code::Hooks::HookDef.new(
               hook.event, hook.command, hook.matcher, hook.timeout,
               cwd: record.root, env: env,
             )
@@ -301,7 +301,7 @@ module Hcode
 
       private def install_from_zip(zip_url : String, original_source : String)
         buffer = Archive.download_zip(zip_url)
-        tmp_dir = File.join(tmpdir, "hcode-plugin-zip-#{Random::Secure.hex(6)}")
+        tmp_dir = File.join(tmpdir, "h2code-plugin-zip-#{Random::Secure.hex(6)}")
         begin
           detected_root = Archive.extract_zip(buffer, tmp_dir)
           parsed = ManifestParser.parse(detected_root)
@@ -320,7 +320,7 @@ module Hcode
       private def install_from_github(source : GithubSource, original_source : String)
         resolution = GithubResolver.resolve(source)
         buffer = Archive.download_zip(resolution.tarball_url)
-        tmp_dir = File.join(tmpdir, "hcode-plugin-zip-#{Random::Secure.hex(6)}")
+        tmp_dir = File.join(tmpdir, "h2code-plugin-zip-#{Random::Secure.hex(6)}")
         begin
           detected_root = Archive.extract_zip(buffer, tmp_dir)
           parsed = ManifestParser.parse(detected_root)
@@ -338,7 +338,7 @@ module Hcode
       end
 
       private def copy_to_managed(id : String, source_root : String) : String
-        managed_dir = File.join(hcode_home_path, "plugins", "managed")
+        managed_dir = File.join(h2code_home_path, "plugins", "managed")
         FileUtils.mkdir_p(managed_dir)
         managed_root = File.join(managed_dir, id)
         staging = File.join(managed_dir, "#{id}-#{Random::Secure.hex(4)}")
@@ -407,8 +407,8 @@ module Hcode
         Store.write(@kimi_home, records)
       end
 
-      private def hcode_home_path : String
-        ENV["HCODE_HOME"]? || File.join(@kimi_home, ".hcode")
+      private def h2code_home_path : String
+        ENV["H2CODE_HOME"]? || File.join(@kimi_home, ".h2code")
       end
 
       private def tmpdir : String

@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Prompt
     class Template
       def self.render(template : String, vars : Hash(String, String)) : String

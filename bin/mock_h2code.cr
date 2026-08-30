@@ -1,12 +1,12 @@
 #!/usr/bin/env crystal
 #
-# mock-hcode — standalone test binary that drives the real TUI with
+# mock-h2code — standalone test binary that drives the real TUI with
 # simulated LLM output. Runs 100 tool calls with hardcoded results so you
 # can visually inspect rendering bugs (logo reappearing, flicker, etc.)
 # in a real terminal.
 #
-# Build:   crystal build bin/mock_hcode.cr -o bin/mock_hcode --release
-# Run:     ./bin/mock-hcode
+# Build:   crystal build bin/mock_h2code.cr -o bin/mock_h2code --release
+# Run:     ./bin/mock-h2code
 
 require "../src/version"
 require "../src/version_compare"
@@ -69,6 +69,7 @@ require "../src/loop/abort"
 require "../src/loop/dedup"
 require "../src/loop/tool_batch"
 require "../src/loop/agent"
+require "../src/remote/sync"
 require "../src/loop/subagent_registry"
 require "../src/loop/subagent_agent_runner"
 require "../src/loop/subagent_swarm_runner"
@@ -100,6 +101,7 @@ require "../src/tui/tasks_browser"
 require "../src/tui/setup_controller"
 require "../src/tui/command_controller"
 require "../src/tui/app_models"
+require "../src/tui/telemetry"
 require "../src/tui/event_controller"
 require "../src/tui/input_controller"
 require "../src/tui/turn_controller"
@@ -132,10 +134,10 @@ require "../src/plugin/manifest"
 require "../src/plugin/commands"
 require "../src/plugin/manager"
 
-Hcode::I18n.init("en")
+H2code::I18n.init("en")
 
-module Hcode
-  module MockHcode
+module H2code
+  module MockH2code
     TOOLS = [
       {"Read", %({"path": "src/main.ts"}), "1  import { createApp } from 'vue'\n2  import { createPinia } from 'pinia'\n3  import App from './App.vue'\n4  import router from './router'\n5  import './style.css'\n6  \n7  const app = createApp(App)\n8  app.use(createPinia())\n9  app.use(router)\n10  app.mount('#app')"},
       {"Grep", %({"pattern": "isActive", "path": "src"}), "src/store/auth.ts:42:  const isActive = computed(() => !!token.value)\nsrc/store/auth.ts:58:  function checkActive() {\nsrc/components/Header.vue:12:  const { isActive } = useAuth()\nsrc/views/Dashboard.vue:8:  v-if=\"isActive\""},
@@ -184,7 +186,7 @@ module Hcode
     # terminal viewport, so the Log zone receives a chunk bigger than the
     # screen — used to exercise large-block emission and scroll behavior.
     def self.build_big_plan : String
-      rows = Hcode::TUI::Terminal.current.rows
+      rows = H2code::TUI::Terminal.current.rows
       target = (rows * 2) + 30
       String.build do |s|
         s << "## Plan — large render test (#{target} lines, viewport #{rows})\n"
@@ -203,7 +205,7 @@ module Hcode
     # where a long streamed LLM answer (the chat-icon block) overflows the
     # Active area and produces redraw artifacts.
     def self.build_big_streamed_response : String
-      rows = Hcode::TUI::Terminal.current.rows
+      rows = H2code::TUI::Terminal.current.rows
       target = (rows * 2) + 20
       String.build do |s|
         s << "Here is a detailed explanation that is intentionally longer than the viewport "
@@ -217,16 +219,16 @@ module Hcode
     end
 
     def self.run : Nil
-      config = Hcode::Config::Config.load
+      config = H2code::Config::Config.load
 
-      app = Hcode::TUI::App.new
+      app = H2code::TUI::App.new
       app.model = "mock-model"
       app.provider_name = "mock"
       app.permission_mode = "yolo"
       app.work_dir = Dir.current
       app.debug_zones = config.debug_zones?
 
-      puts "mock-hcode: simulating 100 tool calls. Press Ctrl+C to exit."
+      puts "mock-h2code: simulating 100 tool calls. Press Ctrl+C to exit."
 
       app.run(initial_prompt: "Fix the frontend key validation — key should become invalid when the deadline passes.") do |_text, _persisted|
         spawn do
@@ -235,9 +237,9 @@ module Hcode
           # for the small repainted region (spinner, live preview, editor), and a
           # viewport-sized streaming block violates the two-zone model.
           plan = build_big_plan
-          app.on_event(Hcode::Loop::Event.step_begin(0))
+          app.on_event(H2code::Loop::Event.step_begin(0))
           sleep 80.milliseconds
-          app.on_event(Hcode::Loop::Event.assistant_text(plan))
+          app.on_event(H2code::Loop::Event.assistant_text(plan))
           sleep 50.milliseconds
 
           # Reproduce the Active-zone overflow bug: stream a large assistant
@@ -245,15 +247,15 @@ module Hcode
           # finished block. The Active area holds the in-progress chat-icon
           # block, and a response taller than the viewport causes redraw
           # artifacts as the repainted region exceeds its budget.
-          app.on_event(Hcode::Loop::Event.step_begin(0))
+          app.on_event(H2code::Loop::Event.step_begin(0))
           sleep 80.milliseconds
           big_response = build_big_streamed_response
           big_response.split(" ").each_with_index do |word, wi|
-            app.on_event(Hcode::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
+            app.on_event(H2code::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
             sleep 15.milliseconds
           end
           sleep 50.milliseconds
-          app.on_event(Hcode::Loop::Event.assistant_text(big_response))
+          app.on_event(H2code::Loop::Event.assistant_text(big_response))
           sleep 50.milliseconds
 
           100.times do |i|
@@ -264,13 +266,13 @@ module Hcode
             step = i
 
             # Step begin
-            app.on_event(Hcode::Loop::Event.step_begin(step))
+            app.on_event(H2code::Loop::Event.step_begin(step))
             sleep 80.milliseconds
 
             # Thinking (stream a few tokens)
             thinking = THINKING_SNIPPETS[i % THINKING_SNIPPETS.size]
             thinking.split(" ").each_with_index do |word, wi|
-              app.on_event(Hcode::Loop::Event.thinking_delta(word + (wi == 0 ? "" : " ")))
+              app.on_event(H2code::Loop::Event.thinking_delta(word + (wi == 0 ? "" : " ")))
               sleep 30.milliseconds
             end
             sleep 50.milliseconds
@@ -279,35 +281,35 @@ module Hcode
             text = TEXT_SNIPPETS[i % TEXT_SNIPPETS.size]
             words = text.split(" ")
             words.each_with_index do |word, wi|
-              app.on_event(Hcode::Loop::Event.text_delta(word + (wi == words.size - 1 ? "" : " ")))
+              app.on_event(H2code::Loop::Event.text_delta(word + (wi == words.size - 1 ? "" : " ")))
               sleep 25.milliseconds
             end
             sleep 50.milliseconds
 
             # Tool call
             tool_id = "tc_#{i}"
-            app.on_event(Hcode::Loop::Event.tool_call_start(tool_id, tool_name, tool_args))
+            app.on_event(H2code::Loop::Event.tool_call_start(tool_id, tool_name, tool_args))
             sleep 100.milliseconds
 
             # Tool result
-            app.on_event(Hcode::Loop::Event.tool_result(tool_id, tool_result_text, false))
+            app.on_event(H2code::Loop::Event.tool_result(tool_id, tool_result_text, false))
             sleep 80.milliseconds
           end
 
           # Final assistant text
           final = "I've completed all the changes. The frontend now properly validates key expiry — when the deadline passes, the key automatically becomes invalid."
           final.split(" ").each_with_index do |word, wi|
-            app.on_event(Hcode::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
+            app.on_event(H2code::Loop::Event.text_delta(word + (wi == 0 ? "" : " ")))
             sleep 30.milliseconds
           end
           sleep 50.milliseconds
 
-          app.on_event(Hcode::Loop::Event.assistant_text(final))
-          app.on_event(Hcode::Loop::Event.turn_end)
+          app.on_event(H2code::Loop::Event.assistant_text(final))
+          app.on_event(H2code::Loop::Event.turn_end)
         end
       end
     end
   end
 end
 
-Hcode::MockHcode.run
+H2code::MockH2code.run

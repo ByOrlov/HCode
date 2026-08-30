@@ -1,4 +1,4 @@
-# HCode — 即使是土豆也能 Vibe-code
+# H2Code — 即使是土豆也能 Vibe-code
 
 [English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · **中文** · [日本語](./README.ja.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
@@ -8,13 +8,13 @@
 Linux 和 MacOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/H2Code/main/install.sh | bash
 ```
 
 Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex 
+irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex 
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · 原生二进制 · 无运行时**
@@ -27,7 +27,7 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 | # | Agent       | 语言       | 空闲内存          | 许可证              | 来源   |
 |---|-------------|------------|-------------------|---------------------|--------|
-| 1 | **HCode**   | **Crystal**| **~3 MB**         | **GPL-2.0-or-later**| [1]    |
+| 1 | **H2Code**   | **Crystal**| **~3 MB**         | **GPL-2.0-or-later**| [1]    |
 | 2 | grok-build  | Rust       | ~20 MB            | Apache-2.0          | [3]    |
 | 3 | Codex CLI   | Rust       | ~30 MB            | Apache-2.0          | [2]    |
 | 4 | Goose       | Rust + TS  | ~50–100 MB（估算）| Apache-2.0          | [4]    |
@@ -36,7 +36,7 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 | 7 | kimi-code   | TS / Node  | ~250 MB+          | MIT                 | [5]    |
 | 8 | opencode    | TS / Bun   | ~400 MB           | MIT                 | [8]    |
 
-**差距。** HCode 比最近的 Rust Agent（grok-build）低 ~7×，比最轻的 Node Agent（Claude Code）低 ~40×，比 kimi-code 低 ~80×，比 opencode 低 **~130×**。Node 家族跨度极大 —— 从 ~120 MB 到 ~400 MB —— 因为每一个都按进程附带 V8 运行时并随使用增长。Rust Agent（Codex、grok-build、Goose）原生且精简；HCode 在内存上与它们并驾齐驱，并在可读性和许可证上胜出（见[为什么是 Crystal？](#为什么是-crystal)）。
+**差距。** H2Code 比最近的 Rust Agent（grok-build）低 ~7×，比最轻的 Node Agent（Claude Code）低 ~40×，比 kimi-code 低 ~80×，比 opencode 低 **~130×**。Node 家族跨度极大 —— 从 ~120 MB 到 ~400 MB —— 因为每一个都按进程附带 V8 运行时并随使用增长。Rust Agent（Codex、grok-build、Goose）原生且精简；H2Code 在内存上与它们并驾齐驱，并在可读性和许可证上胜出（见[为什么是 Crystal？](#为什么是-crystal)）。
 
 > Aider（估算 ~150–250 MB）和 kimi-code（~250 MB+）处在同一重量级的边界 —— 它们的相对顺序在误差范围内。
 
@@ -50,19 +50,19 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 更糟的是 —— 这些"聊天"很难被称为**真正的软件**。它们是堆砌了功能的软件原型。真正的软件在性能上不可能这么可怕。而最可怕的是：它们是**永恒的原型**。永恒的临时方案，却作为成品交付。
 
-然后其他开发者转向 Rust 来构建 Agent。Rust 是一种你和编译器搏斗而不是构建东西的语言 —— 另一个极端。而笑点是：基于 Rust 的对手在空闲时占用 **~10× 于 HCode 的内存**。
+然后其他开发者转向 Rust 来构建 Agent。Rust 是一种你和编译器搏斗而不是构建东西的语言 —— 另一个极端。而笑点是：基于 Rust 的对手在空闲时占用 **~10× 于 H2Code 的内存**。
 
 于是我以 Moonshot-AI 的 TypeScript Agent 为基线，在 Kimi 2.6 和 GLM 5 的帮助下用 Crystal 重写了它的逻辑。最初的结果：空闲 **~3 MB** 对比 kimi-code 的 ~200 MB。核心循环已经能跑。之后峰值消耗确实爬升 —— 到了 ~130 MB —— 对一个聊天记事本来说很可怕，但仍然低于 kimi-code 的空闲占用。
 
-**这个差距，就是 HCode 存在的意义。**
+**这个差距，就是 H2Code 存在的意义。**
 
 ---
 
 ## 它为什么存在
 
-并行启动五个编码 Agent。盯着你的内存。每一个附带 Node.js 运行时的 Agent 都要为此买单 —— 按进程，永久。每个 HCode 进程在等待下一个 prompt 时只有约 **3 MB 常驻** —— 不是 120，不是 250，不是 400 MB。你的编辑器守住它的内存预算。你的笔记本保持凉爽。操作系统停止交换。你终于可以在你已经拥有的机器上跑一个 Agent 群。
+并行启动五个编码 Agent。盯着你的内存。每一个附带 Node.js 运行时的 Agent 都要为此买单 —— 按进程，永久。每个 H2Code 进程在等待下一个 prompt 时只有约 **3 MB 常驻** —— 不是 120，不是 250，不是 400 MB。你的编辑器守住它的内存预算。你的笔记本保持凉爽。操作系统停止交换。你终于可以在你已经拥有的机器上跑一个 Agent 群。
 
-> Rust Agent —— Codex、grok-build、Goose —— 同样是原生且精简的。对阵它们时 HCode 的优势不在内存，而在**可读性与许可证**。见下方的[全景图](#全景图)。
+> Rust Agent —— Codex、grok-build、Goose —— 同样是原生且精简的。对阵它们时 H2Code 的优势不在内存，而在**可读性与许可证**。见下方的[全景图](#全景图)。
 
 ---
 
@@ -80,7 +80,7 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 ## 从源码构建
 
-如果你更愿意自己构建 HCode，需要 Crystal ≥ 1.14 和 ripgrep (`rg`)：
+如果你更愿意自己构建 H2Code，需要 Crystal ≥ 1.14 和 ripgrep (`rg`)：
 
 ```sh
 # 安装 Crystal ≥ 1.14 — https://crystal-lang.org/install/
@@ -94,19 +94,19 @@ brew install ripgrep            # macOS
 # sudo pacman -S ripgrep        # Arch
 
 # 构建
-git clone https://github.com/ByOrlov/HCode
-cd HCode
+git clone https://github.com/ByOrlov/H2Code
+cd H2Code
 shards install
-rake build            # → ./hcode（release 标志）
+rake build            # → ./h2code（release 标志）
 
 # 冒烟测试你的凭证
-./hcode --hi
+./h2code --hi
 
 # 无头模式 —— 单次 prompt，流式输出到 stdout
-./hcode -p "explain this repo's entry point"
+./h2code -p "explain this repo's entry point"
 
 # 交互式 TUI
-./hcode
+./h2code
 ```
 
 ---
@@ -124,18 +124,18 @@ rake build            # → ./hcode（release 标志）
 | Aider       | Apache-2.0          | 否          | 否                | 是             |
 | opencode    | MIT                 | 否          | 否                | 是             |
 | kimi-code   | MIT                 | 否          | Moonshot          | 是             |
-| **HCode**   | **GPL-2.0-or-later**| **否**      | **否**            | **是**         |
+| **H2Code**   | **GPL-2.0-or-later**| **否**      | **否**            | **是**         |
 
 ## 许可证
 
-HCode 以 **GPL-2.0-or-later** 发布。
+H2Code 以 **GPL-2.0-or-later** 发布。
 
 Copyright © 2026 **Oleg Orlov** <orelcokolov@gmail.com> · byorlov.com.
 All rights reserved. 完整文本见 [LICENSE](./LICENSE)。
 
-> **为什么是 GPL-2.0 而非 MIT？** opencode 和 kimi-code 都是 MIT —— 任何人都可以把它们吸收进闭源产品而永不回馈。HCode 是 copyleft：每个衍生作品都必须以相同条款附带其源码。社区永远拥有一个免费的、可用的、无法被再次关闭的版本。
+> **为什么是 GPL-2.0 而非 MIT？** opencode 和 kimi-code 都是 MIT —— 任何人都可以把它们吸收进闭源产品而永不回馈。H2Code 是 copyleft：每个衍生作品都必须以相同条款附带其源码。社区永远拥有一个免费的、可用的、无法被再次关闭的版本。
 >
-> **双重许可。** 版权仅由作者持有，因此项目可以额外向需要规避 GPL copyleft 的方（例如把 HCode 嵌入闭源产品）提供独立的商业许可证。为保持该选项可行，外部贡献需要签署 CLA，授予作者再许可权。见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+> **双重许可。** 版权仅由作者持有，因此项目可以额外向需要规避 GPL copyleft 的方（例如把 H2Code 嵌入闭源产品）提供独立的商业许可证。为保持该选项可行，外部贡献需要签署 CLA，授予作者再许可权。见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ---
 

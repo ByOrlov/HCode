@@ -1,4 +1,4 @@
-# HCode — ポテトでも Vibe-code
+# H2Code — ポテトでも Vibe-code
 
 **日本語** · [English](./README.md) · [Русский](./README.ru.md) · [Español](./README.es.md) · [中文](./README.zh.md) · [Português](./README.pt.md) · [हिन्दी](./README.hi.md) · [فارسی](./README.fa.md) · [Українська](./README.uk.md) · [Беларуская](./README.be.md)
 
@@ -8,13 +8,13 @@
 Linux & MacOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ByOrlov/HCode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ByOrlov/H2Code/main/install.sh | bash
 ```
 
 Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex 
+irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex 
 ```
 
 **Crystal 1.14 · GPL-2.0-or-later · ネイティブバイナリ · ランタイムなし**
@@ -27,7 +27,7 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 | # | エージェント  | 言語       | アイドル RAM       | ライセンス           | ソース |
 |---|---------------|------------|--------------------|----------------------|--------|
-| 1 | **HCode**     | **Crystal**| **~3 MB**          | **GPL-2.0-or-later** | [1]    |
+| 1 | **H2Code**     | **Crystal**| **~3 MB**          | **GPL-2.0-or-later** | [1]    |
 | 2 | grok-build    | Rust       | ~20 MB             | Apache-2.0           | [3]    |
 | 3 | Codex CLI     | Rust       | ~30 MB             | Apache-2.0           | [2]    |
 | 4 | Goose         | Rust + TS  | ~50–100 MB（推定） | Apache-2.0           | [4]    |
@@ -36,7 +36,7 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 | 7 | kimi-code     | TS / Node  | ~250 MB+           | MIT                  | [5]    |
 | 8 | opencode      | TS / Bun   | ~400 MB            | MIT                  | [8]    |
 
-**差。** HCode は最寄りの Rust エージェント（grok-build）より ~7× 下、最も軽い Node エージェント（Claude Code）より ~40× 下、kimi-code より ~80× 下、opencode より **~130× 下**に位置する。Node 系は巨大な幅をまたぐ —— ~120 MB から ~400 MB まで —— なぜならそれぞれがプロセスごとに V8 ランタイムを同梱し、使用とともに増大するからだ。Rust エージェント（Codex、grok-build、Goose）はネイティブで軽量；HCode は RAM で互角に並び、可読性とライセンスで勝る（[なぜ Crystal か？](#なぜ-crystal-か)を参照）。
+**差。** H2Code は最寄りの Rust エージェント（grok-build）より ~7× 下、最も軽い Node エージェント（Claude Code）より ~40× 下、kimi-code より ~80× 下、opencode より **~130× 下**に位置する。Node 系は巨大な幅をまたぐ —— ~120 MB から ~400 MB まで —— なぜならそれぞれがプロセスごとに V8 ランタイムを同梱し、使用とともに増大するからだ。Rust エージェント（Codex、grok-build、Goose）はネイティブで軽量；H2Code は RAM で互角に並び、可読性とライセンスで勝る（[なぜ Crystal か？](#なぜ-crystal-か)を参照）。
 
 > Aider（推定 ~150–250 MB）と kimi-code（~250 MB+）は同じ重量級の境界にいる —— 相対順序は誤差の範囲内だ。
 
@@ -51,19 +51,19 @@ irm https://raw.githubusercontent.com/ByOrlov/HCode/master/install.ps1 | iex
 
 さらに悪いことに —— これらの「チャット」は**本物のソフトウェア**とは呼び難い。機能をボルトで留めただけのソフトウェアプロトタイプだ。本物のソフトウェアが性能でこれほど恐ろしいはずがない。そして最も恐ろしいのは：それらは**永遠のプロトタイプ**だ。完成品として出荷される、永遠の暫定ソリューション。
 
-そして他の開発者はエージェントを作るために Rust に手を伸ばす。Rust は、ものを作る代わりにコンパイラと戦う言語だ —— 正反対の極端。そしてオチ：Rust の競合はアイドル時で **HCode の ~10 倍のメモリ**に居座る。
+そして他の開発者はエージェントを作るために Rust に手を伸ばす。Rust は、ものを作る代わりにコンパイラと戦う言語だ —— 正反対の極端。そしてオチ：Rust の競合はアイドル時で **H2Code の ~10 倍のメモリ**に居座る。
 
 そこで Moonshot-AI の TypeScript エージェントをベースに、Kimi 2.6 と GLM 5 の助けを借りて、そのロジックを Crystal で書き直した。最初の結果：kimi-code の ~200 MB に対してアイドル **~3 MB**。コアループはすでに動いた。その後ピーク消費は上昇した —— ~130 MB まで —— これはチャットメモ帳としては恐ろしいが、それでも kimi-code のアイドルよりは少ない。
 
-**その差を埋めるために HCode は存在する。**
+**その差を埋めるために H2Code は存在する。**
 
 ---
 
 ## これが存在する理由
 
-コーディングエージェントを 5 つ並行で立ち上げろ。RAM を見よ。Node.js ランタイムを同梱するエージェントはすべて、その代償を払う —— プロセスごとに、永遠に。各 HCode プロセスは次のプロンプトを待つ間、約 **3 MB resident** に留まる —— 120 でも 250 でも 400 MB でもない。エディタはメモリ予算を守る。ノート PC は涼しいままだ。OS はスワップをやめる。あなたはついに、すでに持っているマシンでエージェントの群れを走らせられる。
+コーディングエージェントを 5 つ並行で立ち上げろ。RAM を見よ。Node.js ランタイムを同梱するエージェントはすべて、その代償を払う —— プロセスごとに、永遠に。各 H2Code プロセスは次のプロンプトを待つ間、約 **3 MB resident** に留まる —— 120 でも 250 でも 400 MB でもない。エディタはメモリ予算を守る。ノート PC は涼しいままだ。OS はスワップをやめる。あなたはついに、すでに持っているマシンでエージェントの群れを走らせられる。
 
-> Rust エージェント —— Codex、grok-build、Goose —— もネイティブで軽量だ。それらに対する HCode の強みは RAM ではなく、**可読性とライセンス**だ。下の[ランドスケープ](#ランドスケープ)を参照。
+> Rust エージェント —— Codex、grok-build、Goose —— もネイティブで軽量だ。それらに対する H2Code の強みは RAM ではなく、**可読性とライセンス**だ。下の[ランドスケープ](#ランドスケープ)を参照。
 
 ---
 
@@ -81,7 +81,7 @@ Rust、Go、TypeScript を真剣に検討した。どれも、私たちが受け
 
 ## ソースからビルド
 
-ご自身で HCode をビルドしたい場合は、Crystal ≥ 1.14 と ripgrep (`rg`) が必要：
+ご自身で H2Code をビルドしたい場合は、Crystal ≥ 1.14 と ripgrep (`rg`) が必要：
 
 ```sh
 # Install Crystal ≥ 1.14 — https://crystal-lang.org/install/
@@ -95,19 +95,19 @@ brew install ripgrep            # macOS
 # sudo pacman -S ripgrep        # Arch
 
 # Build
-git clone https://github.com/ByOrlov/HCode
-cd HCode
+git clone https://github.com/ByOrlov/H2Code
+cd H2Code
 shards install
-rake build            # → ./hcode (release flags)
+rake build            # → ./h2code (release flags)
 
 # Smoke-test your credentials
-./hcode --hi
+./h2code --hi
 
 # Headless — one-shot prompt, streams to stdout
-./hcode -p "explain this repo's entry point"
+./h2code -p "explain this repo's entry point"
 
 # Interactive TUI
-./hcode
+./h2code
 ```
 
 ---
@@ -125,19 +125,19 @@ rake build            # → ./hcode (release flags)
 | Aider         | Apache-2.0           | なし          | なし              | あり               |
 | opencode      | MIT                  | なし          | なし              | あり               |
 | kimi-code     | MIT                  | なし          | Moonshot          | あり               |
-| **HCode**     | **GPL-2.0-or-later** | **なし**      | **なし**          | **あり**           |
+| **H2Code**     | **GPL-2.0-or-later** | **なし**      | **なし**          | **あり**           |
 
 
 ## ライセンス
 
-HCode は **GPL-2.0-or-later** で公開されている。
+H2Code は **GPL-2.0-or-later** で公開されている。
 
 Copyright © 2026 **Oleg Orlov** <orelcokolov@gmail.com> · byorlov.com.
 All rights reserved. 全文は [LICENSE](./LICENSE) を参照。
 
-> **なぜ MIT ではなく GPL-2.0 なのか？** opencode と kimi-code はどちらも MIT だ —— 誰でもそれらをクローズドソース製品に取り込み、決して還元しないことができる。HCode はコピーレフトだ：派生物はすべて同じ条件でソースを同梱しなければならない。コミュニティは常に、再閉鎖できない自由で使えるバージョンを持つ。
+> **なぜ MIT ではなく GPL-2.0 なのか？** opencode と kimi-code はどちらも MIT だ —— 誰でもそれらをクローズドソース製品に取り込み、決して還元しないことができる。H2Code はコピーレフトだ：派生物はすべて同じ条件でソースを同梱しなければならない。コミュニティは常に、再閉鎖できない自由で使えるバージョンを持つ。
 >
-> **デュアルライセンス。** 著作権は著者単独で保持されているため、プロジェクトは GPL コピーレフトを回避する必要のある者（例えば HCode をクローズドソース製品に組み込む場合）に別個の商用ライセンスを追加で提供できる。この選択肢を維持するため、外部からの貢献には著者に再許諾権を付与する CLA が求められる。[CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
+> **デュアルライセンス。** 著作権は著者単独で保持されているため、プロジェクトは GPL コピーレフトを回避する必要のある者（例えば H2Code をクローズドソース製品に組み込む場合）に別個の商用ライセンスを追加で提供できる。この選択肢を維持するため、外部からの貢献には著者に再許諾権を付与する CLA が求められる。[CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
 
 ---
 

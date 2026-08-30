@@ -1,7 +1,7 @@
 require "json"
 require "./transport"
 
-module Hcode
+module H2code
   module Mcp
     # Raised when the server returns a JSON-RPC `error` object or the request
     # times out / the transport dies mid-call.

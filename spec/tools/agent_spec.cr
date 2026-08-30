@@ -2,28 +2,28 @@ require "../spec_helper"
 require "../../src/tools/agent"
 
 # Тестовый runner: позволяет управлять исходом запуска субагента.
-private class FakeRunner < Hcode::Tools::AgentRunner
-  getter calls = [] of Hcode::Tools::AgentLaunchSpec
-  property behaviour : Hcode::Tools::AgentLaunchSpec -> Hcode::Tools::AgentRunOutcome
+private class FakeRunner < H2code::Tools::AgentRunner
+  getter calls = [] of H2code::Tools::AgentLaunchSpec
+  property behaviour : H2code::Tools::AgentLaunchSpec -> H2code::Tools::AgentRunOutcome
 
-  def initialize(@behaviour : Hcode::Tools::AgentLaunchSpec -> Hcode::Tools::AgentRunOutcome)
+  def initialize(@behaviour : H2code::Tools::AgentLaunchSpec -> H2code::Tools::AgentRunOutcome)
   end
 
-  def launch(spec : Hcode::Tools::AgentLaunchSpec, signal : Hcode::Tools::AbortController?) : Hcode::Tools::AgentRunOutcome
+  def launch(spec : H2code::Tools::AgentLaunchSpec, signal : H2code::Tools::AbortController?) : H2code::Tools::AgentRunOutcome
     @calls << spec
     @behaviour.call(spec)
   end
 end
 
-describe Hcode::Tools::Agent do
+describe H2code::Tools::Agent do
   after_each do
-    Hcode::Tools::Agent.runner = nil
-    Hcode::Tools::Agent.background_enabled = false
+    H2code::Tools::Agent.runner = nil
+    H2code::Tools::Agent.background_enabled = false
   end
 
   it "exposes the JS-name and identical schema" do
-    agent = Hcode::Tools::Agent.new
-    agent.name.should eq(Hcode::Tools::Names::AGENT)
+    agent = H2code::Tools::Agent.new
+    agent.name.should eq(H2code::Tools::Names::AGENT)
     agent.description.should contain("Launch a subagent")
     agent.description.should contain("agent")
     agent.description.should contain("coder")
@@ -42,16 +42,16 @@ describe Hcode::Tools::Agent do
   end
 
   it "toggles background paragraph based on background_enabled flag" do
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     agent.description.should contain("Background agent execution is disabled")
 
-    Hcode::Tools::Agent.background_enabled = true
+    H2code::Tools::Agent.background_enabled = true
     agent.description.should contain("run_in_background=true")
     agent.description.should contain("The completion arrives in a later turn")
   end
 
   it "returns a clear error when no subagent runtime is registered" do
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "do something",
       "description": "test"
@@ -61,7 +61,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "rejects resume + subagent_type together" do
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test",
@@ -73,7 +73,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "rejects run_in_background=true when background is disabled" do
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test",
@@ -84,15 +84,15 @@ describe Hcode::Tools::Agent do
   end
 
   it "rejects unknown subagent_type" do
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "x", profile_name: "coder",
-        status: Hcode::Tools::AgentRunStatus::Completed, summary: "ok"
+        status: H2code::Tools::AgentRunStatus::Completed, summary: "ok"
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test",
@@ -103,15 +103,15 @@ describe Hcode::Tools::Agent do
   end
 
   it "defaults subagent_type to coder when omitted" do
-    runner = FakeRunner.new(->(s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    runner = FakeRunner.new(->(s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "x", profile_name: s[:subagent_type] || "coder",
-        status: Hcode::Tools::AgentRunStatus::Completed, summary: "ok"
+        status: H2code::Tools::AgentRunStatus::Completed, summary: "ok"
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test"
@@ -123,17 +123,17 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground success format" do
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "agent-42",
         profile_name: "coder",
-        status: Hcode::Tools::AgentRunStatus::Completed,
+        status: H2code::Tools::AgentRunStatus::Completed,
         summary: "Refactored foo.cr and added tests."
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "refactor"
@@ -146,18 +146,18 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground failure with resume_hint on timeout" do
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "agent-9",
         profile_name: "coder",
-        status: Hcode::Tools::AgentRunStatus::Failed,
+        status: H2code::Tools::AgentRunStatus::Failed,
         error: "Agent timed out after 2 hours.",
         timed_out: true
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test"
@@ -171,17 +171,17 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders foreground failure without resume_hint when not timed out" do
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "agent-9",
         profile_name: "coder",
-        status: Hcode::Tools::AgentRunStatus::Failed,
+        status: H2code::Tools::AgentRunStatus::Failed,
         error: "boom"
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test"
@@ -192,19 +192,19 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders detached (background) result format" do
-    Hcode::Tools::Agent.background_enabled = true
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
-      Hcode::Tools::AgentRunOutcome.new(
+    H2code::Tools::Agent.background_enabled = true
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
+      H2code::Tools::AgentRunOutcome.new(
         agent_id: "agent-100",
         profile_name: "coder",
-        status: Hcode::Tools::AgentRunStatus::Detached,
+        status: H2code::Tools::AgentRunStatus::Detached,
         description: "long-running job",
         task_id: "task-5"
       )
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "long-running job",
@@ -222,7 +222,7 @@ describe Hcode::Tools::Agent do
   end
 
   it "renders timeout description in hours/minutes/seconds" do
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     agent.format_subagent_timeout_description(7_200_000).should eq("2 hours")
     agent.format_subagent_timeout_description(3_600_000).should eq("1 hour")
     agent.format_subagent_timeout_description(60_000).should eq("1 minute")
@@ -232,12 +232,12 @@ describe Hcode::Tools::Agent do
   end
 
   it "wraps runner exceptions into subagent error" do
-    runner = FakeRunner.new(->(_s : Hcode::Tools::AgentLaunchSpec) do
+    runner = FakeRunner.new(->(_s : H2code::Tools::AgentLaunchSpec) do
       raise "boom"
     end)
-    Hcode::Tools::Agent.runner = runner
+    H2code::Tools::Agent.runner = runner
 
-    agent = Hcode::Tools::Agent.new
+    agent = H2code::Tools::Agent.new
     result = agent.execute(JSON.parse(%({
       "prompt": "go",
       "description": "test"

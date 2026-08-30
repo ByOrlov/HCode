@@ -84,7 +84,7 @@ puts "Tool results in TUI are stored as #{TOOL_PREVIEW_LINES}-line / #{TOOL_PREV
 measurements << measure("Baseline")
 
 # Phase 1: Context::Memory with realistic compaction.
-memory = Hcode::Context::Memory.new
+memory = H2code::Context::Memory.new
 memory.max_context_tokens = MAX_TOKENS
 
 compaction_count = 0
@@ -99,7 +99,7 @@ N_TURNS.times do |i|
   if memory.token_count >= (MAX_TOKENS * 0.85).to_i
     old = memory.history.dup
     kept_count = Math.min(COMPACT_KEEP, old.size)
-    kept = old[-kept_count..] || [] of Hcode::Context::ContextMessage
+    kept = old[-kept_count..] || [] of H2code::Context::ContextMessage
     summary = "[compaction summary for turns #{i - old.size + 1}..#{i}]"
     memory.apply_compaction(summary, kept)
     compaction_count += 1
@@ -114,7 +114,7 @@ N_TURNS.times do |i|
   context_peak_raw_mb = {context_peak_raw_mb, ctx_raw_mb}.max
 
   if i % 500 == 0 && i > 0
-    req = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+    req = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
     json = req.to_json
     json_peak_mb = {json_peak_mb, json.bytesize / 1_048_576.0}.max
     measure("   at turn #{i}", "compactions=#{compaction_count}, context msgs=#{memory.history.size}, tokens=#{memory.token_count}, JSON=#{(json.bytesize / 1_048_576.0).round(2)} MB")
@@ -137,7 +137,7 @@ tui_raw_mb = N_TURNS * (USER_SIZE + ASSISTANT_SIZE + TOOL_SIZE) / 1_048_576.0
 tui_m = measure("2. TUI transcript with previews", "stored #{tui_stored_mb.round(2)} MB vs full #{tui_raw_mb.round(2)} MB")
 
 # Phase 3: render markdown for the TUI transcript.
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 rendered_bytes = 0_i64
 messages.each do |msg|
   content = msg.content
@@ -147,7 +147,7 @@ end
 render_m = measure("3. Markdown render", "#{rendered_bytes / 1_048_576.0} MB rendered")
 
 # Phase 4: serialize compacted context to JSON.
-_request = Hcode::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
+_request = H2code::LLM::ChatRequest.new(model: "mock", messages: memory.messages, tools: nil, stream: true)
 _json_body = _request.to_json
 json_peak_mb = {json_peak_mb, _json_body.bytesize / 1_048_576.0}.max
 json_m = measure("4. JSON request body", "JSON body #{(_json_body.bytesize / 1_048_576.0).round(2)} MB, peak #{json_peak_mb.round(2)} MB")
@@ -159,7 +159,7 @@ _request = nil
 measure("5. After Context::Memory cleared", "TUI still holds messages")
 
 messages.clear
-markdown = Hcode::TUI::Markdown.new(Hcode::TUI::Theme.dark)
+markdown = H2code::TUI::Markdown.new(H2code::TUI::Theme.dark)
 after_tui_clear = measure("6. After TUI transcript cleared")
 
 final = measure("Final")

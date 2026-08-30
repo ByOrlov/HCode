@@ -65,7 +65,7 @@
   end
 {% end %}
 
-module Hcode
+module H2code
   module TUI
     class Terminal
       {% if flag?(:unix) %}

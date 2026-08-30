@@ -3,7 +3,7 @@
 ## Контекст
 
 `src/tui/app.cr` — 4628 строк, крупнейший файл проекта. Содержит один класс
-`Hcode::TUI::App` плюс хелпер-структуры. Проект уже применяет паттерн:
+`H2code::TUI::App` плюс хелпер-структуры. Проект уже применяет паттерн:
 связная группа методов выносится в модуль в отдельном файле и подключается
 через `include` в `App`. Так сделаны `SetupController` (`setup_controller.cr`,
 240 строк) и `CommandController` (`command_controller.cr`, 486 строк). Их
@@ -11,7 +11,7 @@
 класса — эта видимость работает внутри одного включающего класса, чем и
 воспользуемся.
 
-Список загрузки файлов явный: `src/hcode.cr:117-144`. Новые файлы нужно
+Список загрузки файлов явный: `src/h2code.cr:117-144`. Новые файлы нужно
 вставлять в этот список **до** строки `require "./tui/app"` (142), чтобы модули
 были определены к моменту `include`.
 
@@ -28,7 +28,7 @@
 ## Структура файлов (итог)
 
 `app.cr` после разбиения должен содержать только:
-- `module Hcode; module TUI` обёртку;
+- `module H2code; module TUI` обёртку;
 - хелпер-структуры, если не переедут в `app_models.cr` (см. ниже);
 - объявление `class App` с `include`-списком всех контроллеров;
 - все ivars/properties (`@...` и `property ...`);
@@ -45,7 +45,7 @@
 - `ApprovalRequest` (181-188)
 - `QueuedMessage` (190-200)
 
-Все они лежат в `module Hcode::TUI`, как и сейчас.
+Все они лежат в `module H2code::TUI`, как и сейчас.
 
 ### `src/tui/event_controller.cr` — `module EventController`
 «Вход со стороны агента»: обработка событий цикла и запросы одобрения.
@@ -137,20 +137,20 @@
 
 1. Создать `app_models.cr`, перенести туда 6 структур + `MCP_HELP_TEXT`.
 2. Создать 6 файлов-контроллеров, перенести методы согласно распределению выше.
-   Каждый файл — `module Hcode; module TUI; module XController ... end; end; end`
+   Каждый файл — `module H2code; module TUI; module XController ... end; end; end`
    с теми же `private`/`def` квалификаторами. Константы переезжают вместе с
    использующими их методами.
 3. В `class App` добавить `include EventController, InputController,
    TurnController, RenderController, MessageRenderer, UIPanels` (порядок не
    важен — модули не имеют коллизий методов).
-4. Обновить список `require` в `src/hcode.cr`: вставить 7 новых
+4. Обновить список `require` в `src/h2code.cr`: вставить 7 новых
    `require "./tui/<file>"` **перед** строкой 142 (`require "./tui/app"`).
 5. Удалить из `app.cr` перенесённый код; оставить только каркас (см. блок
    «структура файлов»).
 
 ## Проверка
 
-- `crystal build src/hcode.cr` — компиляция (Crystal проверит сигнатуры и
+- `crystal build src/h2code.cr` — компиляция (Crystal проверит сигнатуры и
   видимость методов между модулями на этапе компиляции).
 - `crystal spec spec/tui/` — все TUI-спеки (`app_spec.cr`, `zone_*`,
   `editor_cursor_sync_spec`, `large_log_render_spec`, …) покрывают рендер,

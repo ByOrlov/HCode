@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module TUI
     # `TerminalPort` implementation that writes ANSI escape sequences to a real
     # IO (typically `IO::Memory` built per frame by the orchestrator, then

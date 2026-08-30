@@ -134,12 +134,12 @@ require "../src/plugin/manager"
 
 # Initialize i18n so specs that exercise translated strings resolve keys
 # instead of getting the raw key back.
-Hcode::I18n.init("en")
+H2code::I18n.init("en")
 
 # Create a temp directory and yield it, cleaning up after the block. Used by
 # plugin and other specs that need an isolated filesystem.
 def with_tmpdir(&)
-  dir = File.join(Dir.tempdir, "hcode-spec-#{Random::Secure.hex(6)}")
+  dir = File.join(Dir.tempdir, "h2code-spec-#{Random::Secure.hex(6)}")
   Dir.mkdir_p(dir)
   begin
     yield dir

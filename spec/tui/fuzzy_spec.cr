@@ -2,26 +2,26 @@ require "../spec_helper"
 
 # Verifies the fuzzy matcher: subsequence requirement, scoring/ranking quality,
 # match-position reconstruction (for highlighting), and `SelectList` filtering.
-describe Hcode::TUI::Fuzzy do
+describe H2code::TUI::Fuzzy do
   describe ".matches?" do
     it "matches a subsequence case-insensitively" do
-      Hcode::TUI::Fuzzy.matches?("g45", "glm-4.5").should be_true
-      Hcode::TUI::Fuzzy.matches?("G45", "glm-4.5").should be_true
+      H2code::TUI::Fuzzy.matches?("g45", "glm-4.5").should be_true
+      H2code::TUI::Fuzzy.matches?("G45", "glm-4.5").should be_true
     end
 
     it "rejects when chars are out of order or missing" do
-      Hcode::TUI::Fuzzy.matches?("54", "glm-4.5").should be_false
-      Hcode::TUI::Fuzzy.matches?("abc", "ab").should be_false
+      H2code::TUI::Fuzzy.matches?("54", "glm-4.5").should be_false
+      H2code::TUI::Fuzzy.matches?("abc", "ab").should be_false
     end
 
     it "treats empty query as non-matching" do
-      Hcode::TUI::Fuzzy.matches?("", "anything").should be_false
+      H2code::TUI::Fuzzy.matches?("", "anything").should be_false
     end
   end
 
   describe ".match (score + positions)" do
     it "returns matched positions in ascending order" do
-      res = Hcode::TUI::Fuzzy.match("g45", "glm-4.5")
+      res = H2code::TUI::Fuzzy.match("g45", "glm-4.5")
       res.should_not be_nil
       res = res || raise "res should not be nil"
       res.positions.should eq([0, 4, 6])
@@ -29,32 +29,32 @@ describe Hcode::TUI::Fuzzy do
     end
 
     it "scores a prefix/word-boundary match higher than a scattered one" do
-      prefix = (Hcode::TUI::Fuzzy.match("glm", "glm-4.5") || raise "match failed").score
-      scattered = (Hcode::TUI::Fuzzy.match("glm", "x-g-l-m") || raise "match failed").score
+      prefix = (H2code::TUI::Fuzzy.match("glm", "glm-4.5") || raise "match failed").score
+      scattered = (H2code::TUI::Fuzzy.match("glm", "x-g-l-m") || raise "match failed").score
       prefix.should be > scattered
     end
 
     it "scores consecutive matches higher than gapped ones" do
-      tight = (Hcode::TUI::Fuzzy.match("air", "glm-4.5-air") || raise "match failed").score
-      gapped = (Hcode::TUI::Fuzzy.match("air", "a___i___r") || raise "match failed").score
+      tight = (H2code::TUI::Fuzzy.match("air", "glm-4.5-air") || raise "match failed").score
+      gapped = (H2code::TUI::Fuzzy.match("air", "a___i___r") || raise "match failed").score
       tight.should be > gapped
     end
 
     it "rewards camelCase boundary matches" do
-      camel = (Hcode::TUI::Fuzzy.match("gf", "glmFour") || raise "match failed").score
-      plain = (Hcode::TUI::Fuzzy.match("gf", "glmfour") || raise "match failed").score
+      camel = (H2code::TUI::Fuzzy.match("gf", "glmFour") || raise "match failed").score
+      plain = (H2code::TUI::Fuzzy.match("gf", "glmfour") || raise "match failed").score
       camel.should be > plain
     end
 
     it "returns nil when not a subsequence" do
-      Hcode::TUI::Fuzzy.match("xyz", "glm-4.5").should be_nil
+      H2code::TUI::Fuzzy.match("xyz", "glm-4.5").should be_nil
     end
   end
 
   describe ".filter (ranking)" do
     it "keeps only matching items, best score first, stable on ties" do
       items = ["glm-4.5", "glm-5.2", "gpt-4o", "glm-4.5-air"]
-      ranked = Hcode::TUI::Fuzzy.filter(items, "glm")
+      ranked = H2code::TUI::Fuzzy.filter(items, "glm")
       # All three glm-* have 'glm' at the same leading positions, so their
       # scores tie and input order is preserved; gpt-4o is filtered out.
       ranked.map(&.[0]).should eq([0, 1, 3])
@@ -62,25 +62,25 @@ describe Hcode::TUI::Fuzzy do
 
     it "ranks a word-boundary match above a scattered one" do
       items = ["xglm", "glm-4.5"]
-      ranked = Hcode::TUI::Fuzzy.filter(items, "glm")
+      ranked = H2code::TUI::Fuzzy.filter(items, "glm")
       ranked.map(&.[0]).should eq([1, 0])
     end
 
     it "returns empty for a query matching nothing" do
       items = ["glm-4.5", "glm-5.2"]
-      Hcode::TUI::Fuzzy.filter(items, "zzz").should be_empty
+      H2code::TUI::Fuzzy.filter(items, "zzz").should be_empty
     end
   end
 end
 
-describe Hcode::TUI::SelectList do
+describe H2code::TUI::SelectList do
   it "filters items by a fuzzy query and reports them in score order" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.searchable = true
     list.show("Select model", ["glm-4.5", "glm-5.2", "glm-4.5-air", "gpt-4o"])
-    list.handle_input(Hcode::TUI::KeyEvent.char('g'))
-    list.handle_input(Hcode::TUI::KeyEvent.char('l'))
-    list.handle_input(Hcode::TUI::KeyEvent.char('m'))
+    list.handle_input(H2code::TUI::KeyEvent.char('g'))
+    list.handle_input(H2code::TUI::KeyEvent.char('l'))
+    list.handle_input(H2code::TUI::KeyEvent.char('m'))
 
     list.query.should eq("glm")
     list.filtered_size.should eq(3)
@@ -91,33 +91,33 @@ describe Hcode::TUI::SelectList do
   end
 
   it "snaps the cursor to the top after each query edit" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.searchable = true
     list.show("Select model", ["a", "b", "c"])
     list.selected = 2
-    list.handle_input(Hcode::TUI::KeyEvent.char('b'))
+    list.handle_input(H2code::TUI::KeyEvent.char('b'))
     list.query.should eq("b")
     list.selected.should eq(0)
     list.current.should eq("b")
   end
 
   it "backspace trims the query and restores matches" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.searchable = true
     list.show("Select model", ["abc", "abd", "xyz"])
-    list.handle_input(Hcode::TUI::KeyEvent.char('a'))
-    list.handle_input(Hcode::TUI::KeyEvent.char('b'))
+    list.handle_input(H2code::TUI::KeyEvent.char('a'))
+    list.handle_input(H2code::TUI::KeyEvent.char('b'))
     list.filtered_size.should eq(2)
-    list.handle_input(Hcode::TUI::KeyEvent.new(Hcode::TUI::Key::Backspace))
+    list.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Backspace))
     list.query.should eq("a")
     list.filtered_size.should eq(2) # abc, abd still match "a"
   end
 
   it "clear_query restores the full list" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.searchable = true
     list.show("Select model", ["a", "b", "c"])
-    list.handle_input(Hcode::TUI::KeyEvent.char('a'))
+    list.handle_input(H2code::TUI::KeyEvent.char('a'))
     list.filtered_size.should eq(1)
     list.clear_query.should be_true
     list.query.should eq("")
@@ -126,21 +126,21 @@ describe Hcode::TUI::SelectList do
   end
 
   it "ignores typed characters when not searchable" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.show("Select theme", ["dark", "light"])
-    consumed = list.handle_input(Hcode::TUI::KeyEvent.char('d'))
+    consumed = list.handle_input(H2code::TUI::KeyEvent.char('d'))
     consumed.should be_false
     list.query.should eq("")
     list.filtered_size.should eq(2)
   end
 
   it "selected_original_index maps back to the unfiltered array" do
-    list = Hcode::TUI::SelectList.new
+    list = H2code::TUI::SelectList.new
     list.searchable = true
     list.show("Select model", ["glm-4.5", "glm-5.2", "gpt-4o"])
-    list.handle_input(Hcode::TUI::KeyEvent.char('g'))
-    list.handle_input(Hcode::TUI::KeyEvent.char('p'))
-    list.handle_input(Hcode::TUI::KeyEvent.char('t'))
+    list.handle_input(H2code::TUI::KeyEvent.char('g'))
+    list.handle_input(H2code::TUI::KeyEvent.char('p'))
+    list.handle_input(H2code::TUI::KeyEvent.char('t'))
     list.current.should eq("gpt-4o")
     list.selected_original_index.should eq(2)
   end

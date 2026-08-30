@@ -2,18 +2,18 @@ require "../spec_helper"
 require "../../src/context/compaction"
 
 private def make_summary_provider(text : String)
-  step = Hcode::LLM::MockStep.new(
-    parts: [Hcode::LLM::TextPart.new(text)] of Hcode::LLM::MessagePart,
+  step = H2code::LLM::MockStep.new(
+    parts: [H2code::LLM::TextPart.new(text)] of H2code::LLM::MessagePart,
     stop_reason: "end_turn",
     text: text,
   )
-  Hcode::LLM::MockProvider.new([step])
+  H2code::LLM::MockProvider.new([step])
 end
 
 # A provider that records every request it receives and replays a scripted
 # list of outcomes: either an exception to raise or a summary text to return.
-private class ScriptedProvider < Hcode::LLM::Provider
-  getter requests : Array(Array(Hcode::LLM::Message)) = [] of Array(Hcode::LLM::Message)
+private class ScriptedProvider < H2code::LLM::Provider
+  getter requests : Array(Array(H2code::LLM::Message)) = [] of Array(H2code::LLM::Message)
   @outcomes : Array(Exception | String)
 
   def initialize(outcomes : Array(Exception | String))
@@ -32,40 +32,40 @@ private class ScriptedProvider < Hcode::LLM::Provider
     [] of String
   end
 
-  def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
+  def chat(messages : Array(H2code::LLM::Message), tools : Array(H2code::LLM::ToolDefinition)?,
            system_prompt : String? = nil,
            aborted? : -> Bool = -> { false },
-           &_block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+           &_block : H2code::LLM::MessagePart ->) : H2code::LLM::StepResult
     @requests << messages
     outcome = @outcomes.shift
     raise outcome.as(Exception) if outcome.is_a?(Exception)
     text = outcome.as(String)
-    Hcode::LLM::StepResult.new(
+    H2code::LLM::StepResult.new(
       stop_reason: "end_turn",
       text: text,
       thinking: "",
-      tool_calls: [] of Hcode::LLM::ToolCall,
-      usage: Hcode::LLM::Usage.new,
+      tool_calls: [] of H2code::LLM::ToolCall,
+      usage: H2code::LLM::Usage.new,
     )
   end
 end
 
-private def zai_overflow_error : Hcode::LLM::ApiError
-  Hcode::LLM::ApiError.new(400,
+private def zai_overflow_error : H2code::LLM::ApiError
+  H2code::LLM::ApiError.new(400,
     "Chat API error 400: The messages parameter is illegal. Please check the documentation.",
     retryable: false)
 end
 
-describe Hcode::Context::Compaction do
+describe H2code::Context::Compaction do
   it "summarizes and applies the compaction" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("first message")
     memory.add_assistant("first reply")
     memory.add_user("second message")
     memory.add_assistant("second reply")
 
     provider = make_summary_provider("Summary of the conversation.")
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 2)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 2)
 
     result = compactor.compact { }
 
@@ -77,12 +77,12 @@ describe Hcode::Context::Compaction do
   end
 
   it "sends the history as a message list plus a trailing instruction, not one blob" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("first message")
     memory.add_assistant("first reply")
 
     provider = ScriptedProvider.new(["Summary."])
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 1)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 1)
 
     compactor.compact { }
 
@@ -94,13 +94,13 @@ describe Hcode::Context::Compaction do
   end
 
   it "excludes injection-origin messages from the summarizer input" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("real question")
     memory.add_injection("[step reminder]")
     memory.add_assistant("answer")
 
     provider = ScriptedProvider.new(["Summary."])
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 1)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 1)
 
     compactor.compact { }
 
@@ -110,15 +110,15 @@ describe Hcode::Context::Compaction do
   end
 
   it "synthesizes missing tool results and drops orphan tool results" do
-    projected = Hcode::Context::Compaction.project([
-      Hcode::LLM::Message.user("run tools"),
-      Hcode::LLM::Message.assistant("", tool_calls: [
-        Hcode::LLM::ToolCall.new("call_1", Hcode::LLM::ToolCallFunction.new("bash", "{}")),
-        Hcode::LLM::ToolCall.new("call_2", Hcode::LLM::ToolCallFunction.new("read", "{}")),
+    projected = H2code::Context::Compaction.project([
+      H2code::LLM::Message.user("run tools"),
+      H2code::LLM::Message.assistant("", tool_calls: [
+        H2code::LLM::ToolCall.new("call_1", H2code::LLM::ToolCallFunction.new("bash", "{}")),
+        H2code::LLM::ToolCall.new("call_2", H2code::LLM::ToolCallFunction.new("read", "{}")),
       ]),
-      Hcode::LLM::Message.tool("out 1", "call_1"),
+      H2code::LLM::Message.tool("out 1", "call_1"),
       # Orphan: no assistant message ever made this call.
-      Hcode::LLM::Message.tool("stray", "call_unknown"),
+      H2code::LLM::Message.tool("stray", "call_unknown"),
     ])
 
     roles = projected.map(&.role)
@@ -134,7 +134,7 @@ describe Hcode::Context::Compaction do
   end
 
   it "shrinks the history and retries when the summarizer request overflows" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     20.times do |i|
       memory.add_user("question number #{i} with some padding text to give it tokens")
       memory.add_assistant("answer number #{i} with some padding text to give it tokens")
@@ -143,7 +143,7 @@ describe Hcode::Context::Compaction do
     memory.max_context_tokens = 1000
 
     provider = ScriptedProvider.new([zai_overflow_error, zai_overflow_error, "Shrunk summary."])
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 2)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 2)
 
     result = compactor.compact { }
 
@@ -162,12 +162,12 @@ describe Hcode::Context::Compaction do
   end
 
   it "does not treat a small-request 400 as overflow" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("hello")
     memory.max_context_tokens = 1_000_000
 
     provider = ScriptedProvider.new([zai_overflow_error])
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 1)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 1)
 
     result = compactor.compact { }
 
@@ -177,11 +177,11 @@ describe Hcode::Context::Compaction do
   end
 
   it "retains full history on provider failure" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("hello")
 
     failing = FailingProvider.new
-    compactor = Hcode::Context::Compaction.new(failing, memory, kept_count: 2)
+    compactor = H2code::Context::Compaction.new(failing, memory, kept_count: 2)
 
     result = compactor.compact { }
 
@@ -191,13 +191,13 @@ describe Hcode::Context::Compaction do
   end
 
   it "drops the oldest message and retries on an empty summary" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("first")
     memory.add_assistant("first reply")
     memory.add_user("second")
 
     provider = ScriptedProvider.new(["", "Retry summary."])
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 1)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 1)
 
     result = compactor.compact { }
 
@@ -208,12 +208,12 @@ describe Hcode::Context::Compaction do
   end
 
   it "reports token reduction when tokens decrease" do
-    memory = Hcode::Context::Memory.new
+    memory = H2code::Context::Memory.new
     memory.add_user("a somewhat longer message here")
     memory.add_assistant("a reply that is also reasonably long")
 
     provider = make_summary_provider("Short summary.")
-    compactor = Hcode::Context::Compaction.new(provider, memory, kept_count: 1)
+    compactor = H2code::Context::Compaction.new(provider, memory, kept_count: 1)
 
     result = compactor.compact { }
 
@@ -223,11 +223,11 @@ describe Hcode::Context::Compaction do
   describe ".take_recent_within_token_budget" do
     it "keeps the most recent messages that fit and never returns a tool-first slice" do
       cms = [
-        Hcode::Context::ContextMessage.new(Hcode::LLM::Message.user("0123456789" * 10)),
-        Hcode::Context::ContextMessage.new(Hcode::LLM::Message.tool("out", "c1")),
-        Hcode::Context::ContextMessage.new(Hcode::LLM::Message.user("short")),
+        H2code::Context::ContextMessage.new(H2code::LLM::Message.user("0123456789" * 10)),
+        H2code::Context::ContextMessage.new(H2code::LLM::Message.tool("out", "c1")),
+        H2code::Context::ContextMessage.new(H2code::LLM::Message.user("short")),
       ]
-      kept = Hcode::Context::Compaction.take_recent_within_token_budget(cms, 10)
+      kept = H2code::Context::Compaction.take_recent_within_token_budget(cms, 10)
       kept.size.should eq(1)
       kept.first.message.text.should eq("short")
     end
@@ -235,20 +235,20 @@ describe Hcode::Context::Compaction do
 
   describe ".overflow_error?" do
     it "classifies 413 and Z.AI-style oversized-input 400s" do
-      overflow_413 = Hcode::LLM::ApiError.new(413, "Chat API error 413: too large")
-      Hcode::Context::Compaction.overflow_error?(overflow_413, 600, 1000).should be_true
+      overflow_413 = H2code::LLM::ApiError.new(413, "Chat API error 413: too large")
+      H2code::Context::Compaction.overflow_error?(overflow_413, 600, 1000).should be_true
       # Estimate below the recovery ratio: shrinking cannot be the fix.
-      Hcode::Context::Compaction.overflow_error?(overflow_413, 400, 1000).should be_false
+      H2code::Context::Compaction.overflow_error?(overflow_413, 400, 1000).should be_false
       # 400 with a matching body and a near-full request.
-      Hcode::Context::Compaction.overflow_error?(zai_overflow_error, 900, 1000).should be_true
+      H2code::Context::Compaction.overflow_error?(zai_overflow_error, 900, 1000).should be_true
       # 400 that does not blame the input (e.g. invalid model).
-      other_400 = Hcode::LLM::ApiError.new(400, "Chat API error 400: invalid model id", retryable: false)
-      Hcode::Context::Compaction.overflow_error?(other_400, 900, 1000).should be_false
+      other_400 = H2code::LLM::ApiError.new(400, "Chat API error 400: invalid model id", retryable: false)
+      H2code::Context::Compaction.overflow_error?(other_400, 900, 1000).should be_false
     end
   end
 end
 
-private class FailingProvider < Hcode::LLM::Provider
+private class FailingProvider < H2code::LLM::Provider
   def name : String
     "failing"
   end
@@ -261,10 +261,10 @@ private class FailingProvider < Hcode::LLM::Provider
     [] of String
   end
 
-  def chat(messages : Array(Hcode::LLM::Message), tools : Array(Hcode::LLM::ToolDefinition)?,
+  def chat(messages : Array(H2code::LLM::Message), tools : Array(H2code::LLM::ToolDefinition)?,
            system_prompt : String? = nil,
            aborted? : -> Bool = -> { false },
-           &_block : Hcode::LLM::MessagePart ->) : Hcode::LLM::StepResult
+           &_block : H2code::LLM::MessagePart ->) : H2code::LLM::StepResult
     raise "provider down"
   end
 end

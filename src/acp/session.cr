@@ -6,7 +6,7 @@ require "../permission/manager"
 require "./json_rpc"
 require "./event_translator"
 
-module Hcode
+module H2code
   module Acp
     # Per-session wrapper: owns a `Loop::Agent` + `Session::Store`, translates
     # streaming events into ACP `session/update` notifications, and bridges
@@ -14,7 +14,7 @@ module Hcode
     class Session
       getter id : String
       getter agent : Loop::Agent
-      getter store : Hcode::Session::Store
+      getter store : H2code::Session::Store
       getter rpc : JsonRpc
       getter system_prompt : String
       getter current_turn_id : Int32 = 0
@@ -25,7 +25,7 @@ module Hcode
       @started_tool_calls = Set(String).new
       @cancelled = false
 
-      def initialize(@id : String, @agent : Loop::Agent, @store : Hcode::Session::Store,
+      def initialize(@id : String, @agent : Loop::Agent, @store : H2code::Session::Store,
                      @rpc : JsonRpc, @system_prompt : String)
       end
 
@@ -72,7 +72,7 @@ module Hcode
             result_channel.send(build_prompt_response("end_turn")) unless result_channel.closed?
           rescue ex
             STDERR.puts "[acp] error in session #{@id}: #{ex}"
-            ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["HCODE_DEBUG"]?
+            ex.backtrace.each { |b| STDERR.puts "  #{b}" } if ENV["H2CODE_DEBUG"]?
             result_channel.send(build_prompt_response("end_turn")) unless result_channel.closed?
           end
         end

@@ -1,6 +1,6 @@
 require "json"
 
-module Hcode
+module H2code
   module Mcp
     # One configured MCP server entry. Only the stdio transport is wired in
     # MVP; `type`, `url` and `token_env` are parsed and stored so Phase 2
@@ -107,19 +107,19 @@ module Hcode
       end
     end
 
-    # Loader for the optional `~/.hcode/mcp.json` file and its project-local
-    # overrides (`<project-root>/.mcp.json`, `<cwd>/.hcode/mcp.json`). Sources
+    # Loader for the optional `~/.h2code/mcp.json` file and its project-local
+    # overrides (`<project-root>/.mcp.json`, `<cwd>/.h2code/mcp.json`). Sources
     # are merged by server name; later files override earlier ones.
     module ConfigLoader
       # Load from three mcp.json files — user-global, project-root, and
       # project-local — mirroring JS `loadMcpServers`. Later files override
       # earlier ones with the same name.
       def self.load(home_dir : String, cwd : String = Dir.current) : Array(McpServerConfig)
-        hcode_home = ENV["HCODE_HOME"]? || File.join(home_dir, ".hcode")
+        h2code_home = ENV["H2CODE_HOME"]? || File.join(home_dir, ".h2code")
 
-        user_json = read_mcp_json_file(File.join(hcode_home, "mcp.json"))
+        user_json = read_mcp_json_file(File.join(h2code_home, "mcp.json"))
         project_root_json = read_mcp_json_file(project_root_mcp_json(cwd))
-        project_json = read_mcp_json_file(File.join(cwd, ".hcode", "mcp.json"))
+        project_json = read_mcp_json_file(File.join(cwd, ".h2code", "mcp.json"))
 
         # Merge by name: user → project-root → project (later wins).
         merged = {} of String => McpServerConfig

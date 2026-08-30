@@ -8,37 +8,37 @@ require "i18n"
 # This replaces `I18n::Loader::YAML.embed`, which materialised all 10 locales
 # as a single nested Hash in heap at startup (~1 MB). With lazy per-locale
 # parsing, startup loads only 2 locales (~200 KB).
-HCODE_LOCALE_YAML_EN = {{ read_file("#{__DIR__}/locales/en.yml") }}
-HCODE_LOCALE_YAML_RU = {{ read_file("#{__DIR__}/locales/ru.yml") }}
-HCODE_LOCALE_YAML_ES = {{ read_file("#{__DIR__}/locales/es.yml") }}
-HCODE_LOCALE_YAML_ZH = {{ read_file("#{__DIR__}/locales/zh.yml") }}
-HCODE_LOCALE_YAML_JA = {{ read_file("#{__DIR__}/locales/ja.yml") }}
-HCODE_LOCALE_YAML_PT = {{ read_file("#{__DIR__}/locales/pt.yml") }}
-HCODE_LOCALE_YAML_HI = {{ read_file("#{__DIR__}/locales/hi.yml") }}
-HCODE_LOCALE_YAML_FA = {{ read_file("#{__DIR__}/locales/fa.yml") }}
-HCODE_LOCALE_YAML_UK = {{ read_file("#{__DIR__}/locales/uk.yml") }}
-HCODE_LOCALE_YAML_BE = {{ read_file("#{__DIR__}/locales/be.yml") }}
+H2CODE_LOCALE_YAML_EN = {{ read_file("#{__DIR__}/locales/en.yml") }}
+H2CODE_LOCALE_YAML_RU = {{ read_file("#{__DIR__}/locales/ru.yml") }}
+H2CODE_LOCALE_YAML_ES = {{ read_file("#{__DIR__}/locales/es.yml") }}
+H2CODE_LOCALE_YAML_ZH = {{ read_file("#{__DIR__}/locales/zh.yml") }}
+H2CODE_LOCALE_YAML_JA = {{ read_file("#{__DIR__}/locales/ja.yml") }}
+H2CODE_LOCALE_YAML_PT = {{ read_file("#{__DIR__}/locales/pt.yml") }}
+H2CODE_LOCALE_YAML_HI = {{ read_file("#{__DIR__}/locales/hi.yml") }}
+H2CODE_LOCALE_YAML_FA = {{ read_file("#{__DIR__}/locales/fa.yml") }}
+H2CODE_LOCALE_YAML_UK = {{ read_file("#{__DIR__}/locales/uk.yml") }}
+H2CODE_LOCALE_YAML_BE = {{ read_file("#{__DIR__}/locales/be.yml") }}
 
-HCODE_LOCALE_YAML_STRINGS = {
-  "en" => HCODE_LOCALE_YAML_EN,
-  "ru" => HCODE_LOCALE_YAML_RU,
-  "es" => HCODE_LOCALE_YAML_ES,
-  "zh" => HCODE_LOCALE_YAML_ZH,
-  "ja" => HCODE_LOCALE_YAML_JA,
-  "pt" => HCODE_LOCALE_YAML_PT,
-  "hi" => HCODE_LOCALE_YAML_HI,
-  "fa" => HCODE_LOCALE_YAML_FA,
-  "uk" => HCODE_LOCALE_YAML_UK,
-  "be" => HCODE_LOCALE_YAML_BE,
+H2CODE_LOCALE_YAML_STRINGS = {
+  "en" => H2CODE_LOCALE_YAML_EN,
+  "ru" => H2CODE_LOCALE_YAML_RU,
+  "es" => H2CODE_LOCALE_YAML_ES,
+  "zh" => H2CODE_LOCALE_YAML_ZH,
+  "ja" => H2CODE_LOCALE_YAML_JA,
+  "pt" => H2CODE_LOCALE_YAML_PT,
+  "hi" => H2CODE_LOCALE_YAML_HI,
+  "fa" => H2CODE_LOCALE_YAML_FA,
+  "uk" => H2CODE_LOCALE_YAML_UK,
+  "be" => H2CODE_LOCALE_YAML_BE,
 }
 
-module Hcode
+module H2code
   # `I18n` domain — interface translation layer.
   #
   # Wraps the `crystal-i18n` shard: locale YAML is embedded into the binary at
   # compile time (so there are no external files to ship), the active locale is
   # selected from config / env / system at startup, and the `#t` shortcut is
-  # exposed app-wide as `Hcode.t(...)`.
+  # exposed app-wide as `H2code.t(...)`.
   #
   # Only the active locale + "en" are parsed into the catalog at startup. A
   # language switch (`/language`) lazy-loads the requested locale on first use.
@@ -101,12 +101,12 @@ module Hcode
     end
 
     # Resolves the locale to use, in priority order: explicit override, env
-    # `HCODE_LANG`, system `LANG`/`LC_ALL`, fallback "en".
+    # `H2CODE_LANG`, system `LANG`/`LC_ALL`, fallback "en".
     def self.resolve_locale(config_lang : String? = nil, env = ENV) : String
       if lang = config_lang
         return lang if SUPPORTED_LOCALES.includes?(lang)
       end
-      if env_lang = env["HCODE_LANG"]?
+      if env_lang = env["H2CODE_LANG"]?
         resolved = parse_lang(env_lang)
         return resolved if SUPPORTED_LOCALES.includes?(resolved)
       end
@@ -126,7 +126,7 @@ module Hcode
     # Adds a loader for a single locale to `I18n.config.loaders` by parsing
     # the embedded YAML string at runtime.
     private def self.add_locale_loader(name : String) : Nil
-      yaml = HCODE_LOCALE_YAML_STRINGS[name]?
+      yaml = H2CODE_LOCALE_YAML_STRINGS[name]?
       return unless yaml
       translations = ::I18n::Loader::YAML.normalize_raw_translations([yaml])
       ::I18n.config.loaders << ::I18n::Loader::YAML.new(translations)
@@ -149,8 +149,8 @@ module Hcode
   end
 end
 
-# Top-level shortcut so call sites stay short: `Hcode.t("status.done")`.
-module Hcode
+# Top-level shortcut so call sites stay short: `H2code.t("status.done")`.
+module H2code
   def self.t(key : String, **kwargs) : String
     I18n.t(key, **kwargs)
   end

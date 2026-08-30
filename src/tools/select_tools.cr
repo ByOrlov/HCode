@@ -1,4 +1,4 @@
-module Hcode
+module H2code
   module Tools
     # select_tools — progressive tool disclosure loader.
     #

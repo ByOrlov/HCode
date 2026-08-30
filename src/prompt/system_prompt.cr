@@ -1,8 +1,8 @@
-module Hcode
+module H2code
   module Prompt
     class SystemPrompt
       SYSTEM_TEMPLATE = <<-TEXT
-      You are HCode, a lighter-than-air AI agent running on a user's computer.
+      You are H2Code, a lighter-than-air AI agent running on a user's computer.
 
       Your primary goal is to help users with software engineering tasks by taking action — use the tools available to you to make real changes on the user's system. You should also answer questions when asked. Always adhere strictly to the following system instructions and the user's requirements.
 
@@ -78,8 +78,8 @@ module Hcode
 
       ## Operating System
 
-      You are running on **{{HCODE_OS}}**. The Bash tool executes commands using **{{HCODE_SHELL}}**.
-      {% if HCODE_OS == "Windows" %}
+      You are running on **{{H2CODE_OS}}**. The Bash tool executes commands using **{{H2CODE_SHELL}}**.
+      {% if H2CODE_OS == "Windows" %}
 
       IMPORTANT: You are on Windows. The Bash tool runs through Git Bash, so use Unix shell syntax inside Bash commands — `/dev/null` not `NUL`, and forward slashes in paths. For file operations, always prefer the built-in tools (Read, Write, Edit, Glob, Grep) over Bash commands — they work reliably across all platforms.
       {% endif %}
@@ -88,11 +88,11 @@ module Hcode
 
       ## Date and Time
 
-      The current date and time in ISO format is `{{HCODE_NOW}}`. This was captured when the session started and does not update as the session continues, so in a long or resumed session it may be hours or days stale. Treat it only as a rough reference; whenever the real current time matters (web-result freshness, age or expiry checks, anything time-sensitive), get it fresh from the environment — for example by running `date` if you have a shell tool — instead of trusting this value.
+      The current date and time in ISO format is `{{H2CODE_NOW}}`. This was captured when the session started and does not update as the session continues, so in a long or resumed session it may be hours or days stale. Treat it only as a rough reference; whenever the real current time matters (web-result freshness, age or expiry checks, anything time-sensitive), get it fresh from the environment — for example by running `date` if you have a shell tool — instead of trusting this value.
 
       ## Working Directory
 
-      The current working directory is `{{HCODE_WORK_DIR}}`. This should be considered as the project root if you are instructed to perform tasks on the project. Tools may require absolute paths for some parameters, IF SO, YOU MUST use absolute paths for these parameters.
+      The current working directory is `{{H2CODE_WORK_DIR}}`. This should be considered as the project root if you are instructed to perform tasks on the project. Tools may require absolute paths for some parameters, IF SO, YOU MUST use absolute paths for these parameters.
 
       Use this as your basic understanding of the project structure. The tree only shows the first two levels for normal directories; entries marked "... and N more" indicate additional contents. Hidden directories are shown as entries only; their contents are intentionally omitted to reduce noise.
 
@@ -101,24 +101,24 @@ module Hcode
       The directory listing of current working directory is:
 
       ```
-      {{HCODE_WORK_DIR_LS}}
+      {{H2CODE_WORK_DIR_LS}}
       ```
-      {% if HCODE_ADDITIONAL_DIRS_INFO %}
+      {% if H2CODE_ADDITIONAL_DIRS_INFO %}
 
       ## Additional Directories
 
       The following directories have been added to the workspace. You can read, write, search, and glob files in these directories as part of your workspace scope.
 
-      {{HCODE_ADDITIONAL_DIRS_INFO}}
+      {{H2CODE_ADDITIONAL_DIRS_INFO}}
       {% endif %}
 
-      {% if HCODE_SKILLS %}
+      {% if H2CODE_SKILLS %}
 
       # Skills
 
       The following skills are available. A skill is a reusable, parameterized prompt you can invoke through the `Skill` tool. When the user's request matches a skill, call it instead of answering free-form.
 
-      {{HCODE_SKILLS}}
+      {{H2CODE_SKILLS}}
 
       {% endif %}
 
@@ -131,7 +131,7 @@ module Hcode
       The applicable `AGENTS.md` instructions are:
 
       ```````
-      {{HCODE_AGENTS_MD}}
+      {{H2CODE_AGENTS_MD}}
       ```````
 
       # Ultimate Reminders
@@ -160,15 +160,15 @@ module Hcode
                      skills_listing : String = "", shell : String? = nil) : String
         vars = {} of String => String
 
-        vars["HCODE_OS"] = os_name
-        vars["HCODE_SHELL"] = shell_name(shell)
-        vars["HCODE_NOW"] = Time.utc.to_rfc3339
-        vars["HCODE_WORK_DIR"] = work_dir
-        vars["HCODE_WORK_DIR_LS"] = directory_listing(work_dir)
-        vars["HCODE_ADDITIONAL_DIRS_INFO"] = additional_dirs_info(additional_dirs)
+        vars["H2CODE_OS"] = os_name
+        vars["H2CODE_SHELL"] = shell_name(shell)
+        vars["H2CODE_NOW"] = Time.utc.to_rfc3339
+        vars["H2CODE_WORK_DIR"] = work_dir
+        vars["H2CODE_WORK_DIR_LS"] = directory_listing(work_dir)
+        vars["H2CODE_ADDITIONAL_DIRS_INFO"] = additional_dirs_info(additional_dirs)
         agents_md = AgentsMd.discover(work_dir)
-        vars["HCODE_AGENTS_MD"] = agents_md.empty? ? "(none found)" : agents_md
-        vars["HCODE_SKILLS"] = skills_listing
+        vars["H2CODE_AGENTS_MD"] = agents_md.empty? ? "(none found)" : agents_md
+        vars["H2CODE_SKILLS"] = skills_listing
 
         Template.render(SYSTEM_TEMPLATE, vars)
       end
@@ -176,14 +176,14 @@ module Hcode
       # Appended by Loop::Agent to the base system prompt on every request.
       # Models with a strong baked-in brand identity (e.g. kimi-for-coding
       # answering "I am Kimi") otherwise present themselves as the vendor's
-      # assistant; naming the actual model and provider keeps the HCode
+      # assistant; naming the actual model and provider keeps the H2Code
       # identity stable across backends.
       def self.identity_block(provider_name : String, model_name : String) : String
         <<-TEXT
 
         # Identity
 
-        You are HCode. This session is served by the "#{model_name}" model via the "#{provider_name}" provider. When asked who or what you are, identify as HCode — you may mention the underlying model and provider when relevant — but do not present yourself as the model vendor's own branded assistant.
+        You are H2Code. This session is served by the "#{model_name}" model via the "#{provider_name}" provider. When asked who or what you are, identify as H2Code — you may mention the underlying model and provider when relevant — but do not present yourself as the model vendor's own branded assistant.
         TEXT
       end
 
