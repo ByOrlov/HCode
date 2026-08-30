@@ -337,7 +337,7 @@ describe H2code::Config::Config do
     it "defaults the transcription section" do
       config = H2code::Config::Config.parse_json(%({}))
       config.transcription.enabled?.should be_false
-      config.transcription.socket.should eq("~/.h2code/voice.sock")
+      config.transcription.socket.should eq("~/.h2voice/voice.sock")
       config.transcription.engine.should eq("auto")
       config.transcription.max_duration_sec.should eq(120)
     end

@@ -58,7 +58,7 @@ module H2code
       include JSON::Serializable
 
       property? enabled : Bool = false
-      property socket : String = "~/.h2code/voice.sock"
+      property socket : String = "~/.h2voice/voice.sock"
       property engine : String = "auto"
       # Default voice language ("auto" = detect on the server; detection can
       # misfire on short/noisy clips). Set via /voicelang.
@@ -66,7 +66,7 @@ module H2code
       property max_duration_sec : Int32 = 120
 
       def initialize(@enabled : Bool = false,
-                     @socket : String = "~/.h2code/voice.sock",
+                     @socket : String = "~/.h2voice/voice.sock",
                      @engine : String = "auto",
                      @language : String = "auto",
                      @max_duration_sec : Int32 = 120)
