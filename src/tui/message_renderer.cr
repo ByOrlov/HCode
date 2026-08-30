@@ -739,6 +739,8 @@ module H2code
         name = msg.tool_name
         return lines unless name
 
+        return render_recording_tool(msg, cols) if name == VoiceController::RECORDING_TOOL
+
         # Pulsing circle animation ● → • → ⋅ → •, advancing every 3 ticks
         # (~250ms). Matches the settled `●` bullet the log entry will show
         # once the result arrives.
@@ -777,6 +779,67 @@ module H2code
         lines
       end
 
+      LEVEL_BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+
+      # Live view of a voice recording (Ctrl+R): "● REC 00:12 ▄▆▅" with a VU
+      # meter while capturing, then a spinner while the server transcribes.
+      # Rendered in the active zone like any pending tool call.
+      private def render_recording_tool(msg : Message, cols : Int32) : Array(String)
+        lines = [] of String
+        ec = ANSI.color(@theme.colors.error, nil)
+        pc = ANSI.color(@theme.colors.primary, nil)
+        dc = ANSI.color(@theme.colors.dim, nil)
+        tc = ANSI.color(@theme.colors.text, nil)
+        r = ANSI.reset
+
+        kc = ANSI.color(@theme.colors.logo, nil)
+        lead = "#{kc}#{STREAMING_BAR}#{r} "
+
+        if voice_recording?
+          # Pulsing red bullet — same cadence as the running-tool bullet.
+          bullet_frame = Spinner::BASH_BULLET_FRAMES[(@spin_phase // 3) % Spinner::BASH_BULLET_FRAMES.size]
+          meter_idx = (Math.sqrt(@voice_level) * LEVEL_BLOCKS.size).clamp(0..(LEVEL_BLOCKS.size - 1)).to_i
+          meter = LEVEL_BLOCKS[meter_idx]
+          lines << "#{lead}#{ec}#{bullet_frame}#{r} #{ec}#{ANSI.bold}REC#{r} #{tc}#{format_voice_time(voice_elapsed_ms)}#{r} #{pc}#{meter}#{r}"
+          lines << "#{lead}  #{dc}Ctrl+R / Esc / Space — stop and transcribe#{r}"
+        else
+          sp = Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
+          engine = @voice_engine.empty? ? "" : " · #{@voice_engine}"
+          lines << "#{lead}#{tc}#{STATUS_BULLET}#{r} #{pc}#{sp}#{r} #{tc}#{ANSI.bold}Transcribing#{r}#{dc}#{engine}#{r}"
+        end
+        lines
+      end
+
+      # mm:ss from milliseconds.
+      private def format_voice_time(ms : Int64) : String
+        total = ms // 1000
+        "%02d:%02d" % {total // 60, total % 60}
+      end
+
+      # Header for a finished voice recording: "● Voice message · 00:07 ·
+      # gigaam" (duration/engine/language from the meta JSON stored in
+      # tool_args) or "✗ Recording failed" when the session errored.
+      private def voice_tool_header(args : String?, has_result : Bool, is_error : Bool) : String
+        return "#{ANSI.color(@theme.colors.error, nil)}✗ #{ANSI.reset}#{ANSI.color(@theme.colors.error, nil)}#{ANSI.bold}Recording failed#{ANSI.reset}" if is_error
+
+        duration = ""
+        engine = ""
+        if args
+          begin
+            parsed = JSON.parse(args)
+            if (ms = parsed["duration_ms"]?.try(&.as_i64?)) && ms > 0
+              duration = format_voice_time(ms)
+            end
+            engine = parsed["engine"]?.try(&.to_s) || ""
+          rescue JSON::ParseException
+          end
+        end
+        bullet = "#{ANSI.color(@theme.colors.success, nil)}● #{ANSI.reset}"
+        label = "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}Voice message#{ANSI.reset}"
+        detail = "#{ANSI.color(@theme.colors.dim, nil)} · #{[duration, engine].reject(&.empty?).join(" · ")}#{ANSI.reset}"
+        "#{bullet}#{label}#{detail}"
+      end
+
       private def tool_header(name : String, args : String?, tool_result : String?,
                               has_result : Bool, is_error : Bool) : String
         bullet =
@@ -787,6 +850,10 @@ module H2code
           else
             "#{ANSI.color(@theme.colors.text, nil)}● #{ANSI.reset}"
           end
+
+        if name == VoiceController::RECORDING_TOOL
+          return voice_tool_header(args, has_result, is_error)
+        end
 
         if name == Tools::Names::BASH
           label = has_result ? H2code.t("tools.ran_command") : H2code.t("tools.running_command")

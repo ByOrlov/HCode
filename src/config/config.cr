@@ -50,10 +50,11 @@ module H2code
     end
 
     # Voice transcription settings (`transcription` section of config.json)
-    # — h2code-remote stores inbound APK voice clips and sends the file
-    # paths to the local soroka-server over a Unix socket. The socket path
-    # keeps its literal `~` here; callers expand it at the use site.
-    # H2CODE_VOICE_SOCKET overrides it (the same env soroka-server reads).
+    # — the TUI's Ctrl+R voice messages (and h2code-remote's inbound APK
+    # voice clips) are recorded/transcribed by the local h2voice server over
+    # a Unix socket. The socket path keeps its literal `~` here; callers
+    # expand it at the use site. H2CODE_VOICE_SOCKET (and the server's own
+    # H2VOICE_VOICE_SOCKET) override it.
     struct TranscriptionConfig
       include JSON::Serializable
 

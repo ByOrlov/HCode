@@ -4,6 +4,15 @@ require "../../src/tui/input"
 describe H2code::TUI::Input do
   input = H2code::TUI::Input.new
 
+  it "parses Ctrl+R (byte 18)" do
+    key, consumed = input.parse_one([18_u8])
+    consumed.should eq(1)
+    key.should_not be_nil
+    key = key || raise "key should not be nil"
+    key.key.should eq(H2code::TUI::Key::CtrlR)
+    key.to_s.should eq("Ctrl+R")
+  end
+
   it "parses a standalone ESC followed by DEL as Alt+Backspace" do
     key, consumed = input.parse_one([27_u8, 127_u8])
     consumed.should eq(2)

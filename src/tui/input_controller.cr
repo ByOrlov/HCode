@@ -153,6 +153,14 @@ module H2code
           return
         end
 
+        # While a voice recording is in flight, Escape and Space stop it
+        # (same as Ctrl+R) instead of their normal editing behavior.
+        if voice_recording? && (key.key.escape? || (key.key.char? && key.char == ' '))
+          toggle_voice_recording
+          @dirty = true
+          return
+        end
+
         case key.key
         when .ctrl_c?
           if @agent_busy
@@ -185,6 +193,8 @@ module H2code
           elsif !@queue.empty?
             steer_queued
           end
+        when .ctrl_r?
+          toggle_voice_recording
         when .ctrl_g?
           handle_external_editor
         when .up?

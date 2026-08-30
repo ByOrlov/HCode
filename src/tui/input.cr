@@ -16,6 +16,7 @@ module H2code
       CtrlG
       CtrlB
       CtrlE
+      CtrlR
       Up
       Down
       Left
@@ -71,6 +72,7 @@ module H2code
         in .left?        then io << "Left"
         in .right?       then io << "Right"
         in .ctrl_e?      then io << "Ctrl+E"
+        in .ctrl_r?      then io << "Ctrl+R"
         in .shift_enter? then io << "Shift+Enter"
         in .paste?       then io << "Paste"
         in .unknown?     then io << "Unknown"
@@ -167,6 +169,8 @@ module H2code
           {KeyEvent.new(Key::CtrlB), 1}
         when 5
           {KeyEvent.new(Key::CtrlE), 1}
+        when 18
+          {KeyEvent.new(Key::CtrlR), 1}
         when 27
           parse_escape(bytes)
         else

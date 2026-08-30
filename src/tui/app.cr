@@ -10,6 +10,7 @@ module H2code
       include RenderController
       include MessageRenderer
       include UIPanels
+      include VoiceController
 
       @terminal : Terminal
       getter terminal
@@ -113,6 +114,14 @@ module H2code
       @current_step : Int32 = 0
       @step_tool_count : Int32 = 0
       @pending_read_group : Message? = nil
+      # Voice recording (Ctrl+R): index of the in-flight RECORDING tool
+      # message in @messages, plus live session state for the active-zone
+      # renderer (timer, level meter, engine). See VoiceController.
+      @voice_msg_idx : Int32? = nil
+      @voice_recording : Bool = false
+      @voice_level : Float64 = 0.0
+      @voice_started_at : Time::Span? = nil
+      @voice_engine : String = ""
 
       # Command state
       @show_command_hints : Bool = false
@@ -416,7 +425,7 @@ module H2code
           now = Time.monotonic
           elapsed = (now - @last_render).total_milliseconds
 
-          if (@agent_busy || @swarm_active) && elapsed >= 80
+          if (@agent_busy || @swarm_active || voice_active?) && elapsed >= 80
             @spin_phase += 1
             @dirty = true
           end
