@@ -46,6 +46,37 @@ module Hcode
         File.join(state_dir, "code")
       end
 
+      # External, dialable-from-the-LAN form of a relay URL — what the QR
+      # banner must hand out. A wildcard/loopback host means "this machine,
+      # whichever interface": replace it with the LAN IP (keeping
+      # scheme/port/path). A real host (domain or foreign IP) passes
+      # through unchanged. nil for an empty URL.
+      def self.external_relay_url(cloud_url : String) : String?
+        return nil if cloud_url.empty?
+        uri = URI.parse(cloud_url)
+        host = uri.host.to_s.downcase
+        if host.empty? || {"0.0.0.0", "::", "127.0.0.1", "localhost"}.includes?(host)
+          uri.host = lan_ip
+        end
+        uri.to_s
+      rescue ex : ArgumentError | URI::Error
+        cloud_url
+      end
+
+      def self.relay_url_path : String
+        File.join(state_dir, "relay.url")
+      end
+
+      # The external relay URL the daemon last connected to (nil if it
+      # never ran in cloud mode). The hcode-remote daemon writes it on
+      # startup; `hcode sync resync` re-reads it so `sync.relay_url` tracks
+      # the daemon's actual uplink instead of a stale address.
+      def self.stored_relay_url : String?
+        return nil unless File.exists?(relay_url_path)
+        url = File.read(relay_url_path).strip
+        url.empty? ? nil : url
+      end
+
       def self.pid_path : String
         File.join(state_dir, "daemon.pid")
       end
