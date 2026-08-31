@@ -152,6 +152,11 @@ module H2code
           return
         end
 
+        if @cleanup_list.visible?
+          handle_cleanup_list_key(key)
+          return
+        end
+
         if @sudo_approval_list.visible?
           handle_sudo_approval_key(key)
           return
@@ -603,6 +608,8 @@ module H2code
           handle_goal_command(args)
         when "/language"
           handle_language_command(args)
+        when "/cleanup"
+          cmd_cleanup(args)
         else
           emit_to_log(Message.new("error", H2code.t("ui.unknown_command", cmd: cmd)))
         end
@@ -946,6 +953,8 @@ module H2code
       EFFORT_LEVELS    = ["off", "low", "medium", "high"]
       THEMES           = ["dark", "light"]
       SUDO_MODES       = ["request", "always", "off"]
+      # Minimum-age options for /cleanup, aligned with Session::Cleanup::PERIODS.
+      CLEANUP_PERIODS = ["week", "month", "6months", "year"]
 
       private def open_permission_selector : Nil
         @permission_list.show(H2code.t("ui.select_permission"), PERMISSION_MODES)
@@ -1026,6 +1035,36 @@ module H2code
           invalidate_log_cache!
         when .escape?
           @theme_list.hide
+          @dirty = true
+        end
+      end
+
+      private def open_cleanup_selector : Nil
+        # Show what each option would delete so the choice is informed.
+        counts = H2code::Session::Cleanup.new(@home).counts([@session_id])
+        labels = CLEANUP_PERIODS.map do |p|
+          pc = counts[p]? || H2code::Session::Cleanup::PeriodCounts.new
+          "#{H2code.t("ui.cleanup_period_#{p}")} — #{pc.sessions} #{H2code.t("ui.cleanup_word_sessions")}, #{pc.voice_files} #{H2code.t("ui.cleanup_word_voice")}"
+        end
+        @cleanup_list.show(H2code.t("ui.select_cleanup"), labels)
+        @cleanup_list.selected = 0
+        @input.drain_pending_enters
+        @dirty = true
+      end
+
+      private def handle_cleanup_list_key(key : KeyEvent) : Nil
+        case key.key
+        when .up?, .down?
+          @cleanup_list.handle_input(key)
+          @dirty = true
+        when .enter?
+          idx = @cleanup_list.selected
+          period = CLEANUP_PERIODS[idx]? || CLEANUP_PERIODS[0]
+          @cleanup_list.hide
+          @dirty = true
+          run_cleanup(period)
+        when .escape?
+          @cleanup_list.hide
           @dirty = true
         end
       end

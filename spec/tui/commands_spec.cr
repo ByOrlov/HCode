@@ -82,5 +82,15 @@ describe H2code::TUI::CommandRegistry do
       names.should contain("/rename")
       names.should contain("/title")
     end
+
+    it "includes the cleanup command" do
+      names = H2code::TUI::CommandRegistry.names
+      names.should contain("/cleanup")
+      cmd = H2code::TUI::CommandRegistry.find("/cleanup")
+      cmd.should_not be_nil
+      if c = cmd
+        c.usage.should eq("[week|month|6months|year]")
+      end
+    end
   end
 end

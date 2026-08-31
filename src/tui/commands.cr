@@ -79,6 +79,7 @@ module H2code
         CommandInfo.new("/volume", "Set sound volume", "0-100", "volume"),
         CommandInfo.new("/voicelang", "Default voice message language", "ru|en|…|auto", "voicelang"),
         CommandInfo.new("/upgrade", "Update h2code to the latest release", description_key: "upgrade"),
+        CommandInfo.new("/cleanup", "Delete old sessions and voice messages", "[week|month|6months|year]", "cleanup"),
       ]
 
       def self.names : Array(String)

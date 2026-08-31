@@ -241,6 +241,10 @@ module H2code
           active_lines.concat(render_select_panel(@sudo_list, cols))
         end
 
+        if @cleanup_list.visible?
+          active_lines.concat(render_select_panel(@cleanup_list, cols))
+        end
+
         if @sudo_approval_list.visible?
           active_lines.concat(render_sudo_approval_panel(cols))
         end

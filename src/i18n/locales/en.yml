@@ -115,6 +115,7 @@ en:
     upgrade: "Update h2code to the latest release"
     sounds: "Toggle sound notifications"
     volume: "Set sound volume"
+    cleanup: "Delete old sessions and voice messages"
   help:
     title: "help"
     subtitle: "· Esc / Enter / q to cancel · ↑↓ scroll"
@@ -229,6 +230,19 @@ en:
     upgrade_install_failed: "Installation failed: %{error}"
     upgrade_done: "Updated to %{version}. Restart h2code to use the new version."
     upgrade_available: "Update available: %{current} → %{latest}. Run /upgrade to update."
+    # /cleanup — aged-out data removal (period picker + result report)
+    select_cleanup: "Delete sessions and voice messages older than:"
+    cleanup_period_week: "Older than a week"
+    cleanup_period_month: "Older than a month"
+    cleanup_period_6months: "Older than 6 months"
+    cleanup_period_year: "Older than a year"
+    cleanup_usage: "Usage: /cleanup [week|month|6months|year]"
+    cleanup_unknown_period: "Unknown period: %{period}. Available: week|month|6months|year"
+    cleanup_running: "Cleaning up data older than %{period}…"
+    cleanup_done: "Cleanup complete: deleted %{sessions} session(s) and %{voice} voice message(s) older than %{period}."
+    cleanup_skipped: "%{count} session(s) skipped (in use by another h2code process)."
+    cleanup_word_sessions: "session(s)"
+    cleanup_word_voice: "voice message(s)"
   language:
     changed: "Language changed to %{name}"
     unknown: "Unknown language: %{name}"

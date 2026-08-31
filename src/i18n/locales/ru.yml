@@ -115,6 +115,7 @@ ru:
     upgrade: "Обновить h2code до последнего релиза"
     sounds: "Включить/выключить звуковые уведомления"
     volume: "Установить громкость звука"
+    cleanup: "Удалить старые сессии и голосовые сообщения"
   help:
     title: "справка"
     subtitle: "· Esc / Enter / q — закрыть · ↑↓ — прокрутка"
@@ -229,6 +230,19 @@ ru:
     upgrade_install_failed: "Ошибка установки: %{error}"
     upgrade_done: "Обновлено до %{version}. Перезапустите h2code, чтобы использовать новую версию."
     upgrade_available: "Доступно обновление: %{current} → %{latest}. Введите /upgrade для обновления."
+    # /cleanup — aged-out data removal (period picker + result report)
+    select_cleanup: "Удалить сессии и голосовые сообщения старше:"
+    cleanup_period_week: "Старше недели"
+    cleanup_period_month: "Старше месяца"
+    cleanup_period_6months: "Старше полугода"
+    cleanup_period_year: "Старше года"
+    cleanup_usage: "Использование: /cleanup [week|month|6months|year]"
+    cleanup_unknown_period: "Неизвестный период: %{period}. Доступно: week|month|6months|year"
+    cleanup_running: "Очистка данных старше %{period}…"
+    cleanup_done: "Очистка завершена: удалено %{sessions} сессий и %{voice} голосовых сообщений старше %{period}."
+    cleanup_skipped: "Пропущено сессий: %{count} (используются другим процессом h2code)."
+    cleanup_word_sessions: "сессий"
+    cleanup_word_voice: "голосовых"
   language:
     changed: "Язык изменён на %{name}"
     unknown: "Неизвестный язык: %{name}"

@@ -36,6 +36,25 @@ describe H2code::I18n do
       missing_in_ru.should be_empty, "Keys missing in ru.yml: #{missing_in_ru.inspect}"
       missing_in_en.should be_empty, "Keys missing in en.yml: #{missing_in_en.inspect}"
     end
+
+    it "places the /cleanup keys under ui: and commands: in every locale" do
+      ui_keys = {"select_cleanup", "cleanup_period_week", "cleanup_period_month",
+                 "cleanup_period_6months", "cleanup_period_year", "cleanup_usage",
+                 "cleanup_unknown_period", "cleanup_running", "cleanup_done",
+                 "cleanup_skipped", "cleanup_word_sessions", "cleanup_word_voice"}
+      Dir.glob(File.join(locale_dir, "*.yml")).each do |path|
+        locale = File.basename(path, ".yml")
+        data = YAML.parse(File.read(path)).as_h[locale].as_h
+        ui = data["ui"]?.try(&.as_h) || Hash(YAML::Any, YAML::Any).new
+        ui.should_not be_empty, "#{locale}: no ui section"
+        ui_keys.each do |k|
+          ui.has_key?(k).should be_true, "#{locale}: missing ui.#{k}"
+        end
+        commands = data["commands"]?.try(&.as_h) || Hash(YAML::Any, YAML::Any).new
+        commands.should_not be_empty, "#{locale}: no commands section"
+        commands.has_key?("cleanup").should be_true, "#{locale}: missing commands.cleanup"
+      end
+    end
   end
 
   describe ".resolve_locale" do
@@ -92,6 +111,14 @@ describe H2code::I18n do
     it "interpolates params" do
       H2code::I18n.init("en")
       H2code.t("errors.generic", message: "boom").should eq("Error: boom")
+    end
+
+    it "resolves the /cleanup picker keys instead of returning them raw" do
+      H2code::I18n.init("en")
+      H2code.t("ui.select_cleanup").should_not eq("ui.select_cleanup")
+      H2code.t("ui.cleanup_period_week").should_not eq("ui.cleanup_period_week")
+      H2code.t("ui.cleanup_period_6months").should_not eq("ui.cleanup_period_6months")
+      H2code.t("ui.cleanup_word_sessions").should_not eq("ui.cleanup_word_sessions")
     end
   end
 end

@@ -202,6 +202,7 @@ module H2code
       @effort_list : SelectList
       @theme_list : SelectList
       @sudo_list : SelectList
+      @cleanup_list : SelectList
       @question_dialog : QuestionDialog
       @plan_review_dialog : PlanReviewDialog
       @undo_dialog : UndoDialog
@@ -358,6 +359,7 @@ module H2code
         @effort_list = SelectList.new([] of String, @theme)
         @theme_list = SelectList.new([] of String, @theme)
         @sudo_list = SelectList.new([] of String, @theme)
+        @cleanup_list = SelectList.new([] of String, @theme)
         @sudo_approval_list = SelectList.new([] of String, @theme)
         @question_dialog = QuestionDialog.new(@theme)
         @plan_review_dialog = PlanReviewDialog.new(@theme)

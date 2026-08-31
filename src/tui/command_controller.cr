@@ -204,6 +204,37 @@ module H2code
         emit_to_log(Message.new(ok ? "system" : "error", msg))
       end
 
+      # /cleanup — delete sessions and voice messages older than a picked
+      # period. No args opens the period selector; a valid period runs
+      # directly (e.g. `/cleanup month`).
+      private def cmd_cleanup(args : String) : Nil
+        period = args.strip.downcase
+        if period.empty?
+          open_cleanup_selector
+        elsif H2code::Session::Cleanup.period_days(period)
+          run_cleanup(period)
+        else
+          emit_to_log(Message.new("error", H2code.t("ui.cleanup_unknown_period", period: period)))
+        end
+      end
+
+      private def run_cleanup(period : String) : Nil
+        label = H2code.t("ui.cleanup_period_#{period}")
+        emit_to_log(Message.new("system", H2code.t("ui.cleanup_running", period: label)))
+        @dirty = true
+        render
+        cleanup = H2code::Session::Cleanup.new(@home)
+        result = cleanup.run(period, skip_session_ids: [@session_id])
+        msg = H2code.t("ui.cleanup_done",
+          sessions: result.sessions_removed,
+          voice: result.voice_files_removed,
+          period: label)
+        if result.sessions_skipped > 0
+          msg += "\n#{H2code.t("ui.cleanup_skipped", count: result.sessions_skipped)}"
+        end
+        emit_to_log(Message.new("system", msg))
+      end
+
       private def cmd_usage : Nil
         @usage_panel.show
         @input.drain_pending_enters
