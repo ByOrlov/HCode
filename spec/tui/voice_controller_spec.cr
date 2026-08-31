@@ -82,6 +82,17 @@ def voice_wait_until(timeout_ms = 5000, & : -> Bool) : Bool
   true
 end
 
+# Scriptable stand-in for the presence port so specs never probe the real
+# filesystem (the OS adapters scan $PATH and ~/.h2voice).
+class FakeVoicePresence < H2code::Transcription::VoicePresencePort
+  def initialize(@installed : Bool)
+  end
+
+  def installed? : Bool
+    @installed
+  end
+end
+
 describe H2code::TUI::App do
   it "runs a full voice recording session via the h2voice server" do
     mock = VoiceSessionMock.new
@@ -169,9 +180,40 @@ describe H2code::TUI::App do
   it "does not start a session when transcription is disabled" do
     app = H2code::TUI::App.new
     app.app_config = H2code::Config::Config.new
+    app.voice_presence = FakeVoicePresence.new(true)
     app.toggle_voice_recording
     app.voice_active?.should be_false
     app.@messages.last.role.should eq("error")
+    app.@messages.last.content.should contain("[transcription]")
+  end
+
+  it "advises installing H2 Voice when unconfigured and absent from the system" do
+    app = H2code::TUI::App.new
+    app.app_config = H2code::Config::Config.new
+    app.voice_presence = FakeVoicePresence.new(false)
+    app.toggle_voice_recording
+    app.voice_active?.should be_false
+    app.@messages.last.role.should eq("error")
+    app.@messages.last.content.should contain("Install H2 Voice")
+    app.@messages.last.content.should contain(H2code::Transcription::VoicePresencePort::INSTALL_URL)
+  end
+
+  it "advises installing H2 Voice when the socket is dead and H2 Voice is absent" do
+    app = H2code::TUI::App.new
+    config = H2code::Config::Config.new
+    config.transcription = H2code::Config::TranscriptionConfig.new(
+      enabled: true, socket: "/nonexistent/h2voice.sock")
+    app.app_config = config
+    app.voice_presence = FakeVoicePresence.new(false)
+    app.toggle_voice_recording
+    voice_wait_until { !app.voice_active? }.should be_true
+    done = app.@messages.find { |t| t.role == "tool" && t.tool_name == "RECORDING" }
+    done.should_not be_nil
+    if m = done
+      m.is_error?.should be_true
+      (m.tool_result || "").should contain("Install H2 Voice")
+      (m.tool_result || "").should contain(H2code::Transcription::VoicePresencePort::INSTALL_URL)
+    end
   end
 
   it "starts a recording on a double-Space tap (alternative to Ctrl+R)" do

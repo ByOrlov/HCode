@@ -40,11 +40,32 @@ module H2code
         nil
       end
 
+      # Advice shown when a recording cannot even start: with H2 Voice
+      # absent from the system, point at the install page; when it is
+      # installed but the config is missing/disabled, at the config section.
+      private def voice_missing_hint : String
+        if @voice_presence.installed?
+          "Voice messages are disabled. Enable the [transcription] section in ~/.h2code/config.json"
+        else
+          "H2 Voice is not installed. Install H2 Voice to recognize voice: #{Transcription::VoicePresencePort::INSTALL_URL}"
+        end
+      end
+
+      # Socket-connect failure during record_start: distinguish "server not
+      # running" (installed but stopped) from "H2 Voice not installed at
+      # all" — the latter gets the install advice + link.
+      private def voice_socket_error(client : Transcription::Client, ex : IO::Error) : String
+        if @voice_presence.installed?
+          "Voice server unavailable at #{client.socket_path} — is h2voice running? (#{ex.message})"
+        else
+          "H2 Voice is not installed. Install H2 Voice to recognize voice: #{Transcription::VoicePresencePort::INSTALL_URL}"
+        end
+      end
+
       private def start_voice_recording : Nil
         cfg = voice_config
         unless cfg && cfg.enabled?
-          emit_to_log(Message.new("error",
-            "Voice messages are disabled. Enable the [transcription] section in ~/.h2code/config.json"))
+          emit_to_log(Message.new("error", voice_missing_hint))
           invalidate_log_cache!
           @dirty = true
           return
@@ -68,7 +89,7 @@ module H2code
           begin
             client.record_start(cfg.language, cfg.engine) { |evt| handle_voice_event(evt) }
           rescue ex : IO::Error
-            voice_finish(error: "Voice server unavailable at #{client.socket_path} — is h2voice running? (#{ex.message})")
+            voice_finish(error: voice_socket_error(client, ex))
           rescue ex : Exception
             ExceptionHandler.report(ex, "voice recording")
             voice_finish(error: "Voice recording failed: #{ex.message}")
