@@ -77,6 +77,18 @@ to the log:
 After each transition, the active zone is rewritten from scratch. No
 already-written log line is ever modified.
 
+The streaming assistant block carries a **high-water mark**: the block is
+re-rendered every frame over the full buffer, and markdown re-interpretation
+of already-received tokens is not monotonic in line count (an open `**`/`*`/
+`~~`/`` ` `` renders raw and wider, so the closing delimiter can re-wrap a
+paragraph onto fewer lines; a bare ordered-list digit renders as a paragraph
+for one frame). Since the active zone must never shrink, the block is padded
+with blank lines to the tallest height it has reached during the stream, and
+the residual deficit versus the finalized log rendering is compensated with
+blank `spacer` log lines when the stream migrates
+(`EventController#flush_streaming_text!`). See
+`spec/tui/streaming_markdown_spec.cr` for the char-by-char reproducers.
+
 The TodoList migration is special: the live todo panel is active-zone chrome
 polled every frame, not a transcript entry, so it has no natural migration
 path. When every item becomes `done`, the TUI freezes the rendered panel into a

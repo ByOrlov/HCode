@@ -260,6 +260,27 @@ module H2code
         release_active(:thinking)
       end
 
+      # Flush the in-flight streaming assistant text into a permanent assistant
+      # message so it migrates from the Active zone to the Log zone, and reset
+      # the streaming state.
+      #
+      # The active-zone block is padded to its high-water mark
+      # (@streaming_hwm — see MessageRenderer#render_streaming_text), which can
+      # be TALLER than the finalized message renders in the log (transient
+      # inflation from raw inline markup, plus the streaming block renders
+      # markdown 5 columns narrower and wraps earlier). The combined coverage
+      # (log + active) must never shrink, so the deficit is compensated with
+      # blank "spacer" log lines — the same mechanism release_active uses.
+      private def flush_streaming_text! : Nil
+        return if @streaming_text.empty?
+        msg = Message.new("assistant", @streaming_text)
+        emit_to_log(msg)
+        deficit = @streaming_hwm - render_message(msg, @terminal.cols).size
+        deficit.times { emit_to_log(Message.new("spacer", "")) } if deficit > 0
+        @streaming_text = ""
+        @streaming_hwm = 0
+      end
+
       # Start the spinner. The status line is a permanent active-zone element
       # (always one row), so it does NOT participate in the zone-balance
       # declare/release contract — it never appears or disappears.

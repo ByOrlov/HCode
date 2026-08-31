@@ -39,6 +39,15 @@ module H2code
       @streaming_text : String = ""
       @streaming_thinking : String = ""
       @streaming_tool : String?
+      # High-water mark of the streaming assistant block's rendered height
+      # (see MessageRenderer#render_streaming_text). The block is re-rendered
+      # every frame over the full buffer and markdown re-interpretation can
+      # transiently shrink it (an open inline delimiter renders raw/wider; a
+      # bare ordered-list digit renders as a paragraph for one frame). The
+      # active zone must never shrink, so the block is padded to the tallest
+      # height it has reached during this stream. Reset when the stream
+      # finalizes and migrates to the log.
+      @streaming_hwm : Int32 = 0
       @status : String = ""
       @agent_status : AgentStatus = AgentStatus::Hello
       # Accumulated tool calls across all steps in the current turn, shown in
@@ -122,6 +131,10 @@ module H2code
       @voice_level : Float64 = 0.0
       @voice_started_at : Time::Span? = nil
       @voice_engine : String = ""
+      # Voice-server presence probe (port + OS adapter, see
+      # Transcription::Presence); a property so tests can inject a fake
+      # instead of probing the real filesystem.
+      property voice_presence : Transcription::VoicePresencePort = Transcription::VoicePresencePort.default
       # Monotonic timestamp of the last plain Space press, used by the
       # double-Space voice trigger (see InputController#handle_key).
       @last_space_at : Time::Span? = nil

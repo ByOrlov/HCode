@@ -10,6 +10,7 @@ module H2code
         @streaming_text = ""
         @streaming_thinking = ""
         @streaming_tool = nil
+        @streaming_hwm = 0
         @current_step = 0
         # History was rebuilt from scratch — reset the log emission cursor
         # and force a full repaint.
@@ -72,10 +73,7 @@ module H2code
         finalize_streaming_thinking
         # Flush any in-flight streaming text into a permanent assistant message
         # so it doesn't disappear when we reset the streaming buffer.
-        unless @streaming_text.empty?
-          emit_to_log(Message.new("assistant", @streaming_text))
-          @streaming_text = ""
-        end
+        flush_streaming_text!
         stop_spinner
         # The log zone already shows this message (emit_to_log below); setting
         # Error here would duplicate it in the status bar (┃ ✗ <message>).
@@ -115,19 +113,14 @@ module H2code
               invalidate_log_cache!
             end
           else
-            emit_to_log(Message.new("assistant", @streaming_text))
-            @streaming_text = ""
+            flush_streaming_text!
             invalidate_log_cache!
           end
           stop_spinner
           @status = ""
         when .tool_call_start?
           finalize_streaming_thinking
-          unless @streaming_text.empty?
-            emit_to_log(Message.new("assistant", @streaming_text))
-            @streaming_text = ""
-            invalidate_log_cache!
-          end
+          flush_streaming_text!
           @step_tool_count += 1
           @turn_tool_count += 1
 

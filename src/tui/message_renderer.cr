@@ -190,7 +190,17 @@ module H2code
         # SyncBugsCount to fire. Strip such trailing fragments so they are only
         # rendered once complete.
         render_text = strip_streaming_incomplete(@streaming_text)
-        return lines if render_text.empty?
+
+        rows = @terminal.rows
+        budget = {rows - STREAMING_RESERVE, 3}.max
+
+        # The whole input is a trailing incomplete marker — render nothing, but
+        # keep the reserved height so the block does not shrink.
+        if render_text.empty?
+          target = {@streaming_hwm, budget + 2}.min
+          @streaming_hwm = target
+          return Array.new(target) { "" }
+        end
 
         # Render markdown narrower to make room for the lead + bullet/indent.
         md_lines = @markdown.render(render_text, {cols - 5, 10}.max)
@@ -198,8 +208,6 @@ module H2code
         # Windowing: cap the streaming block so the active zone stays within the
         # viewport. Streaming content is mutable — it must not scroll into
         # immutable scrollback. Keep the tail (most recent tokens).
-        rows = @terminal.rows
-        budget = {rows - STREAMING_RESERVE, 3}.max
         hidden = 0
         if md_lines.size > budget
           hidden = md_lines.size - budget
@@ -219,6 +227,20 @@ module H2code
           end
         end
         lines << ""
+
+        # High-water mark: the markdown re-interpretation of already-received
+        # tokens is not monotonic in line count (an open `**`/`*`/`~~`/`` ` ``
+        # renders raw and wider, so the closing delimiter can re-wrap the
+        # paragraph onto fewer lines). The active zone must never shrink, so
+        # pad the block to the tallest height it has reached this stream. The
+        # blank rows fill in as content grows and any residual deficit is
+        # compensated with log spacers when the stream finalizes
+        # (EventController#flush_streaming_text!). Clamped to the current
+        # window budget so a resize can still shrink the block (a resize
+        # triggers the full-repaint path, which makes shrinking safe).
+        target = {@streaming_hwm, budget + 2}.min
+        lines.concat(Array.new(target - lines.size) { "" }) if lines.size < target
+        @streaming_hwm = lines.size
 
         lines
       end
