@@ -1,5 +1,17 @@
 require "i18n"
 
+# Compile-time locale integrity guard: scripts/i18n_check.cr parses every
+# locale YAML, checks key/placeholder parity with en.yml and duplicate keys.
+# In "macro" mode the script always exits 0 (a non-zero exit would surface as
+# a generic "Error executing run" without the report), so it prints "FAIL ..."
+# instead and the raise below turns that into a compile error carrying the
+# full report. The script re-runs on every compile, so edited locale files
+# are always re-checked.
+{% begin %}
+  {% report = run(__DIR__ + "/../../scripts/i18n_check.cr", "macro") %}
+  {% if report.starts_with?("FAIL") %}{{ raise report }}{% end %}
+{% end %}
+
 # Embed each locale YAML as a compile-time string literal (via `read_file`).
 # These live in the binary's read-only data segment — zero heap cost. At
 # runtime only the active locale + "en" are parsed into the I18n catalog;

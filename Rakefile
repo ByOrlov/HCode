@@ -280,6 +280,24 @@ namespace :mock do
   end
 end
 
+# ---------------------------------------------------------------------------
+# i18n locale integrity check (delegates to scripts/i18n_check.cr — the same
+# check that runs at compile time via the macro guard in src/i18n/i18n.cr)
+# ---------------------------------------------------------------------------
+
+namespace :i18n do
+  desc "Check locale integrity: valid YAML, key parity with en.yml, duplicate keys, %{placeholder} parity"
+  task :check do
+    puts "▶ Checking i18n locale integrity".colorize(:blue)
+    sh "crystal run scripts/i18n_check.cr --warnings none --no-color" do |ok, _res|
+      abort "i18n check failed" unless ok
+    end
+  end
+end
+
+desc "Check locale integrity: valid YAML, key parity with en.yml, duplicate keys, %{placeholder} parity (alias of i18n:check)"
+task :i18n_check => "i18n:check"
+
 desc "Remove build artifacts"
 task :clean do
   rm_f "h2code"
