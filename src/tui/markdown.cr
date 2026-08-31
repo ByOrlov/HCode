@@ -224,6 +224,19 @@ module H2code
 
         num_cols = header.size
 
+        # GFM: rows may vary in cell count. Merge excess cells (e.g. from a
+        # stray unescaped pipe) back into the last column instead of rendering
+        # them in a width-1 column, which would wrap one char per line.
+        data_rows = data_rows.map do |row|
+          if row.size > num_cols
+            row[0...(num_cols - 1)] + [row[(num_cols - 1)..].join("|")]
+          elsif row.size < num_cols
+            row + Array.new(num_cols - row.size, "")
+          else
+            row
+          end
+        end
+
         header = header.map { |cell| render_inline(cell.strip) }
         data_rows = data_rows.map { |row| row.map { |cell| render_inline(cell.strip) } }
 
@@ -353,7 +366,12 @@ module H2code
         stripped = line.strip
         stripped = stripped.lchop('|') if stripped.starts_with?("|")
         stripped = stripped.rstrip.rstrip('|') if stripped.ends_with?("|")
-        stripped.split('|').map(&.strip)
+        # GFM: `\|` inside a table cell is a literal pipe, not a column
+        # separator. Shield it before splitting, then restore.
+        placeholder = "\u{0}"
+        stripped.gsub("\\|", placeholder)
+          .split('|')
+          .map(&.strip.gsub(placeholder, "|"))
       end
 
       private def wrap_cell_text(text : String, max_width : Int32) : Array(String)

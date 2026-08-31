@@ -298,6 +298,30 @@ describe H2code::TUI::Markdown do
       text.should contain("┌")
     end
 
+    it "treats an escaped pipe \\| as a literal, not a column separator" do
+      input = "| Каноническое | Примеры |\n|---|---|\n| webkit2gtk | debian ≤11 → \\|`libwebkit2gtk-4.0-37`; debian ≥13 → \\|`libwebkit2gtk-4.1-0` |"
+      text = md_render_text(md, input, 100)
+      # No third column: the header defines two columns and borders must match.
+      text.should contain("|libwebkit2gtk-4.0-37;")
+      lines = text.split('\n')
+      right_col = lines.compact_map do |l|
+        idx = l.rindex('│')
+        idx.nil? ? nil : H2code::TUI::CharWidth.visible_width(l[0...idx])
+      end
+      right_col.uniq.size.should eq(1)
+    end
+
+    it "merges excess cells into the last column instead of a width-1 column" do
+      # A raw unescaped pipe inside a cell adds a third cell to the row;
+      # it must not render vertically one char per line.
+      input = "| A | B |\n|---|---|\n| raw | a `x | y` z |"
+      text = md_render_text(md, input, 60)
+      text.should contain("a x|y z")
+      # The row must not balloon vertically: a width-1 column would produce
+      # one line per character of the extra cell.
+      text.split('\n').size.should be < 10
+    end
+
     it "keeps columns aligned when a cell contains a wide emoji" do
       text = md_render_text(md, "| Feature | Status |\n|---|---|\n| A | \u274C |\n| B | ok |", 40)
       lines = text.split('\n')
