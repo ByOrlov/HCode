@@ -131,6 +131,10 @@ module H2code
       @voice_level : Float64 = 0.0
       @voice_started_at : Time::Span? = nil
       @voice_engine : String = ""
+      # Duration frozen at stop: shown on the transcribing frame so the
+      # recording block keeps its two-line height (an active-zone shrink
+      # mid-flight repaints scrollback rows and duplicates content).
+      @voice_recorded_ms : Int64 = 0_i64
       # Voice-server presence probe (port + OS adapter, see
       # Transcription::Presence); a property so tests can inject a fake
       # instead of probing the real filesystem.

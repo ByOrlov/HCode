@@ -82,6 +82,7 @@ module H2code
         @voice_level = 0.0
         @voice_started_at = started_at
         @voice_engine = ""
+        @voice_recorded_ms = 0_i64
         invalidate_log_cache!
         @dirty = true
 
@@ -112,6 +113,9 @@ module H2code
         cfg = voice_config
         client = Transcription::Client.from_config(cfg) if cfg
         @voice_recording = false
+        # Freeze the recorded duration before the timer stops: the
+        # transcribing frame keeps showing it until the result arrives.
+        @voice_recorded_ms = voice_elapsed_ms
         @dirty = true
         spawn do
           begin

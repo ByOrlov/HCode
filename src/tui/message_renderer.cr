@@ -805,7 +805,10 @@ module H2code
 
       # Live view of a voice recording (Ctrl+R): "● REC 00:12 ▄▆▅" with a VU
       # meter while capturing, then a spinner while the server transcribes.
-      # Rendered in the active zone like any pending tool call.
+      # Rendered in the active zone like any pending tool call. Both frames
+      # draw exactly TWO lines: the block must never shrink mid-flight (a
+      # shrink fires SyncBugsCount and the viewport-shrink full repaint
+      # rewrites rows already sitting in the immutable scrollback).
       private def render_recording_tool(msg : Message, cols : Int32) : Array(String)
         lines = [] of String
         ec = ANSI.color(@theme.colors.error, nil)
@@ -828,6 +831,9 @@ module H2code
           sp = Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
           engine = @voice_engine.empty? ? "" : " · #{@voice_engine}"
           lines << "#{lead}#{tc}#{STATUS_BULLET}#{r} #{pc}#{sp}#{r} #{tc}#{ANSI.bold}Transcribing#{r}#{dc}#{engine}#{r}"
+          # Frozen recorded duration instead of the capture hint (meaningless
+          # mid-transcription) — keeps the block at two lines, no shrink.
+          lines << "#{lead}  #{dc}#{format_voice_time(@voice_recorded_ms)} recorded#{r}"
         end
         lines
       end
