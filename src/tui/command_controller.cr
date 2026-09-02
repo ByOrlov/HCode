@@ -38,6 +38,16 @@ module H2code
         end
       end
 
+      # Global session search: unlike /resume (current workspace only) this
+      # lists sessions from every workspace, archived included.
+      private def cmd_search : Nil
+        if @agent_busy
+          emit_to_log(Message.new("error", "Cannot search sessions while a turn is running."))
+        else
+          open_session_selector(:search)
+        end
+      end
+
       private def cmd_fork : Nil
         if @agent_busy
           emit_to_log(Message.new("error", "Cannot fork while a turn is running. Wait or interrupt first."))

@@ -31,6 +31,7 @@ module H2code
         CommandInfo.new("/fork", "Fork the current session", description_key: "fork"),
         CommandInfo.new("/archive", "Archive the current session", description_key: "archive"),
         CommandInfo.new("/restore", "Restore an archived session", description_key: "restore"),
+        CommandInfo.new("/search", "Search sessions across all workspaces", description_key: "search"),
         CommandInfo.new("/rename", "Rename the current session", "<title>", "rename"),
         CommandInfo.new("/title", "Set session title (alias for /rename)", "<title>", "title"),
         CommandInfo.new("/clear", "Clear conversation history", description_key: "clear"),

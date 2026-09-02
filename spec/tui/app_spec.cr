@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "file_utils"
 require "../../src/tui/component"
 require "../../src/tui/text"
 require "../../src/tui/spinner"
@@ -21,6 +22,14 @@ end
 
 def help_strip_ansi(str : String) : String
   str.gsub(/\e\[[0-9;]*m/, "")
+end
+
+# Private handlers are reachable from a subclass — this spec-only wrapper
+# drives /search the same way the slash dispatcher does.
+class SearchApp < H2code::TUI::App
+  def run_cmd_search
+    cmd_search
+  end
 end
 
 describe H2code::TUI::App do
@@ -803,6 +812,78 @@ describe H2code::TUI::App do
       # All rows below the new content must be blank.
       content_end = mock.visible_rows.size
       mock.screen[content_end..].each { |row| row.should eq("") }
+    end
+  end
+
+  describe "session picker async search" do
+    it "defers the content filter to the debounced worker fiber" do
+      home = File.join(Dir.tempdir, "h2code-test-#{Random::Secure.hex(8)}")
+      begin
+        dir_a = File.join(home, ".h2code", "sessions", "sessA")
+        dir_b = File.join(home, ".h2code", "sessions", "sessB")
+        Dir.mkdir_p(dir_a)
+        Dir.mkdir_p(dir_b)
+        File.write(File.join(dir_a, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"fix the login bug"}}))
+        File.write(File.join(dir_b, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"unrelated talk"}}))
+
+        app = H2code::TUI::App.new
+        app.home = home
+        entries = H2code::Session::Index.new(home).list(include_archived: true, include_empty: true)
+        app.session_entries = entries
+        app.@session_list.show("Resume session", entries.map(&.label))
+
+        # Typing updates the query immediately but does not filter inline —
+        # keystrokes never wait on wire-log scans.
+        app.@session_list.handle_input(H2code::TUI::KeyEvent.char('l'))
+        app.@session_list.handle_input(H2code::TUI::KeyEvent.char('o'))
+        app.@session_list.query.should eq("lo")
+        app.@session_list.filtered_size.should eq(2)
+
+        # After the 200ms debounce window the worker fiber applies the
+        # filter and only the matching session stays.
+        sleep 600.milliseconds
+        app.@session_list.filtered_size.should eq(1)
+        app.@session_list.current.should eq("fix the login bug")
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    # Private handlers are reachable from a subclass (SearchApp at the top
+    # of this file) — it drives /search the same way the dispatcher does.
+    it "/search lists sessions from every workspace, archived included, with cwd labels" do
+      home = File.join(Dir.tempdir, "h2code-test-#{Random::Secure.hex(8)}")
+      begin
+        ws_a = H2code::Session::Index.workspace_id("/repoA")
+        ws_b = H2code::Session::Index.workspace_id("/repoB")
+        dir_a = File.join(home, ".h2code", "sessions", ws_a, "sessA")
+        dir_b = File.join(home, ".h2code", "sessions", ws_b, "sessB")
+        dir_arch = File.join(home, ".h2code", "sessions", ws_b, "sessArch")
+        [dir_a, dir_b, dir_arch].each { |d| Dir.mkdir_p(d) }
+        File.write(File.join(dir_a, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"alpha bug"}}))
+        File.write(File.join(dir_b, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"beta bug"}}))
+        File.write(File.join(dir_arch, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"old arch"}}))
+        arch_meta = H2code::Session::StateMeta.new("sessArch")
+        arch_meta.cwd = "/repoB"
+        arch_meta.archived = true
+        File.write(File.join(dir_arch, "state.json"), arch_meta.to_json)
+
+        app = SearchApp.new
+        app.home = home
+        app.work_dir = "/repoA" # /resume would scope to ws_a only
+        app.run_cmd_search
+
+        app.@session_list.visible?.should be_true
+        ids = app.session_entries.map(&.id)
+        ids.sort!
+        ids.should eq(["sessA", "sessArch", "sessB"])
+        # Global list shows each session's directory so workspaces are
+        # distinguishable.
+        joined = app.@session_list.items.join('\n')
+        joined.should contain("/repoB")
+      ensure
+        FileUtils.rm_rf(home)
+      end
     end
   end
 end

@@ -49,7 +49,7 @@ module H2code
         end
         count.times do |rel|
           i = start + rel
-          item = CharWidth.truncate_to_width(@session_list.items[i], cols - 4)
+          item = CharWidth.truncate_to_width(@session_list.item_at(i).to_s, cols - 4)
           if i == @session_list.selected
             lines << "#{ANSI.color(@theme.colors.accent, nil)}#{ANSI.bold}  ▶ #{item}#{ANSI.reset}"
           else
@@ -57,11 +57,11 @@ module H2code
           end
         end
         if @session_list.scrolled_down?
-          remaining = @session_list.items.size - (start + count)
+          remaining = @session_list.filtered_size - (start + count)
           lines << "#{ANSI.color(@theme.colors.dim, nil)}  ↓ #{remaining} more#{ANSI.reset}"
         end
 
-        lines << "#{ANSI.color(@theme.colors.dim, nil)}  [↑↓] navigate  [Enter] select  [Esc] cancel#{ANSI.reset}"
+        lines << "#{ANSI.color(@theme.colors.dim, nil)}  [↑↓] navigate  [type] search  [Enter] select  [Esc] cancel#{ANSI.reset}"
         lines
       end
 
@@ -91,9 +91,9 @@ module H2code
         lines = [] of String
         lines << "#{bc}╭#{dash}╮#{r}"
 
-        # When a searchable list (model picker) is open, the input box renders
-        # the active fuzzy query with the cursor at its end, instead of the
-        # regular editor content / "send a message" placeholder.
+        # When a searchable list (model or session picker) is open, the input
+        # box renders the active search query with the cursor at its end,
+        # instead of the regular editor content / "send a message" placeholder.
         if search_picker_active?
           query = current_search_query
           prompt = "#{pc}#{ANSI.bold}>#{r} "
@@ -187,19 +187,22 @@ module H2code
         lines
       end
 
-      # True when the fuzzy-search model picker is open — the input box renders
-      # the live query instead of normal editor content.
+      # True when a searchable picker is open — the input box renders the
+      # live query instead of normal editor content.
       private def search_picker_active? : Bool
-        @model_list.visible? && @model_list.searchable?
+        (@model_list.visible? && @model_list.searchable?) ||
+          (@session_list.visible? && @session_list.searchable?)
       end
 
       # The query string driving the currently open searchable picker.
       private def current_search_query : String
+        return @session_list.query if @session_list.visible? && @session_list.searchable?
         @model_list.query
       end
 
       # Placeholder shown in the input box while the query is empty.
       private def search_placeholder : String
+        return H2code.t("ui.search_session") if @session_list.visible? && @session_list.searchable?
         H2code.t("ui.search_model")
       end
 

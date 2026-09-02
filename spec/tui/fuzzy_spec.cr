@@ -144,4 +144,89 @@ describe H2code::TUI::SelectList do
     list.current.should eq("gpt-4o")
     list.selected_original_index.should eq(2)
   end
+
+  it "filters via content_filter, keeping original order (session picker)" do
+    list = H2code::TUI::SelectList.new
+    list.searchable = true
+    # Item text is irrelevant here — the predicate decides, like the session
+    # picker filtering by wire-log content.
+    matching = Set{0, 2}
+    list.content_filter = ->(_query : String, idx : Int32) { matching.includes?(idx) }
+    list.show("Resume session", ["s1", "s2", "s3"])
+
+    list.handle_input(H2code::TUI::KeyEvent.char('x'))
+    list.filtered_size.should eq(2)
+    list.item_at(0).should eq("s1")
+    list.item_at(1).should eq("s3")
+    list.selected_original_index.should eq(0)
+
+    list.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Down))
+    list.current.should eq("s3")
+    list.selected_original_index.should eq(2)
+
+    # Backspace to an empty query restores the full list in order.
+    list.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Backspace))
+    list.query.should eq("")
+    list.filtered_size.should eq(3)
+    list.item_at(2).should eq("s3")
+  end
+
+  it "content_filter receiving no matches yields an empty filtered list" do
+    list = H2code::TUI::SelectList.new
+    list.searchable = true
+    list.content_filter = ->(_query : String, _idx : Int32) { false }
+    list.show("Resume session", ["s1", "s2"])
+    list.handle_input(H2code::TUI::KeyEvent.char('z'))
+    list.filtered_size.should eq(0)
+    list.current.should be_nil
+  end
+
+  it "builds the query from spaces too (substring search, not words)" do
+    list = H2code::TUI::SelectList.new
+    list.searchable = true
+    list.content_filter = ->(query : String, _idx : Int32) { query == "log in" }
+    list.show("Resume session", ["s1", "s2"])
+    "log in".each_char { |c| list.handle_input(H2code::TUI::KeyEvent.char(c)) }
+    list.query.should eq("log in")
+    list.filtered_size.should eq(2)
+    list.handle_input(H2code::TUI::KeyEvent.char('x'))
+    list.query.should eq("log inx")
+    list.filtered_size.should eq(0)
+  end
+
+  it "deferred_filter defers filtering to the owner via on_query_changed" do
+    list = H2code::TUI::SelectList.new
+    list.searchable = true
+    list.deferred_filter = true
+    queries = [] of String
+    list.on_query_changed = ->(q : String) { queries << q; nil }
+    list.content_filter = ->(query : String, _idx : Int32) { query == "ab" }
+    list.show("Resume session", ["s1", "s2", "s3"])
+
+    # Typing updates the query and notifies, but does NOT filter inline —
+    # the list stays unfiltered until the owner applies the filter.
+    list.handle_input(H2code::TUI::KeyEvent.char('a'))
+    list.query.should eq("a")
+    queries.should eq(["a"])
+    list.filtered_size.should eq(3)
+
+    # Backspace notifies too.
+    list.handle_input(H2code::TUI::KeyEvent.char('b'))
+    list.handle_input(H2code::TUI::KeyEvent.new(H2code::TUI::Key::Backspace))
+    queries.should eq(["a", "ab", "a"])
+
+    # The owner applies when its async search completes.
+    list.handle_input(H2code::TUI::KeyEvent.char('b'))
+    list.apply_filter
+    list.filtered_size.should eq(3) # "ab" matches every index here
+    list.query = "ab"
+    list.flush_filter!.should be_nil # current: no-op, no exception
+
+    # flush_filter! applies a stale query synchronously (Enter path).
+    list.handle_input(H2code::TUI::KeyEvent.char('c'))
+    list.query.should eq("abc")
+    list.filtered_size.should eq(3) # still stale
+    list.flush_filter!
+    list.filtered_size.should eq(0) # nothing matches "abc"
+  end
 end

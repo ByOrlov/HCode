@@ -12,10 +12,24 @@ module H2code
       # `Fuzzy`) and Backspace trims it. Off by default so short fixed lists
       # (effort levels, themes) keep their plain up/down behavior.
       property? searchable : Bool = false
+      # When set, filtering uses this predicate `(query, original index)`
+      # instead of fuzzy label matching — used by the session picker to
+      # filter by wire-log content. Matching items keep their original order.
+      property content_filter : (String, Int32 -> Bool)? = nil
+      # When true, query edits update `query` but skip immediate filtering;
+      # the owner schedules an async search via `on_query_changed` and calls
+      # `apply_filter` when it completes. Used by the session picker so
+      # wire-log scans never block typing.
+      property? deferred_filter : Bool = false
+      # Notified after every query edit while `deferred_filter` is on.
+      property on_query_changed : (String -> Nil)? = nil
       # The active search query (empty == no filtering).
       property query : String = ""
       @theme : Theme
       @scroll_offset : Int32 = 0
+      # The query the current filter state was computed from. With a
+      # deferred filter this tracks staleness for `flush_filter!`.
+      @applied_query : String = ""
       # Maps a filtered-list position back to its index in `items`. Identity
       # `[0,1,2,...]` when the query is empty; otherwise sorted by fuzzy score.
       @filtered_indices : Array(Int32) = [] of Int32
@@ -33,6 +47,7 @@ module H2code
         @selected = 0
         @scroll_offset = 0
         @query = ""
+        @applied_query = ""
         reset_filter
         @visible = true
       end
@@ -46,6 +61,7 @@ module H2code
       def clear_query : Bool
         return false if @query.empty?
         @query = ""
+        @applied_query = ""
         reset_filter
         @selected = 0
         @scroll_offset = 0
@@ -105,7 +121,7 @@ module H2code
             false
           else
             @query = @query.rchop
-            apply_filter
+            query_edited
             true
           end
         when .char?
@@ -113,7 +129,7 @@ module H2code
           c = key.char
           return false if c.nil? || c.control?
           @query += c.to_s
-          apply_filter
+          query_edited
           true
         else
           false
@@ -155,12 +171,42 @@ module H2code
         @match_positions = Array.new(@items.size, nil.as(Array(Int32)?))
       end
 
-      # Recompute `@filtered_indices` (sorted by fuzzy score) and the per-item
-      # match positions for the current `@query`. The cursor snaps to the top.
-      private def apply_filter : Nil
+      # Route a query edit: filter inline, or — when `deferred_filter` is
+      # on — just notify the owner so it can debounce an async search.
+      private def query_edited : Nil
+        if @deferred_filter
+          @on_query_changed.try(&.call(@query))
+        else
+          apply_filter
+        end
+      end
+
+      # Apply the filter for an edit that happened while `deferred_filter`
+      # is on (owner-driven async search); no-op when already current.
+      def flush_filter! : Nil
+        apply_filter unless @query == @applied_query
+      end
+
+      # Recompute `@filtered_indices` and the per-item match positions for the
+      # current `@query`. With a `content_filter` the predicate decides what
+      # stays (original order); otherwise items are sorted by fuzzy score.
+      # The cursor snaps to the top.
+      def apply_filter : Nil
         if @query.empty?
           reset_filter
           @selected = 0
+          @scroll_offset = 0
+          @applied_query = @query
+          return
+        end
+        if filter = @content_filter
+          @filtered_indices = (0...@items.size).select { |i| filter.call(@query, i) }
+          @match_positions = Array.new(@items.size, nil.as(Array(Int32)?))
+          @selected = 0
+          @scroll_offset = 0
+          # Only after a successful pass: an aborted (exception-raising)
+          # filter run leaves the query marked unapplied so it is retried.
+          @applied_query = @query
           return
         end
         ranked = Fuzzy.filter(@items, @query)
@@ -172,6 +218,7 @@ module H2code
         @match_positions = positions
         @selected = 0
         @scroll_offset = 0
+        @applied_query = @query
       end
     end
   end

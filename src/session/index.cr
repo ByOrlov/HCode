@@ -25,6 +25,12 @@ module H2code
       end
     end
 
+    # Raised by the searchable session picker's content scan when a newer
+    # keystroke arrived mid-scan (`substring_hits`/`contains_substring?`
+    # cancelled callback). Partial results are never cached.
+    class SearchCancelled < Exception
+    end
+
     # A session discovered by the Index — its on-disk location plus enough
     # metadata to render a picker / filter without opening the wire log.
     struct SessionEntry
@@ -241,6 +247,112 @@ module H2code
         false
       rescue File::Error
         false
+      end
+
+      # Cooperative-scan granularity: `contains_substring?` yields to the
+      # scheduler after processing this many bytes so the input fiber keeps
+      # reading keystrokes while a large wire log is being scanned.
+      SUBSTRING_SCAN_YIELD_BYTES = 256 * 1024
+
+      # Whether the wire log's conversation text contains *needle* as a
+      # substring (case-insensitive). Stops at the first hit, so a matching
+      # session is cheap to find even when its wire log is large. The scan
+      # cooperatively yields every SUBSTRING_SCAN_YIELD_BYTES bytes —
+      # Crystal fibers are cooperative, and without these yields a large
+      # scan would starve the input loop.
+      #
+      # *cancelled* (checked before every line) aborts a stale pass by
+      # raising SearchCancelled — e.g. when the user typed on and the query
+      # this scan was started for is already outdated.
+      #
+      # Cost model: JSON parsing a wire line is far more expensive than a
+      # raw substring search, so each line goes through a cheap prefilter
+      # first — one downcase + `includes?` on the raw line — and only
+      # candidate lines are parsed to confirm the hit is inside a
+      # text-bearing field (not a JSON key or metadata like tool_call_id).
+      def contains_substring?(wire_path : String, needle : String,
+                              cancelled : (-> Bool)? = nil) : Bool
+        needle = needle.downcase
+        return false if needle.empty?
+        processed = 0
+        File.each_line(wire_path) do |line|
+          raise SearchCancelled.new if cancelled.try(&.call)
+          processed += line.bytesize
+          if processed >= SUBSTRING_SCAN_YIELD_BYTES
+            processed = 0
+            Fiber.yield
+          end
+          next if line.strip.empty?
+          next unless line.downcase.includes?(needle)
+          begin
+            parsed = JSON.parse(line)
+          rescue JSON::ParseException
+            next
+          end
+          data = parsed["data"]?
+          next unless data
+          texts = case parsed["type"]?.try(&.to_s)
+                  when "turn.prompt", "turn.steer"
+                    [data["prompt"]?.try(&.to_s)]
+                  when "assistant.text"
+                    [data["content"]?.try(&.to_s), data["thinking"]?.try(&.to_s)]
+                  when "tool.call"
+                    [data["tool_name"]?.try(&.to_s), data["arguments"]?.try(&.to_s)]
+                  when "tool.result"
+                    [data["content"]?.try(&.to_s)]
+                  when "context.apply_compaction"
+                    [data["summary"]?.try(&.to_s)]
+                  else
+                    [] of String?
+                  end
+          texts.each do |text|
+            haystack = text.try(&.downcase)
+            next unless haystack
+            return true if haystack.includes?(needle)
+          end
+        end
+        false
+      rescue File::Error
+        false
+      end
+
+      # Set of indices into *entries* whose wire log contains *needle* (a
+      # downcased substring — the whole picker query, spaces included).
+      # *cache* memoizes results per needle for the lifetime of one open
+      # picker. A cached shorter prefix prunes the scan: a session whose wire
+      # lacks the prefix cannot contain any extension of it, so only
+      # prefix-matching sessions are re-scanned as the query grows. A prefix
+      # with zero hits makes every extension zero-hit without touching any
+      # file at all.
+      #
+      # *cancelled* aborts a stale pass with SearchCancelled; nothing is
+      # cached in that case, so a retry re-scans from a clean state.
+      def substring_hits(entries : Array(SessionEntry), needle : String,
+                         cache : Hash(String, Set(Int32)),
+                         cancelled : (-> Bool)? = nil) : Set(Int32)
+        needle = needle.downcase
+        return Set(Int32).new if needle.empty?
+        cached = cache[needle]?
+        return cached if cached
+
+        base : Set(Int32)? = nil
+        (needle.size - 1).downto(1) do |len|
+          if prefix_hits = cache[needle[0, len]]?
+            base = prefix_hits
+            break
+          end
+        end
+        scan = base || Set(Int32).new(0...entries.size)
+
+        hits = Set(Int32).new
+        scan.each do |i|
+          raise SearchCancelled.new if cancelled.try(&.call)
+          entry = entries[i]?
+          next unless entry
+          hits << i if contains_substring?(entry.wire_path, needle, cancelled)
+        end
+        cache[needle] = hits
+        hits
       end
 
       private def first_prompt(wire : String) : String

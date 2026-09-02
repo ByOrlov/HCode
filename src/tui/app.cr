@@ -213,7 +213,24 @@ module H2code
       @tasks_browser : TasksBrowser
       @help_panel : HelpPanel
       @usage_panel : UsagePanel
-      @session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
+      property session_entries : Array(Session::SessionEntry) = [] of Session::SessionEntry
+      # Search query (downcased substring) → set of original `@session_entries`
+      # indices whose wire log contains it. Cached for the lifetime of one
+      # open session picker; `Session::Index#substring_hits` also uses cached
+      # shorter prefixes to prune scans as the query grows.
+      @session_search_hits : Hash(String, Set(Int32)) = Hash(String, Set(Int32)).new
+      # Producer/consumer state for the async session search. Keystrokes
+      # (producers) only bump the generation, record the latest query in
+      # `@session_search_pending`, and nudge the channel — a lossy
+      # latest-value mailbox. The worker fiber (consumer) applies the filter
+      # for the newest query and cancels its own stale passes by comparing
+      # the generation it started with against the current one.
+      @session_search_pending : String? = nil
+      @session_search_wakeup : Channel(Nil)? = nil
+      @session_search_generation : Int32 = 0
+      # Cancellation check shared with the scan (`Session::SearchCancelled`
+      # when true). nil while no cancellable scan should run.
+      @session_search_cancel_check : (-> Bool)? = nil
       @session_picker_mode : Symbol = :resume
       @show_welcome : Bool = true
       property? debug_zones : Bool = false
@@ -359,6 +376,14 @@ module H2code
         @model_list.searchable = true
         @model_list.max_visible = 50
         @session_list = SelectList.new([] of String, @theme)
+        @session_list.searchable = true
+        @session_list.content_filter = ->(query : String, idx : Int32) { session_content_matches?(query, idx) }
+        # Content scans stream wire logs — defer them off the typing path:
+        # edits only schedule the debounced search worker (see
+        # `start_session_search_worker`), which re-applies the filter later.
+        @session_list.deferred_filter = true
+        @session_list.on_query_changed = ->(query : String) { schedule_session_search(query) }
+        start_session_search_worker
         @permission_list = SelectList.new([] of String, @theme)
         @effort_list = SelectList.new([] of String, @theme)
         @theme_list = SelectList.new([] of String, @theme)

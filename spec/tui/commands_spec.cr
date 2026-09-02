@@ -79,6 +79,7 @@ describe H2code::TUI::CommandRegistry do
       names.should contain("/fork")
       names.should contain("/archive")
       names.should contain("/restore")
+      names.should contain("/search")
       names.should contain("/rename")
       names.should contain("/title")
     end

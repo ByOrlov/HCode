@@ -9,6 +9,12 @@ module H2code
       # trigger (mirrors common double-tap cutoffs).
       DOUBLE_SPACE_MS = 500
 
+      # Debounce window for the session picker's async content search. This
+      # only coalesces keystroke bursts — stale scans are cancelled at their
+      # next line checkpoint (see `start_session_search_worker`), so the
+      # window can stay small and results still land near-instantly.
+      SESSION_SEARCH_DEBOUNCE_MS = 30
+
       private def handle_key(key : KeyEvent) : Nil
         if @exit_confirm
           case key.key
@@ -510,6 +516,8 @@ module H2code
           cmd_sessions
         when "/restore"
           cmd_restore
+        when "/search"
+          cmd_search
         when "/fork"
           cmd_fork
         when "/archive"
@@ -1119,35 +1127,47 @@ module H2code
 
       private def open_session_selector(mode : Symbol) : Nil
         @session_picker_mode = mode
-        include_archived = mode == :restore
-        title = include_archived ? H2code.t("ui.restore_session") : H2code.t("ui.resume_session")
+        # :restore shows archived sessions too; :search goes further — it
+        # drops the workspace scoping entirely so every session on the
+        # machine is findable, archived included.
+        include_archived = mode != :resume
+        global = mode == :search
+        title = case mode
+                when :restore then H2code.t("ui.restore_session")
+                when :search  then H2code.t("ui.search_sessions_all")
+                else               H2code.t("ui.resume_session")
+                end
 
         # Scope to the current workspace so sessions from other folders don't
-        # mix in. Falls back to all sessions when @work_dir is unset (e.g. in
-        # tests or non-standard entry points).
+        # mix in (:search ignores the scope). Falls back to all sessions when
+        # @work_dir is unset (e.g. in tests or non-standard entry points).
         index = Session::Index.new(@home)
-        ws_id = @work_dir.empty? ? nil : Session::Index.workspace_id(@work_dir)
+        ws_id = (!global && !@work_dir.empty?) ? Session::Index.workspace_id(@work_dir) : nil
         entries = index.list(ws_id, include_archived: include_archived)
         if entries.empty?
-          msg = include_archived ? "No archived sessions to restore." : "No sessions found."
-          emit_to_log(Message.new("system", msg))
+          emit_to_log(Message.new("system", "No sessions found."))
           return
         end
 
         @session_entries = entries
-        items = entries.map { |e| session_picker_label(e) }
+        @session_search_hits.clear
+        @session_search_pending = nil
+        items = entries.map { |e| session_picker_label(e, show_cwd: global) }
         @session_list.show(title, items)
         @session_list.selected = 0
         @input.drain_pending_enters
         @dirty = true
       end
 
-      private def session_picker_label(entry : Session::SessionEntry) : String
+      private def session_picker_label(entry : Session::SessionEntry, show_cwd : Bool = false) : String
         label = sanitize_picker_text(entry.label)
         preview_raw = entry.preview
         preview = preview_raw.empty? ? "" : " — #{sanitize_picker_text(preview_raw)}"
         time = entry.updated_at.to_s("%Y-%m-%d %H:%M")
-        "#{label}#{preview}  (#{time})"
+        # In global search sessions from other workspaces mix together, so
+        # surface each one's directory.
+        cwd = (show_cwd && !entry.cwd.empty?) ? "  #{sanitize_picker_text(entry.cwd)}" : ""
+        "#{label}#{preview}  (#{time})#{cwd}"
       end
 
       # Strip ANSI escapes, literal caret-escaped sequences (^[[A etc.), and
@@ -1163,13 +1183,89 @@ module H2code
         cleaned
       end
 
+      # True when the session-picker search query occurs as a substring
+      # (spaces included) in a session's wire log. Results are cached per
+      # picker open with prefix pruning — see `Session::Index#substring_hits`.
+      # A stale pass may raise SearchCancelled (see the worker).
+      private def session_content_matches?(query : String, idx : Int32) : Bool
+        needle = query.downcase
+        return false if needle.empty?
+        Session::Index.new(@home)
+          .substring_hits(@session_entries, needle, @session_search_hits, @session_search_cancel_check)
+          .includes?(idx)
+      end
+
+      # Record the latest picker query and nudge the search worker fiber.
+      # This is the producer side of a latest-value mailbox: every keystroke
+      # bumps the generation (invalidating in-flight scans for older
+      # queries) and overwrites the pending query; the channel send never
+      # blocks — a queued wakeup means the worker will run and read
+      # `@session_search_pending` directly.
+      private def schedule_session_search(query : String) : Nil
+        @session_search_generation += 1
+        @session_search_pending = query
+        if ch = @session_search_wakeup
+          select
+          when ch.send(nil)
+          else
+          end
+        end
+      end
+
+      # Long-lived consumer fiber applying the session picker's content
+      # filter. Typing never blocks: keystrokes only publish to the mailbox,
+      # and the scan itself yields cooperatively
+      # (`SUBSTRING_SCAN_YIELD_BYTES`) so the input loop keeps running
+      # while it works.
+      #
+      # A pass started for generation G cancels itself as soon as a newer
+      # keystroke arrives (generation moves past G): the scan raises
+      # SearchCancelled at its next line checkpoint, nothing partial is
+      # cached, and the loop immediately retries with the newest query — no
+      # fixed delay between passes.
+      private def start_session_search_worker : Nil
+        return if @session_search_wakeup
+        ch = Channel(Nil).new(1)
+        @session_search_wakeup = ch
+        spawn do
+          loop do
+            ch.receive
+            # Tiny coalescing window so a keystroke burst collapses into
+            # one scan instead of one pass per character.
+            sleep SESSION_SEARCH_DEBOUNCE_MS.milliseconds
+            while @session_search_pending && @session_list.visible?
+              @session_search_pending = nil
+              start_gen = @session_search_generation
+              @session_search_cancel_check = -> { @session_search_generation != start_gen }
+              begin
+                @session_list.flush_filter!
+              rescue Session::SearchCancelled
+                # Stale pass dropped — the newer pending query above (or the
+                # one already in @session_list.query) retriggers instantly.
+              ensure
+                @session_search_cancel_check = nil
+                @dirty = true
+              end
+            end
+          end
+        end
+      end
+
       private def handle_session_key(key : KeyEvent) : Nil
         case key.key
-        when .up?, .down?
-          @session_list.handle_input(key)
-          @dirty = true
         when .enter?
-          idx = @session_list.selected
+          # Apply the latest query synchronously before reading the
+          # selection. Uncancellable by design: Enter must see the final
+          # result, and this also disarms any in-flight background pass.
+          @session_search_cancel_check = nil
+          @session_search_pending = nil
+          @session_list.flush_filter!
+          # Nothing matched the filter: keep the picker open instead of
+          # silently picking the top entry of the unfiltered list.
+          return if @session_list.filtered_size == 0
+          # Map the filtered-list cursor back to the entry array — with an
+          # active search the visible order differs from `@session_entries`.
+          idx = @session_list.selected_original_index
           entry = @session_entries[idx]?
           @session_list.hide
           @dirty = true
@@ -1203,7 +1299,17 @@ module H2code
             end
           end
         when .escape?
-          @session_list.hide
+          # A single Esc clears an active search first; a second Esc closes.
+          cleared = @session_list.clear_query
+          @session_list.hide unless cleared
+          @session_search_pending = nil
+          # Invalidate any in-flight scan: its generation is now stale, so
+          # it cancels at the next checkpoint.
+          @session_search_generation += 1
+          @dirty = true
+        else
+          # ↑/↓, Backspace, and typed characters drive the content filter.
+          @session_list.handle_input(key)
           @dirty = true
         end
       end

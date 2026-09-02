@@ -19,6 +19,178 @@ describe H2code::Session::Index do
     a.should_not eq(b)
   end
 
+  describe "#contains_substring?" do
+    it "matches substrings in prompts, assistant text, and tool results, case-insensitively" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".h2code", "sessions", "sess0001")
+        Dir.mkdir_p(dir)
+        File.write(File.join(dir, "wire.jsonl"), [
+          %({"type":"turn.prompt","data":{"prompt":"Fix the LOGIN bug"}}),
+          %({"type":"assistant.text","data":{"content":"Looking into it"}}),
+          %({"type":"tool.result","data":{"tool_call_id":"t1","content":"stdout here"}}),
+        ].join("\n"))
+
+        idx = H2code::Session::Index.new(home)
+        wire = File.join(dir, "wire.jsonl")
+        idx.contains_substring?(wire, "login").should be_true
+        idx.contains_substring?(wire, "looking").should be_true
+        idx.contains_substring?(wire, "stdout").should be_true
+        idx.contains_substring?(wire, "nothere").should be_false
+        idx.contains_substring?(wire, "").should be_false
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "ignores non-text events and malformed lines, and handles a missing file" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".h2code", "sessions", "sess0002")
+        Dir.mkdir_p(dir)
+        File.write(File.join(dir, "wire.jsonl"), [
+          "not json at all",
+          %({"type":"session.start","data":{"cwd":"/repo"}}),
+        ].join("\n"))
+
+        idx = H2code::Session::Index.new(home)
+        wire = File.join(dir, "wire.jsonl")
+        idx.contains_substring?(wire, "repo").should be_false
+        idx.contains_substring?(File.join(dir, "missing.jsonl"), "x").should be_false
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "ignores raw-line candidates whose needle sits in a non-text field" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".h2code", "sessions", "sess0003")
+        Dir.mkdir_p(dir)
+        # The raw line contains the needle (tool_call_id + cwd), but neither
+        # field is conversation text — the confirm step must reject it.
+        File.write(File.join(dir, "wire.jsonl"),
+          %({"type":"tool.result","data":{"tool_call_id":"ticket-42","cwd":"/ticket-42","content":"unrelated"}}))
+
+        idx = H2code::Session::Index.new(home)
+        idx.contains_substring?(File.join(dir, "wire.jsonl"), "ticket-42").should be_false
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "finds a match beyond the cooperative-yield threshold in a large wire log" do
+      home = temp_home
+      begin
+        dir = File.join(home, ".h2code", "sessions", "sess0004")
+        Dir.mkdir_p(dir)
+        # ~1.5MB of non-matching filler (crosses SUBSTRING_SCAN_YIELD_BYTES
+        # several times, exercising the Fiber.yield points), needle last.
+        filler = %({"type":"assistant.text","data":{"content":"#{"x" * 4096}"}})
+        lines = Array.new(360, filler)
+        lines << %({"type":"turn.prompt","data":{"prompt":"finally the needle phrase"}})
+        File.write(File.join(dir, "wire.jsonl"), lines.join("\n"))
+
+        idx = H2code::Session::Index.new(home)
+        wire = File.join(dir, "wire.jsonl")
+        idx.contains_substring?(wire, "needle phrase").should be_true
+        idx.contains_substring?(wire, "absent needle").should be_false
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+  end
+
+  describe "#substring_hits" do
+    it "caches per query and prunes scans with cached prefixes" do
+      home = temp_home
+      begin
+        dir_a = File.join(home, ".h2code", "sessions", "sessA")
+        dir_b = File.join(home, ".h2code", "sessions", "sessB")
+        Dir.mkdir_p(dir_a)
+        Dir.mkdir_p(dir_b)
+        wire_a = File.join(dir_a, "wire.jsonl")
+        wire_b = File.join(dir_b, "wire.jsonl")
+        File.write(wire_a, %({"type":"turn.prompt","data":{"prompt":"fix the login bug"}}))
+        File.write(wire_b, %({"type":"turn.prompt","data":{"prompt":"unrelated talk"}}))
+
+        idx = H2code::Session::Index.new(home)
+        entries = idx.list(include_archived: true, include_empty: true)
+        cache = Hash(String, Set(Int32)).new
+
+        # Growing query: "logi" scans both files, "login" only re-checks
+        # prefix survivors (sessB was ruled out by "logi" already).
+        hits_a = Set.new((0...entries.size).select { |i| entries[i].id == "sessA" })
+        idx.substring_hits(entries, "logi", cache).should eq(hits_a)
+        idx.substring_hits(entries, "login", cache).should eq(hits_a)
+        cache.size.should eq(2)
+
+        # A query that matched nothing poisons every extension: "zzz" is
+        # cached empty, so "zzzmore" never rescans the files — proven by
+        # writing a matching prompt afterwards and still getting no hits.
+        idx.substring_hits(entries, "zzz", cache).should be_empty
+        File.write(wire_a, %({"type":"turn.prompt","data":{"prompt":"zzzmore now"}}))
+        idx.contains_substring?(wire_a, "zzzmore").should be_true     # a direct scan finds it
+        idx.substring_hits(entries, "zzzmore", cache).should be_empty # the pruned path doesn't look
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "cancels a stale scan without caching partial results" do
+      home = temp_home
+      begin
+        dir_a = File.join(home, ".h2code", "sessions", "sessA")
+        dir_b = File.join(home, ".h2code", "sessions", "sessB")
+        Dir.mkdir_p(dir_a)
+        Dir.mkdir_p(dir_b)
+        File.write(File.join(dir_a, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"needle here"}}))
+        File.write(File.join(dir_b, "wire.jsonl"), %({"type":"turn.prompt","data":{"prompt":"other"}}))
+
+        idx = H2code::Session::Index.new(home)
+        entries = idx.list(include_archived: true, include_empty: true)
+
+        # Cancellation armed before anything is scanned: raises, caches
+        # nothing — a retry from a clean state finds the session.
+        cache = Hash(String, Set(Int32)).new
+        expect_raises(H2code::Session::SearchCancelled) do
+          idx.substring_hits(entries, "needle", cache, -> { true })
+        end
+        cache.should be_empty
+
+        # Cancellation flips on after the first checkpoint call: the abort
+        # now comes from inside `contains_substring?`'s per-line checkpoint
+        # (raising through File.each_line) — partial results are NOT cached.
+        cancelled = false
+        flips_after_first = -> do
+          if cancelled
+            true
+          else
+            cancelled = true
+            false
+          end
+        end
+        expect_raises(H2code::Session::SearchCancelled) do
+          idx.substring_hits(entries, "needle", cache, flips_after_first)
+        end
+        cache.should be_empty
+
+        # Clean retry (uncancellable) succeeds.
+        hits = idx.substring_hits(entries, "needle", cache)
+        hits.size.should eq(1)
+      ensure
+        FileUtils.rm_rf(home)
+      end
+    end
+
+    it "returns an empty set for an empty query without caching" do
+      idx = H2code::Session::Index.new(temp_home)
+      cache = Hash(String, Set(Int32)).new
+      idx.substring_hits([] of H2code::Session::SessionEntry, "", cache).should be_empty
+      cache.should be_empty
+    end
+  end
+
   it "lists workspace-aware v2 sessions" do
     home = temp_home
     begin
