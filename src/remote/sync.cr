@@ -12,6 +12,11 @@ require "./qr"
 module H2code
   module Remote
     module Sync
+      # Продакшн-релей по умолчанию (совпадает с DEFAULT_CLOUD_URL демона);
+      # локальный LAN-релей — только явным relay_url в конфиге или resync.
+      # Shared by `h2code sync` (CLI) and `/sync` (TUI).
+      DEFAULT_RELAY_URL = "wss://relay.h2code.dev:8443/api/v1/stream"
+
       # State dir: `$H2CODE_HOME/remote` (default `~/.h2code/remote`).
       def self.state_dir : String
         home = ENV["H2CODE_HOME"]? || File.join(ENV["HOME"]? || "/tmp", ".h2code")

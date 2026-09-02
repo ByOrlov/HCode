@@ -372,8 +372,9 @@ module H2code
 
       # `/sync [on|off|code|status]` — cloud sync with the PWA. `on`
       # enables it in config.json, starts the h2code-remote cloud daemon
-      # and prints the pairing QR; no args default to status. Auth is
-      # code-only (plans/QrAuth.md) — no email needed.
+      # and prints the pairing QR; bare `/sync` acts as `/sync code`
+      # (current QR, no rotation). Auth is code-only (plans/QrAuth.md) —
+      # no email needed.
       private def cmd_sync(args : String) : Nil
         cfg = @app_config
         case args.strip.downcase
@@ -390,10 +391,13 @@ module H2code
         when "off"
           cfg.try { |c| c.sync.enabled = false; c.save }
           emit_to_log(Message.new("system", sync_stop_message))
-        when "code"
-          relay = cfg.try(&.sync.relay_url) || "ws://localhost:8791/api/v1/stream"
+        when "code", ""
+          # Bare /sync = /sync code: QR of the current pairing code (no
+          # rotation; a fresh code comes from `h2code sync resync` only).
+          relay = cfg.try(&.sync.relay_url) || ""
+          relay = Remote::Sync::DEFAULT_RELAY_URL if relay.empty?
           emit_to_log(Message.new("system", Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, relay)))
-        when "status", ""
+        when "status"
           emit_to_log(Message.new("system", sync_status_message(cfg)))
         else
           emit_to_log(Message.new("error", "Usage: /sync [on|off|code]"))

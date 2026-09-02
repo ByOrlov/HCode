@@ -736,9 +736,8 @@ module H2code
     # fresh pairing code + QR, optionally for a new relay (`h2code resync` is
     # the shortcut). Auth is code-only (plans/QrAuth.md) — no email needed.
 
-    # Продакшн-релей по умолчанию (совпадает с DEFAULT_CLOUD_URL демона);
-    # локальный LAN-релей — только явным relay_url/resync-аргументом.
-    DEFAULT_RELAY_URL = "wss://relay.h2code.dev:8443/api/v1/stream"
+    # Продакшн-релей по умолчанию — общий с TUI `/sync`, живёт в
+    # Remote::Sync::DEFAULT_RELAY_URL.
 
     private def self.run_sync(rest_argv : Array(String)) : Nil
       config = Config::Config.load
@@ -751,7 +750,7 @@ module H2code
         # Без явного relay в конфиге подставляем продакшн (h2code.dev);
         # локальный LAN-релей — только явным relay_url в конфиге.
         if config.sync.relay_url.empty?
-          config.sync.relay_url = DEFAULT_RELAY_URL
+          config.sync.relay_url = Remote::Sync::DEFAULT_RELAY_URL
           config.save
         end
         config.sync.enabled = true
@@ -765,7 +764,7 @@ module H2code
         puts sync_daemon_stop_message
       when "code"
         if config.sync.relay_url.empty?
-          config.sync.relay_url = DEFAULT_RELAY_URL
+          config.sync.relay_url = Remote::Sync::DEFAULT_RELAY_URL
           config.save
         end
         puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
@@ -780,7 +779,7 @@ module H2code
         relay = Remote::Sync.stored_relay_url if relay.nil? || relay.empty?
         relay = config.sync.relay_url if relay.nil? || relay.empty?
         if relay.nil? || relay.empty?
-          relay = DEFAULT_RELAY_URL
+          relay = Remote::Sync::DEFAULT_RELAY_URL
         end
         config.sync.relay_url = relay
         config.save
