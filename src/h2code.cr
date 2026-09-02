@@ -730,20 +730,28 @@ module H2code
     end
 
     # `h2code sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
-    # command. Flips `sync.enabled` in config.json and manages the
+    # command. Bare `h2code sync` acts as `sync code` (current QR, no rotation).
+    # Flips `sync.enabled` in config.json and manages the
     # h2code-remote cloud daemon (see Remote::Sync). `resync [url]` issues a
     # fresh pairing code + QR, optionally for a new relay (`h2code resync` is
     # the shortcut). Auth is code-only (plans/QrAuth.md) — no email needed.
+
+    # Продакшн-релей по умолчанию (совпадает с DEFAULT_CLOUD_URL демона);
+    # локальный LAN-релей — только явным relay_url/resync-аргументом.
+    DEFAULT_RELAY_URL = "wss://relay.h2code.dev:8443/api/v1/stream"
+
     private def self.run_sync(rest_argv : Array(String)) : Nil
       config = Config::Config.load
       config.ensure_h2code_home
-      cmd = rest_argv[0]? || "status"
+      # Без аргументов — как `sync code`: показать QR текущего кода
+      # (без ротации; свежий код выдаёт только resync).
+      cmd = rest_argv[0]? || "code"
       case cmd
       when "on"
-        # Без явного relay в конфиге подставляем LAN-адрес этого компьютера:
-        # QR с localhost на телефоне указывал бы на сам телефон.
+        # Без явного relay в конфиге подставляем продакшн (h2code.dev);
+        # локальный LAN-релей — только явным relay_url в конфиге.
         if config.sync.relay_url.empty?
-          config.sync.relay_url = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+          config.sync.relay_url = DEFAULT_RELAY_URL
           config.save
         end
         config.sync.enabled = true
@@ -757,7 +765,7 @@ module H2code
         puts sync_daemon_stop_message
       when "code"
         if config.sync.relay_url.empty?
-          config.sync.relay_url = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+          config.sync.relay_url = DEFAULT_RELAY_URL
           config.save
         end
         puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
@@ -772,7 +780,7 @@ module H2code
         relay = Remote::Sync.stored_relay_url if relay.nil? || relay.empty?
         relay = config.sync.relay_url if relay.nil? || relay.empty?
         if relay.nil? || relay.empty?
-          relay = "ws://#{Remote::Sync.lan_ip}:8791/api/v1/stream"
+          relay = DEFAULT_RELAY_URL
         end
         config.sync.relay_url = relay
         config.save
@@ -1845,6 +1853,7 @@ module H2code
 
         Commands:
           h2code sync [on|off|code|resync|status]   Cloud sync management
+              sync                     Show current pairing QR (same as `sync code`)
               sync on                  Enable sync, start daemon, show pairing QR
               sync off                 Stop daemon and disable sync
               sync code                Show current pairing QR
