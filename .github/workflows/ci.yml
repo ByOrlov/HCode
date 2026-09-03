@@ -17,6 +17,9 @@ jobs:
         with:
           crystal: 1.21.0
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Install shards
         run: shards install
 

@@ -140,7 +140,7 @@ describe H2code::Config::Config do
       # This assertion is best-effort — skip if the oauth file is present.
       home = ENV["HOME"]? || "/tmp"
       oauth_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
-      config.provider_configured?.should be_true unless File.exists?(oauth_path)
+      config.provider_configured?.should be_false unless File.exists?(oauth_path)
     end
 
     it "returns true for moonshot with an api key" do
