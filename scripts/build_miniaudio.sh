@@ -19,6 +19,18 @@ MA_DIR="$ROOT/vendor/miniaudio"
 CC="${CC:-cc}"
 CFLAGS="${CFLAGS:--O2}"
 
+# Convert a POSIX path to Windows form for native MSVC tools. MSYS argument
+# conversion handles bare paths but leaves paths attached to multi-char
+# switches like -Fo untouched, so cl.exe receives "/d/a/..." and resolves it
+# from the drive root (D:\d\a\... -> C1083). Pass explicit D:\ paths instead.
+wpath() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 target="${1:-}"
 if [ -z "$target" ]; then
   case "$(uname -s)" in
@@ -85,10 +97,11 @@ build_windows_msvc() {
   # cl.exe prints diagnostics (including compile errors) to stdout, not stderr.
   # CI captures this script's stdout via $(...) to get the link flags, so mirror
   # cl's chatter to stderr or a compile failure is completely silent.
-  "$cl_exe" -nologo -O2 -c -I"$MA_DIR" "$MA_DIR/miniaudio_bridge.c" -Fo"$obj" 1>&2
+  "$cl_exe" -nologo -O2 -c -I"$(wpath "$MA_DIR")" "$(wpath "$MA_DIR/miniaudio_bridge.c")" -Fo"$(wpath "$obj")" 1>&2
   # Pass the object by full path; Crystal forwards it to cl.exe/link.exe, which
-  # treats *.obj as a native object file.
-  echo "$obj winmm.lib ole32.lib ksuser.lib"
+  # treats *.obj as a native object file. Windows form keeps the flag string
+  # intact when it crosses from bash into crystal.exe.
+  echo "$(wpath "$obj") winmm.lib ole32.lib ksuser.lib"
 }
 
 build_windows_mingw() {
