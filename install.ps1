@@ -1,4 +1,4 @@
-# H2Code installer — Windows (PowerShell).
+# H2Code installer -- Windows (PowerShell).
 # Usage:  irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex
 #Requires -Version 5.1
 [CmdletBinding()] param()
@@ -10,7 +10,7 @@ $InstallDir = if ($env:H2CODE_INSTALL_DIR) { $env:H2CODE_INSTALL_DIR } else { Jo
 $BinName = 'h2code.exe'
 
 function Write-Info($msg) { Write-Host "  $msg" }
-function Write-Err($msg)  { Write-Host "✗ $msg" -ForegroundColor Red }
+function Write-Err($msg)  { Write-Host "[x] $msg" -ForegroundColor Red }
 
 # Prints a fatal error and pauses before exiting so the console window
 # doesn't close before the message can be read (double-click / "Run with
@@ -42,7 +42,7 @@ function Ensure-WindowsDeps($binPath) {
         Write-Info "Runtime dependencies already available."
         return
     }
-    Write-Info "Binary failed to start (likely missing DLLs). Installing runtime dependencies…"
+    Write-Info "Binary failed to start (likely missing DLLs). Installing runtime dependencies..."
 
     $installDir = Split-Path $binPath -Parent
 
@@ -97,7 +97,7 @@ function Ensure-Ripgrep($installDir) {
         return
     }
 
-    Write-Info "ripgrep (rg) not found — installing…"
+    Write-Info "ripgrep (rg) not found -- installing..."
 
     # Try winget.
     if (Get-Command winget -ErrorAction SilentlyContinue) {
@@ -121,7 +121,7 @@ function Ensure-Ripgrep($installDir) {
 
     # Fallback: download rg.exe from the latest ripgrep GitHub release and
     # drop it next to h2code.exe so PATH picks it up.
-    Write-Info "Downloading rg.exe from ripgrep GitHub releases…"
+    Write-Info "Downloading rg.exe from ripgrep GitHub releases..."
     try {
         $apiUrl = "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest"
         $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
@@ -166,7 +166,7 @@ try {
     $Asset = "h2code-${arch}-windows.zip"
     $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
 
-    Write-Host "Installing H2Code for ${arch}-windows…" -ForegroundColor White
+    Write-Host "Installing H2Code for ${arch}-windows..." -ForegroundColor White
     Write-Info "Release asset: $Asset"
     Write-Info "Install dir:   $InstallDir"
 
@@ -174,7 +174,7 @@ try {
     $Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "h2code-$(New-Guid)") -Force
     try {
         $ZipPath = Join-Path $Tmp.FullName $Asset
-        Write-Info "Downloading $Url…"
+        Write-Info "Downloading $Url..."
         try {
             Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
         } catch {
@@ -185,7 +185,7 @@ try {
         }
 
         # --- Verify + extract -----------------------------------------------------
-        Write-Info "Extracting…"
+        Write-Info "Extracting..."
         Expand-Archive -Path $ZipPath -DestinationPath $Tmp.FullName -Force
 
         # --- Install --------------------------------------------------------------
@@ -203,7 +203,7 @@ try {
         # always drop the pinned runtime DLL bundle next to the binary.
         Ensure-WindowsDeps $Dest
 
-        # ripgrep (rg.exe) — required by the Grep and Glob tools. Installed via
+        # ripgrep (rg.exe) -- required by the Grep and Glob tools. Installed via
         # winget/choco when available, otherwise downloaded directly from the
         # ripgrep GitHub release into the install directory.
         Ensure-Ripgrep $InstallDir
@@ -220,7 +220,7 @@ try {
         }
 
         # --- Done -----------------------------------------------------------------
-        Write-Host "✓ H2Code installed." -ForegroundColor Green
+        Write-Host "[ok] H2Code installed." -ForegroundColor Green
         try {
             $Version = & $Dest --version 2>$null
             Write-Info "Version: $Version"
