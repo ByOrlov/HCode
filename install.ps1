@@ -12,6 +12,16 @@ $BinName = 'h2code.exe'
 function Write-Info($msg) { Write-Host "  $msg" }
 function Write-Err($msg)  { Write-Host "✗ $msg" -ForegroundColor Red }
 
+# Prints a fatal error and pauses before exiting so the console window
+# doesn't close before the message can be read (double-click / "Run with
+# PowerShell" / irm|iex all tear down the window as soon as we exit).
+function Fail($msg) {
+    Write-Err $msg
+    Write-Host ""
+    Read-Host "Press Enter to close" | Out-Null
+    exit 1
+}
+
 # Returns $true if the binary starts and prints a version (i.e. all its DLL
 # dependencies resolve). Used to decide whether we need to install deps.
 function Test-H2codeStarts($path) {
@@ -141,80 +151,96 @@ function Ensure-Ripgrep($installDir) {
 }
 
 # --- Detect arch --------------------------------------------------------------
-$Arch = $env:PROCESSOR_ARCHITECTURE
-if ($Arch -eq 'AMD64' -or $Arch -eq 'x64') {
-    $arch = 'x86_64'
-} else {
-    Write-Err "Unsupported architecture: $Arch (this installer covers x86_64)"
-    exit 1
-}
-
-$Asset = "h2code-${arch}-windows.zip"
-$Url = "https://github.com/$Repo/releases/latest/download/$Asset"
-
-Write-Host "Installing H2Code for ${arch}-windows…" -ForegroundColor White
-Write-Info "Release asset: $Asset"
-Write-Info "Install dir:   $InstallDir"
-
-# --- Download -----------------------------------------------------------------
-$Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "h2code-$(New-Guid)") -Force
+# The whole main flow runs inside try/catch so that any unexpected terminating
+# error (with $ErrorActionPreference = 'Stop') is reported and followed by a
+# pause instead of silently killing the window.
 try {
-    $ZipPath = Join-Path $Tmp.FullName $Asset
-    Write-Info "Downloading $Url…"
+    $Arch = $env:PROCESSOR_ARCHITECTURE
+    if ($Arch -eq 'AMD64' -or $Arch -eq 'x64') {
+        $arch = 'x86_64'
+    } else {
+        Write-Err "Unsupported architecture: $Arch (this installer covers x86_64)"
+        Fail "Installation aborted."
+    }
+
+    $Asset = "h2code-${arch}-windows.zip"
+    $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
+
+    Write-Host "Installing H2Code for ${arch}-windows…" -ForegroundColor White
+    Write-Info "Release asset: $Asset"
+    Write-Info "Install dir:   $InstallDir"
+
+    # --- Download -----------------------------------------------------------------
+    $Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "h2code-$(New-Guid)") -Force
     try {
-        Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
-    } catch {
-        Write-Err "Download failed."
-        Write-Err "If you're on ${arch}-windows, the asset may not be published yet."
-        Write-Err "Check available assets at: https://github.com/$Repo/releases/latest"
-        exit 1
+        $ZipPath = Join-Path $Tmp.FullName $Asset
+        Write-Info "Downloading $Url…"
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
+        } catch {
+            Write-Err "Download failed: $_"
+            Write-Err "If you're on ${arch}-windows, the asset may not be published yet."
+            Write-Err "Check available assets at: https://github.com/$Repo/releases/latest"
+            Fail "Installation aborted."
+        }
+
+        # --- Verify + extract -----------------------------------------------------
+        Write-Info "Extracting…"
+        Expand-Archive -Path $ZipPath -DestinationPath $Tmp.FullName -Force
+
+        # --- Install --------------------------------------------------------------
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        $Src = Join-Path $Tmp.FullName $BinName
+        $Dest = Join-Path $InstallDir $BinName
+        Move-Item -Path $Src -Destination $Dest -Force
+        Write-Info "Installed $Dest"
+
+        # --- Runtime dependencies -------------------------------------------------
+        # h2code.exe links dynamically against OpenSSL (libcrypto/libssl), libyaml
+        # and pcre2. These DLLs are not present on a stock Windows install, so we
+        # detect a missing-DLL failure by trying to run the binary and, on failure,
+        # install the dependencies: OpenSSL via winget/choco when available, then
+        # always drop the pinned runtime DLL bundle next to the binary.
+        Ensure-WindowsDeps $Dest
+
+        # ripgrep (rg.exe) — required by the Grep and Glob tools. Installed via
+        # winget/choco when available, otherwise downloaded directly from the
+        # ripgrep GitHub release into the install directory.
+        Ensure-Ripgrep $InstallDir
+
+        # --- PATH -----------------------------------------------------------------
+        $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+        if ($UserPath -notlike "*$InstallDir*") {
+            $NewPath = if ($UserPath) { "$UserPath;$InstallDir" } else { $InstallDir }
+            [Environment]::SetEnvironmentVariable('PATH', $NewPath, 'User')
+            # Also update the current session.
+            $env:PATH = "$env:PATH;$InstallDir"
+            Write-Info "Added $InstallDir to user PATH."
+            Write-Info "Restart your terminal for PATH to take effect."
+        }
+
+        # --- Done -----------------------------------------------------------------
+        Write-Host "✓ H2Code installed." -ForegroundColor Green
+        try {
+            $Version = & $Dest --version 2>$null
+            Write-Info "Version: $Version"
+        } catch {
+            Write-Info "Version: unknown"
+        }
+        Write-Info "Run 'h2code' to start. Use '/upgrade' inside the TUI to update later."
     }
-
-    # --- Verify + extract -----------------------------------------------------
-    Write-Info "Extracting…"
-    Expand-Archive -Path $ZipPath -DestinationPath $Tmp.FullName -Force
-
-    # --- Install --------------------------------------------------------------
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    $Src = Join-Path $Tmp.FullName $BinName
-    $Dest = Join-Path $InstallDir $BinName
-    Move-Item -Path $Src -Destination $Dest -Force
-    Write-Info "Installed $Dest"
-
-    # --- Runtime dependencies -------------------------------------------------
-    # h2code.exe links dynamically against OpenSSL (libcrypto/libssl), libyaml
-    # and pcre2. These DLLs are not present on a stock Windows install, so we
-    # detect a missing-DLL failure by trying to run the binary and, on failure,
-    # install the dependencies: OpenSSL via winget/choco when available, then
-    # always drop the pinned runtime DLL bundle next to the binary.
-    Ensure-WindowsDeps $Dest
-
-    # ripgrep (rg.exe) — required by the Grep and Glob tools. Installed via
-    # winget/choco when available, otherwise downloaded directly from the
-    # ripgrep GitHub release into the install directory.
-    Ensure-Ripgrep $InstallDir
-
-    # --- PATH -----------------------------------------------------------------
-    $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-    if ($UserPath -notlike "*$InstallDir*") {
-        $NewPath = if ($UserPath) { "$UserPath;$InstallDir" } else { $InstallDir }
-        [Environment]::SetEnvironmentVariable('PATH', $NewPath, 'User')
-        # Also update the current session.
-        $env:PATH = "$env:PATH;$InstallDir"
-        Write-Info "Added $InstallDir to user PATH."
-        Write-Info "Restart your terminal for PATH to take effect."
+    finally {
+        Remove-Item -Recurse -Force $Tmp.FullName -ErrorAction SilentlyContinue
     }
-
-    # --- Done -----------------------------------------------------------------
-    Write-Host "✓ H2Code installed." -ForegroundColor Green
-    try {
-        $Version = & $Dest --version 2>$null
-        Write-Info "Version: $Version"
-    } catch {
-        Write-Info "Version: unknown"
+} catch {
+    Write-Err "Installation failed: $_"
+    if ($_.Exception.InnerException -and $_.Exception.InnerException.Message) {
+        Write-Err "Cause: $($_.Exception.InnerException.Message)"
     }
-    Write-Info "Run 'h2code' to start. Use '/upgrade' inside the TUI to update later."
-}
-finally {
-    Remove-Item -Recurse -Force $Tmp.FullName -ErrorAction SilentlyContinue
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    Read-Host "Press Enter to close" | Out-Null
+    exit 1
 }
