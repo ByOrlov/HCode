@@ -2,9 +2,12 @@ name: Release
 
 on:
   push:
+    branches: [master]
     tags:
       - "[0-9]*.[0-9]*.[0-9]*"
       - "[0-9]*.[0-9]*.[0-9]*.[0-9]*"
+  pull_request:
+    branches: [master]
   workflow_dispatch:
     inputs:
       version:
@@ -30,6 +33,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Branch push / PR: a CI build, not a release. Skip version math.
+          if [ -z "${{ inputs.version }}" ] && [[ ! "$GITHUB_REF_NAME" =~ ^[0-9] ]]; then
+            echo "version=0.0.0-ci" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Resolve the raw tag pushed (or the dispatch input).
           if [ -n "${{ inputs.version }}" ]; then
             RAW="${{ inputs.version }}"
@@ -241,6 +249,8 @@ jobs:
 
   release:
     needs: [compute-version, build]
+    # Only tag pushes publish a release; plain branch pushes just build.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.compute-version.outputs.version }}
