@@ -8,7 +8,11 @@ require "i18n"
 # full report. The script re-runs on every compile, so edited locale files
 # are always re-checked.
 {% begin %}
-  {% report = run(__DIR__ + "/../../scripts/i18n_check.cr", "macro") %}
+  # Dot-relative on purpose: the compiler's `run` macro only treats "/"-prefixed
+  # paths as absolute, so an absolute `__DIR__`-based path (e.g. "D:\...\src\i18n"
+  # on Windows) falls through to a CRYSTAL_PATH lookup and fails. A "./" path is
+  # resolved against this file's directory on every platform.
+  {% report = run("./../../scripts/i18n_check.cr", "macro") %}
   {% if report.starts_with?("FAIL") %}{{ raise report }}{% end %}
 {% end %}
 
