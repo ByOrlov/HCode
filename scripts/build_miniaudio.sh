@@ -82,7 +82,10 @@ build_windows_msvc() {
   # Remove stale artifacts from any previous MinGW build so we don't accidentally
   # pick up the wrong object during packaging.
   rm -f "$MA_DIR/miniaudio_bridge.o" "$MA_DIR/libminiaudio_bridge.a" "$obj" "$MA_DIR/miniaudio_bridge.lib"
-  "$cl_exe" -nologo -O2 -c -I"$MA_DIR" "$MA_DIR/miniaudio_bridge.c" -Fo"$obj"
+  # cl.exe prints diagnostics (including compile errors) to stdout, not stderr.
+  # CI captures this script's stdout via $(...) to get the link flags, so mirror
+  # cl's chatter to stderr or a compile failure is completely silent.
+  "$cl_exe" -nologo -O2 -c -I"$MA_DIR" "$MA_DIR/miniaudio_bridge.c" -Fo"$obj" 1>&2
   # Pass the object by full path; Crystal forwards it to cl.exe/link.exe, which
   # treats *.obj as a native object file.
   echo "$obj winmm.lib ole32.lib ksuser.lib"

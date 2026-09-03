@@ -168,7 +168,10 @@ jobs:
             cp "$abs" "./${lib}"
             # Rewrite the dylib's own id and its dependency on the sibling.
             install_name_tool -id "@rpath/${lib}" "./${lib}"
-            other=$(otool -L "./${lib}" | grep -E "/.*/(libssl.3|libcrypto.3).dylib\b" | awk '{print $1}')
+            # NOTE the trailing "|| true": libcrypto has no ssl/crypto deps, so
+            # grep finds nothing, exits 1, and under `set -euo pipefail` that
+            # used to abort the whole step after the rebind was half-done.
+            other=$(otool -L "./${lib}" | grep -E "/.*/(libssl.3|libcrypto.3).dylib\b" | awk '{print $1}' || true)
             for dep in $other; do
               depname=$(basename "$dep")
               install_name_tool -change "$dep" "@rpath/${depname}" "./${lib}"
@@ -178,6 +181,13 @@ jobs:
           done
           # Look beside the binary for the dylibs.
           install_name_tool -add_rpath @loader_path h2code 2>/dev/null || true
+          # install_name_tool invalidated the Homebrew signatures of the
+          # modified dylibs (see the warnings above); re-sign ad hoc or macOS
+          # kills the binary on launch with an invalid code signature.
+          for lib in libssl.3.dylib libcrypto.3.dylib; do
+              [ -f "./${lib}" ] && codesign --force --sign - "./${lib}"
+          done
+          codesign --force --sign - h2code 2>/dev/null || true
           echo "--- after rebind ---"
           otool -L h2code
 
