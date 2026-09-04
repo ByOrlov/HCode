@@ -1,8 +1,8 @@
 # Cloud-sync orchestration shared by `h2code sync` (CLI) and `/sync` (TUI):
-# pairing-code storage, `h2code-remote --cloud` daemon lifecycle, and the
-# QR banner. Config (`sync.enabled` / `sync.relay_url` / `sync.email`)
-# lives in config.json; the 12-digit code in `$H2CODE_HOME/remote/code`
-# (same file `h2code-remote password` writes).
+# pairing-code storage and the QR banner. Config (`sync.enabled` /
+# `sync.relay_url` / `sync.email`) lives in config.json; the 12-digit code
+# in `$H2CODE_HOME/remote/code` (same file `h2code-remote password` writes).
+# The h2code-remote daemon itself is MANUAL-ONLY — see the NOTE below.
 require "random/secure"
 require "process"
 require "file_utils"
@@ -127,54 +127,13 @@ module H2code
         "ws://#{lan_ip}:#{port}"
       end
 
-      # Resolve the h2code-remote binary: sibling of the running h2code
-      # executable, then PATH lookup.
-      private def self.resolve_remote_bin : String?
-        if exe = Process.executable_path
-          sibling = File.join(File.dirname(exe), "h2code-remote")
-          return sibling if File.exists?(sibling) && File.executable?(sibling)
-        end
-        ENV["PATH"]?.try do |paths|
-          paths.split(':').each do |dir|
-            candidate = File.join(dir, "h2code-remote")
-            return candidate if !dir.empty? && File.executable?(candidate)
-          end
-        end
-        nil
-      end
-
-      # Start `h2code-remote --cloud` detached; logs go to
-      # `remote/daemon.log`. The local WS port defaults to 8788 (or
-      # `REMOTE_CLOUD_PORT`) so a local-mode h2code-remote on 8787 doesn't
-      # collide with it. Returns the outcome for user feedback.
-      def self.start_daemon(relay_url : String) : Symbol
-        return :already if daemon_running?
-        bin = resolve_remote_bin
-        return :no_binary unless bin
-        read_or_create_code # h2code-remote exits 2 without it
-        port = ENV["REMOTE_CLOUD_PORT"]?.try(&.to_i?) || 8788
-        log = File.open(File.join(state_dir, "daemon.log"), "a")
-        begin
-          proc = Process.new(bin, ["--port", port.to_s, "--host", "auto", "--cloud", relay_url],
-            output: log, error: log)
-          File.write(pid_path, proc.pid.to_s)
-          :started
-        rescue ex : IO::Error | File::Error
-          :failed
-        ensure
-          log.close
-        end
-      end
-
-      def self.stop_daemon : Symbol
-        pid = daemon_pid
-        return :not_running unless pid
-        # Stdlib has no Process.kill in this version — call libc directly
-        # (returns -1 and sets errno for a dead pid; nothing to raise).
-        LibC.kill(pid, LibC::SIGTERM)
-        File.delete(pid_path) if File.exists?(pid_path)
-        :stopped
-      end
+      # NOTE (2026-09-03): hcode NEVER spawns or stops the h2code-remote
+      # daemon. It is a separate manual service (the user runs it himself,
+      # e.g. from his own systemd unit or shell); the former autostart at
+      # TUI launch and the start/stop wiring in `h2code sync` / `/sync`
+      # were removed after they spammed daemon.log with lock errors from
+      # repeated spawn attempts. hcode only reads daemon state (pid file)
+      # for `sync status` and manages the pairing code/QR.
 
       # Full QR banner text: half-block rows plus the formatted code. The QR
       # payload is the pairing URL — the app scans it and learns both the

@@ -281,12 +281,6 @@ module H2code
       end
       config.ensure_h2code_home
 
-      # Cloud-sync autostart: when sync is enabled, make sure the
-      # h2code-remote cloud daemon is up (idempotent — skips if running).
-      if config.sync.enabled? && !Remote::Sync.daemon_running?
-        Remote::Sync.start_daemon(config.sync.relay_url)
-      end
-
       home = ENV["HOME"]? || "/tmp"
 
       oauth_path = File.join(home, ".kimi-code", "credentials", "kimi-code.json")
@@ -731,10 +725,12 @@ module H2code
 
     # `h2code sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
     # command. Bare `h2code sync` acts as `sync code` (current QR, no rotation).
-    # Flips `sync.enabled` in config.json and manages the
-    # h2code-remote cloud daemon (see Remote::Sync). `resync [url]` issues a
-    # fresh pairing code + QR, optionally for a new relay (`h2code resync` is
-    # the shortcut). Auth is code-only (plans/QrAuth.md) — no email needed.
+    # Flips `sync.enabled` in config.json and shows the pairing QR/relay.
+    # The h2code-remote daemon is MANUAL-ONLY (2026-09-03): hcode never
+    # spawns or stops it — the daemon is a separate service the user runs
+    # himself. `resync [url]` issues a fresh pairing code + QR, optionally
+    # for a new relay (`h2code resync` is the shortcut). Auth is code-only
+    # (plans/QrAuth.md) — no email needed.
 
     # Продакшн-релей по умолчанию — общий с TUI `/sync`, живёт в
     # Remote::Sync::DEFAULT_RELAY_URL.
@@ -755,13 +751,12 @@ module H2code
         end
         config.sync.enabled = true
         config.save
-        puts sync_daemon_start_message(config.sync.relay_url)
-        puts "bridge: #{Remote::Sync.bridge_url}"
+        puts "sync enabled; the h2code-remote daemon is manual-only — start it yourself (separate service)"
         puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
       when "off"
         config.sync.enabled = false
         config.save
-        puts sync_daemon_stop_message
+        puts "sync disabled; the h2code-remote daemon (if running) is untouched — stop it manually"
       when "code"
         if config.sync.relay_url.empty?
           config.sync.relay_url = Remote::Sync::DEFAULT_RELAY_URL
@@ -784,40 +779,19 @@ module H2code
         config.sync.relay_url = relay
         config.save
         code = Remote::Sync.regenerate_code
-        was_running = Remote::Sync.daemon_running?
-        Remote::Sync.stop_daemon if was_running
-        if was_running || config.sync.enabled?
-          puts sync_daemon_start_message(relay)
-          puts "bridge: #{Remote::Sync.bridge_url}"
-        end
+        # The daemon (manual, separate service) re-keys its relay uplink on
+        # its own when the pairing code changes — nothing to restart here.
         puts Remote::Sync.qr_banner(code, relay)
       when "status"
         daemon = Remote::Sync.daemon_running? ? "running" : "stopped"
         puts "cloud sync: #{config.sync.enabled? ? "on" : "off"}"
-        puts "daemon: #{daemon}"
+        puts "daemon: #{daemon} (manual — hcode never starts/stops it)"
         puts "relay: #{config.sync.relay_url}"
         puts "bridge: #{Remote::Sync.bridge_url}" if Remote::Sync.daemon_running?
       else
         STDERR.puts "usage: h2code sync [on|off|code|resync [relay-url]|status]"
         STDERR.puts "       h2code resync [relay-url]   # same as `h2code sync resync`"
         exit 2
-      end
-    end
-
-    private def self.sync_daemon_start_message(relay_url : String) : String
-      case Remote::Sync.start_daemon(relay_url)
-      when :started   then "h2code-remote cloud daemon started (#{relay_url})"
-      when :already   then "h2code-remote cloud daemon already running (#{relay_url})"
-      when :no_binary then "h2code-remote binary not found — build it with `rake` or start it manually"
-      else                 "cloud daemon failed to start — see ~/.h2code/remote/daemon.log"
-      end
-    end
-
-    private def self.sync_daemon_stop_message : String
-      case Remote::Sync.stop_daemon
-      when :stopped     then "h2code-remote cloud daemon stopped"
-      when :not_running then "h2code-remote cloud daemon was not running"
-      else                   "daemon stop failed — check ~/.h2code/remote/daemon.pid"
       end
     end
 

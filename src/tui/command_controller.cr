@@ -371,10 +371,11 @@ module H2code
       end
 
       # `/sync [on|off|code|status]` — cloud sync with the PWA. `on`
-      # enables it in config.json, starts the h2code-remote cloud daemon
-      # and prints the pairing QR; bare `/sync` acts as `/sync code`
-      # (current QR, no rotation). Auth is code-only (plans/QrAuth.md) —
-      # no email needed.
+      # enables it in config.json and prints the pairing QR; bare `/sync`
+      # acts as `/sync code` (current QR, no rotation). The h2code-remote
+      # daemon is MANUAL-ONLY (2026-09-03): hcode never spawns or stops
+      # it — the daemon is a separate service. Auth is code-only
+      # (plans/QrAuth.md) — no email needed.
       private def cmd_sync(args : String) : Nil
         cfg = @app_config
         case args.strip.downcase
@@ -385,12 +386,11 @@ module H2code
           end
           cfg.sync.enabled = true
           cfg.save
-          emit_to_log(Message.new("system", sync_start_message(cfg.sync.relay_url)))
-          emit_to_log(Message.new("system", "Bridge: #{Remote::Sync.bridge_url}"))
+          emit_to_log(Message.new("system", "Sync enabled. The h2code-remote daemon is manual-only — start it yourself (separate service)."))
           emit_to_log(Message.new("system", Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, cfg.sync.relay_url)))
         when "off"
           cfg.try { |c| c.sync.enabled = false; c.save }
-          emit_to_log(Message.new("system", sync_stop_message))
+          emit_to_log(Message.new("system", "Sync disabled. The h2code-remote daemon (if running) is untouched — stop it manually."))
         when "code", ""
           # Bare /sync = /sync code: QR of the current pairing code (no
           # rotation; a fresh code comes from `h2code sync resync` only).
@@ -401,23 +401,6 @@ module H2code
           emit_to_log(Message.new("system", sync_status_message(cfg)))
         else
           emit_to_log(Message.new("error", "Usage: /sync [on|off|code]"))
-        end
-      end
-
-      private def sync_start_message(relay_url : String) : String
-        case Remote::Sync.start_daemon(relay_url)
-        when :started   then "Sync enabled. h2code-remote cloud daemon started (#{relay_url})."
-        when :already   then "Sync enabled. h2code-remote cloud daemon already running (#{relay_url})."
-        when :no_binary then "Sync enabled, but h2code-remote binary not found — build it with `rake` or run it manually."
-        else                 "Sync enabled, but the cloud daemon failed to start — see ~/.h2code/remote/daemon.log"
-        end
-      end
-
-      private def sync_stop_message : String
-        case Remote::Sync.stop_daemon
-        when :stopped     then "Sync disabled. h2code-remote cloud daemon stopped."
-        when :not_running then "Sync disabled."
-        else                   "Sync disabled (daemon stop failed — check ~/.h2code/remote/daemon.pid)."
         end
       end
 
