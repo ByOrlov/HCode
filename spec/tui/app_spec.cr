@@ -794,24 +794,34 @@ describe H2code::TUI::App do
     # rows below the new zone bottom must be cleared.
     it "clears stale rows when the active zone shrinks" do
       app = H2code::TUI::App.new
+      # App#initialize memoizes Terminal.current; set_size mutates that shared
+      # singleton, so restore the real size afterwards — later specs (e.g.
+      # streaming_markdown_spec) build Apps off the same instance and render
+      # at widths that must agree with @terminal.cols.
+      prev_cols = app.@terminal.cols
+      prev_rows = app.@terminal.rows
       app.@terminal.set_size(40, 24)
-      mock = H2code::TUI::TerminalMock.new(rows: 24, cols: 80)
+      begin
+        mock = H2code::TUI::TerminalMock.new(rows: 24, cols: 80)
 
-      # Frame 1: tall editor box (long text wraps to many rows).
-      app.@editor.set("x" * 200)
-      app.render_to(mock)
-      tall = mock.visible_rows.size
+        # Frame 1: tall editor box (long text wraps to many rows).
+        app.@editor.set("x" * 200)
+        app.render_to(mock)
+        tall = mock.visible_rows.size
 
-      # Frame 2: short editor box (text cleared → single placeholder row).
-      app.@editor.clear
-      app.render_to(mock)
-      short = mock.visible_rows.size
+        # Frame 2: short editor box (text cleared → single placeholder row).
+        app.@editor.clear
+        app.render_to(mock)
+        short = mock.visible_rows.size
 
-      short.should be < tall
+        short.should be < tall
 
-      # All rows below the new content must be blank.
-      content_end = mock.visible_rows.size
-      mock.screen[content_end..].each { |row| row.should eq("") }
+        # All rows below the new content must be blank.
+        content_end = mock.visible_rows.size
+        mock.screen[content_end..].each { |row| row.should eq("") }
+      ensure
+        app.@terminal.set_size(prev_cols, prev_rows)
+      end
     end
   end
 
