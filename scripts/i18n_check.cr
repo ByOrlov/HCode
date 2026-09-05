@@ -81,7 +81,9 @@ supported = if m = src.match(/SUPPORTED_LOCALES\s*=\s*\{([^}]*)\}/)
               [] of String
             end
 embedded = src.scan(/H2CODE_LOCALE_YAML_([A-Z]{2})\s*=/).map { |sm| sm[1].downcase }.uniq!.sort!
-on_disk = Dir.glob(File.join(locales_dir, "*.yml")).map { |p| File.basename(p, ".yml") }.sort!
+# Dir.glob splits patterns on "/" only and treats "\" as an escape character,
+# so a backslash-separated Windows path matches nothing. Normalize to "/".
+on_disk = Dir.glob("#{locales_dir.gsub('\\', '/')}/*.yml").map { |p| File.basename(p, ".yml") }.sort!
 
 lists = {
   "SUPPORTED_LOCALES in i18n.cr"                       => supported,

@@ -124,7 +124,18 @@ jobs:
           sudo softwareupdate --install-rosetta --agree-to-license || true
           NONINTERACTIVE=1 arch -x86_64 /bin/bash -c \
             "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          /usr/local/bin/brew install libyaml pcre2 openssl@3
+          # openssl@3's post-install (c_rehash) fails on this runner, which makes
+          # brew exit 1 even though the keg — and the libs/pkg-config files the
+          # build needs — poured fine. Only fail if those are actually missing.
+          if ! /usr/local/bin/brew install libyaml pcre2 openssl@3; then
+            /usr/local/bin/brew list --versions libyaml pcre2 openssl@3
+            for pc in /usr/local/opt/openssl@3/lib/pkgconfig/openssl.pc \
+                      /usr/local/lib/pkgconfig/yaml-0.1.pc \
+                      /usr/local/lib/pkgconfig/libpcre2-8.pc; do
+              [ -f "$pc" ] || { echo "::error::missing $pc after brew install"; exit 1; }
+            done
+            echo "::warning::brew install exited non-zero (post-install step), required libs present — continuing"
+          fi
           echo "PKG_CONFIG_PATH=/usr/local/opt/openssl@3/lib/pkgconfig:/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
           # CC wrapper: skip -arch x86_64 for macro programs (compiled for host arch)
           cat > /tmp/cc-wrapper << 'WRAPPER'
