@@ -27,19 +27,12 @@ module H2code
 
       # The machine's LAN IP (eth/wlan outbound interface). Connects a UDP
       # socket to a public address — no packet is sent, the kernel just
-      # picks the default-route interface; getsockname then yields its IP.
-      # (This stdlib version lacks Socket#local_address, hence the LibC call.)
+      # picks the default-route interface; local_address then yields its IP.
       def self.lan_ip : String
-        sock = Socket.udp(Socket::Family::INET)
+        sock = UDPSocket.new(Socket::Family::INET)
         begin
           sock.connect("8.8.8.8", 53)
-          addr = uninitialized LibC::SockaddrIn
-          len = sizeof(LibC::SockaddrIn).to_u32
-          if LibC.getsockname(sock.fd, pointerof(addr).as(LibC::Sockaddr*), pointerof(len)) == 0
-            n = addr.sin_addr.s_addr
-            return "#{n & 0xff}.#{(n >> 8) & 0xff}.#{(n >> 16) & 0xff}.#{(n >> 24) & 0xff}"
-          end
-          "127.0.0.1"
+          sock.local_address.address
         rescue ex : Socket::Error
           "127.0.0.1"
         ensure
