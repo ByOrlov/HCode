@@ -312,6 +312,16 @@ module H2code
         {@cursor_row, @cursor_col}
       end
 
+      # Character immediately before the cursor on the current line, or nil at
+      # the line start. The double-Space voice trigger uses this to prove the
+      # first press's space is still the last thing typed (see
+      # InputController#handle_space_tap).
+      def char_before_cursor : Char?
+        return nil if @cursor_col <= 0
+        line = @lines[@cursor_row]? || ""
+        line[@cursor_col - 1]?
+      end
+
       private def insert_char(c : Char) : Nil
         line = @lines[@cursor_row]
         @lines[@cursor_row] = line.insert(@cursor_col, c)

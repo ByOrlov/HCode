@@ -77,7 +77,10 @@ module H2code
         msg.tool_call_id = "voice-#{Time.utc.to_unix_ms}"
         msg.tool_name = RECORDING_TOOL
         emit_to_log(msg)
-        @voice_msg_idx = @messages.size - 1
+        # The message index doubles as a session token: a new session gets a
+        # new entry, so a stale fiber can tell its session is over.
+        msg_idx = @messages.size - 1
+        @voice_msg_idx = msg_idx
         @voice_recording = false
         @voice_level = 0.0
         @voice_started_at = started_at
@@ -89,6 +92,13 @@ module H2code
         spawn do
           begin
             client.record_start(cfg.language, cfg.engine) { |evt| handle_voice_event(evt) }
+            # The SSE stream ended without a result or error event: the
+            # server died or dropped the connection mid-session. Finish the
+            # entry with an error instead of hanging forever — nothing can
+            # retry the transcription, the audio buffer lives server-side.
+            if @voice_msg_idx == msg_idx
+              voice_finish(error: "Voice stream closed before the transcription result arrived")
+            end
           rescue ex : IO::Error
             voice_finish(error: voice_socket_error(client, ex))
           rescue ex : Exception
@@ -101,9 +111,10 @@ module H2code
         if max = cfg.max_duration_sec
           spawn do
             sleep ({max, 1}.max).seconds
-            # Only fire when this exact session is still recording (the timer
-            # values double as session tokens: a new session gets a new one).
-            stop_voice_recording if @voice_recording && @voice_started_at == started_at
+            # Only fire when this exact session is still recording. Cannot
+            # compare @voice_started_at: the "started" event resets it, so the
+            # message index is the session token here.
+            stop_voice_recording if @voice_recording && @voice_msg_idx == msg_idx
           end
         end
       end

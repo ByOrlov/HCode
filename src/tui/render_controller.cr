@@ -78,17 +78,16 @@ module H2code
         rows = port.rows
 
         log_lines, active_lines, editor_content_line = build_rendered_lines_split(cols)
-        # Throttle before any per-line post-processing so truncation, resets and
-        # the active-zone math all operate on the revealed slice. Capture the
-        # full log size first so the editor content line can be re-based.
+        # Log lines are already truncated/reset at cache-fill time (they are
+        # immutable); throttle just slices the array. Only the repainted active
+        # zone needs per-frame post-processing below — this keeps the frame
+        # cost O(new log lines + active zone) instead of O(total history).
         full_log_size = log_lines.size
         log_lines = throttle_log(log_lines, active_lines, rows)
         if log_lines.size < full_log_size
           editor_content_line = editor_content_line - full_log_size + log_lines.size
         end
-        truncate_render_lines(log_lines, cols)
         truncate_render_lines(active_lines, cols)
-        apply_line_resets(log_lines)
         apply_line_resets(active_lines)
 
         port.begin_frame
@@ -104,14 +103,12 @@ module H2code
       end
 
       # Test-compatible view of a frame: returns the merged frame lines, the
-      # editor content line (absolute), and the active-zone start index. Splits
-      # internally via `build_rendered_lines_split` and applies the same
-      # post-processing (truncate + SGR reset) the renderer does.
+      # editor content line (absolute), and the active-zone start index. Log
+      # lines come pre-processed from the cache; only the active zone gets the
+      # truncate + SGR reset post-processing here, matching `do_render`.
       def build_rendered_lines(cols : Int32) : {Array(String), Int32, Int32}
         log_lines, active_lines, editor_content_line = build_rendered_lines_split(cols)
-        truncate_render_lines(log_lines, cols)
         truncate_render_lines(active_lines, cols)
-        apply_line_resets(log_lines)
         apply_line_resets(active_lines)
         {log_lines + active_lines, editor_content_line, log_lines.size}
       end
@@ -128,8 +125,9 @@ module H2code
       # `log_lines` (append-only history) and `active_lines` (the repainted
       # region). Returns `{log_lines, active_lines, editor_content_line}` where
       # `editor_content_line` is the absolute (log + active) index of the first
-      # editor content row + 1. Lines are returned raw — truncation and SGR
-      # resets are applied by the caller.
+      # editor content row + 1. Log lines are returned fully post-processed
+      # (truncated to `cols` + trailing SGR reset — applied once at cache-fill
+      # time); active lines are raw and are post-processed by the caller.
       def build_rendered_lines_split(cols : Int32) : {Array(String), Array(String), Int32}
         log_lines = [] of String
         active_lines = [] of String
@@ -156,6 +154,15 @@ module H2code
         # instead of O(N). Pending tool calls (no result yet) are skipped here —
         # they live in the active zone and migrate into the cache once their
         # result arrives (which sets @log_cache_dirty).
+        #
+        # Per-line post-processing (width truncation + SGR reset) also runs
+        # HERE, at fill time — the cached lines are immutable until the next
+        # invalidation and the cache is already keyed on `cols`. Re-running it
+        # from the caller made every frame O(total history): render time grew
+        # linearly with chat length, amplified by the CharWidth width-cache
+        # thrashing past its 4096-entry cap (wholesale clear + sequential
+        # access = ~0% hit rate, so every non-ASCII line re-ran the full
+        # grapheme walk each frame).
         if @log_cache_dirty || cols != @log_cache_cols
           @log_lines_cache.clear
           if @show_welcome
@@ -167,6 +174,8 @@ module H2code
                     msg.read_group.nil?
             @log_lines_cache.concat(render_message(msg, cols))
           end
+          truncate_render_lines(@log_lines_cache, cols)
+          apply_line_resets(@log_lines_cache)
           @log_cache_dirty = false
           @log_cache_cols = cols
         end
@@ -311,6 +320,16 @@ module H2code
           rows = @terminal.rows
           total = log_lines.size + active_zone_size_dbg
 
+          # Render-time colour cue: >20ms yellow (warning), >50ms red (error).
+          render_time_color =
+            if @render_ms > 50
+              @theme.colors.error
+            elsif @render_ms > 20
+              @theme.colors.warning
+            else
+              @theme.colors.dim
+            end
+
           active_lines << String.build do |s|
             s << ANSI.color(@theme.colors.dim, nil)
             s << "Msgs: #{@messages.size}, "
@@ -318,7 +337,11 @@ module H2code
             s << (pending_dbg > 0 ? " (pending: #{pending_dbg})" : "")
             s << ", "
             s << "ActiveZone: #{active_zone_size_dbg}, "
-            s << "RenderQuery: #{@render_pending} (#{@render_ms}ms), "
+            s << ANSI.color(render_time_color, nil)
+            s << "RenderQuery: #{@render_pending} (#{@render_ms}ms)"
+            s << ANSI.reset
+            s << ANSI.color(@theme.colors.dim, nil)
+            s << ", "
             s << "Cache: #{@log_cache_dirty ? "dirty" : "hit"}"
             s << ", "
             s << "Rows: #{rows} (total: #{total})"

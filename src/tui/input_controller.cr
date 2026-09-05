@@ -178,7 +178,9 @@ module H2code
 
         # Double-Space voice trigger (see handle_space_tap): the first tap
         # falls through to normal editing, the second toggles recording. Any
-        # other key resets the sequence.
+        # other key resets the sequence; handle_space_tap additionally checks
+        # the editor content, so text that snuck in between the presses
+        # without a key event still disqualifies the trigger.
         if key.key.char? && key.char == ' ' && !key.ctrl? && !key.alt?
           return if handle_space_tap(key)
         else
@@ -279,24 +281,30 @@ module H2code
       end
 
       # Double-Space voice trigger: two plain Space presses within
-      # DOUBLE_SPACE_MS toggle voice recording (same as Ctrl+R). The first
-      # press was already inserted into the editor by normal editing, so it
-      # is removed when the second one fires. Returns true when the key was
-      # consumed; returns false (recording nothing, not toggling) when the
-      # transcription config is missing or disabled so spaces keep typing
-      # normally. Public so specs can drive the same path as handle_key.
+      # DOUBLE_SPACE_MS toggle voice recording (same as Ctrl+R), with nothing
+      # typed between them — the editor character right before the cursor must
+      # be the first press's space. The first press was already inserted into
+      # the editor by normal editing, so it is removed when the second one
+      # fires. Returns true when the key was consumed; returns false (recording
+      # nothing, not toggling) when the transcription config is missing or
+      # disabled so spaces keep typing normally. Public so specs can drive the
+      # same path as handle_key.
       def handle_space_tap(key : KeyEvent) : Bool
         return false if !key.key.char? || key.char != ' ' || key.ctrl? || key.alt?
         return false unless cfg = voice_config
         return false unless cfg.enabled?
         now = Time.monotonic
-        if (last = @last_space_at) && (now - last).total_milliseconds <= DOUBLE_SPACE_MS
+        last = @last_space_at
+        if last && (now - last).total_milliseconds <= DOUBLE_SPACE_MS &&
+           @editor.char_before_cursor == ' '
           @last_space_at = nil
           @editor.handle_input(KeyEvent.new(Key::Backspace))
           toggle_voice_recording
           @dirty = true
           true
         else
+          # Not a trigger: either the window expired or something was typed
+          # between the presses. This press may still arm the next pair.
           @last_space_at = now
           false
         end

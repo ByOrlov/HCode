@@ -7,6 +7,9 @@ require "../../src/tui/app"
 # transcribing + result events onto that stream — mirroring the real server.
 class VoiceSessionMock
   property stop_requests : Int32 = 0
+  # When true the SSE stream is closed right after `started` — the server
+  # dying mid-session, no result or error event ever arrives.
+  property? drop_stream : Bool = false
   @sse : UNIXSocket? = nil
   @server : UNIXServer
   @path : String
@@ -38,7 +41,11 @@ class VoiceSessionMock
       client << "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"
       client << sse(%({"type":"started","sample_rate":16000}))
       client.flush
-      @sse = client
+      if drop_stream?
+        client.close
+      else
+        @sse = client
+      end
     when "/v1/record/stop"
       @stop_requests += 1
       body = %({"status":"stopped","duration_ms":4200})
@@ -216,6 +223,33 @@ describe H2code::TUI::App do
     end
   end
 
+  it "fails the session with an error when the SSE stream dies before the result" do
+    mock = VoiceSessionMock.new
+    mock.drop_stream = true
+    begin
+      app = H2code::TUI::App.new
+      config = H2code::Config::Config.new
+      config.transcription = H2code::Config::TranscriptionConfig.new(
+        enabled: true, socket: mock.socket_path, engine: "auto", language: "ru")
+      app.app_config = config
+
+      app.toggle_voice_recording
+
+      # Server drops the connection mid-session (possibly before the wait
+      # even observes the recording state): the entry must finish with an
+      # error instead of hanging in the active zone forever.
+      voice_wait_until { !app.voice_active? }.should be_true
+      done = app.@messages.find { |t| t.role == "tool" && t.tool_name == "RECORDING" }
+      done.should_not be_nil
+      if m = done
+        m.is_error?.should be_true
+        (m.tool_result || "").should contain("closed before the transcription result")
+      end
+    ensure
+      mock.close
+    end
+  end
+
   it "starts a recording on a double-Space tap (alternative to Ctrl+R)" do
     mock = VoiceSessionMock.new
     begin
@@ -225,9 +259,12 @@ describe H2code::TUI::App do
         enabled: true, socket: mock.socket_path, engine: "auto", language: "ru")
       app.app_config = config
 
-      # First tap: not consumed (the space is typed normally), but armed.
+      # First tap: not consumed (the space is typed normally), but armed. In
+      # the real flow handle_key inserts the space into the editor after
+      # handle_space_tap returns false — mirror that here.
       app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
       app.@last_space_at.should_not be_nil
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char(' '))
 
       # Second tap within DOUBLE_SPACE_MS: consumed → recording starts and
       # the armed state resets.
@@ -238,6 +275,41 @@ describe H2code::TUI::App do
       # Stop so the mock's SSE fiber finishes cleanly.
       app.toggle_voice_recording
       voice_wait_until { !app.voice_active? }.should be_true
+    ensure
+      mock.close
+    end
+  end
+
+  it "does not start a recording when text is typed between the two Spaces" do
+    mock = VoiceSessionMock.new
+    begin
+      app = H2code::TUI::App.new
+      config = H2code::Config::Config.new
+      config.transcription = H2code::Config::TranscriptionConfig.new(
+        enabled: true, socket: mock.socket_path, engine: "auto", language: "ru")
+      app.app_config = config
+
+      app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char(' '))
+
+      # Characters typed between the presses (same path handle_key takes for
+      # the editor; @last_space_at is reset by handle_key, but the trigger
+      # must also hold without that reset — see the armed-state check below).
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char('т'))
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char('е'))
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char('к'))
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char('с'))
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char('т'))
+
+      # Worst case: the armed timestamp survived (e.g. the intermediate keys
+      # were consumed by a dialog before reaching the reset branch in
+      # handle_key). The editor-content guard must still refuse to trigger,
+      # and the press must be typed normally instead.
+      app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
+      app.voice_active?.should be_false
+      # handle_key types the refused press normally — mirror it.
+      app.@editor.handle_input(H2code::TUI::KeyEvent.char(' '))
+      app.@editor.text.should eq(" текст ")
     ensure
       mock.close
     end
