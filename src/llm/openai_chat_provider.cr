@@ -45,6 +45,15 @@ module H2code
       # (GLM / other OpenAI-compatible endpoints). Mirrors TS
       # `usesMaxCompletionTokens`.
       property? uses_max_completion_tokens : Bool = false
+      # How long the stream may stay silent (no SSE chunks) before the request
+      # is torn down and retried. Covers both "connected but the server never
+      # answers" and "the stream stalled after partial output" — the hung
+      # connections that otherwise leave the agent spinning on the busy badge
+      # forever. Reset on every received chunk. Local backends (ollama,
+      # lmstudio) override with a longer first-token budget in their
+      # constructors because loading a model into RAM can legitimately take
+      # minutes.
+      property stream_stall_timeout : Time::Span = 60.seconds
 
       # Transport used for all outbound HTTP. Defaults to the real proxy-aware
       # client; tests inject a fake to simulate network drops and aborts.
@@ -520,10 +529,15 @@ module H2code
           end
         end
 
+        # Stall clock: starts when the request is issued and resets on every
+        # received chunk, so it covers both first-byte and mid-stream stalls.
+        last_activity = Time.monotonic
+
         loop do
           select
           when chunk = chunks.receive?
             break if chunk.nil?
+            last_activity = Time.monotonic
             block.call(chunk)
             # Abort can be set by the main loop fiber between chunks (via
             # Fiber.yield in the chat callback). Check immediately instead of
@@ -540,6 +554,16 @@ module H2code
               chunks.close
               active.close!
               raise AbortedError.new
+            end
+            # Stall guard: a provider that accepted the request but never
+            # answers (or whose stream went silent mid-response) would
+            # otherwise hang the agent forever — the loop above only ever
+            # waits. Tear the connection down and let the agent loop's retry
+            # policy re-issue the request.
+            if Time.monotonic - last_activity > @stream_stall_timeout
+              chunks.close
+              active.close!
+              raise StreamTimeoutError.new(@stream_stall_timeout.total_seconds)
             end
           end
         end

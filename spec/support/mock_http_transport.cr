@@ -13,6 +13,9 @@ module H2code
       # Yield an IO that blocks on read forever (simulates a hanging
       # connection), so the consumer loop hits the abort timeout.
       Blocking
+      # Stream `stream_lines`, then block on read forever (simulates a
+      # provider that answers and then goes silent mid-response).
+      StallMidStream
     end
 
     property mode : Mode = Mode::NormalStream
@@ -65,6 +68,10 @@ module H2code
         io = BlockingIO.new
         response = HTTP::Client::Response.new(200, body_io: io)
         yield response, response.body_io
+      when .stall_mid_stream?
+        io = StallReadIO.new(@stream_lines)
+        response = HTTP::Client::Response.new(200, body_io: io)
+        yield response, response.body_io
       end
     end
 
@@ -96,6 +103,31 @@ module H2code
     private class BlockingIO < IO
       def read(slice : Bytes) : Int32
         loop { sleep 50.milliseconds }
+      end
+
+      def write(slice : Bytes) : Nil
+      end
+    end
+
+    # IO that serves the scripted SSE lines, then blocks on read forever —
+    # simulates a provider that streams partial output and then stalls, so the
+    # consumer loop's stall timeout fires.
+    private class StallReadIO < IO
+      @prefix : String
+      @pos : Int32 = 0
+
+      def initialize(lines : Array(String))
+        @prefix = lines.map { |l| "data: #{l}\n\n" }.join
+      end
+
+      def read(slice : Bytes) : Int32
+        if @pos >= @prefix.bytesize
+          loop { sleep 50.milliseconds }
+        end
+        count = Math.min(slice.size, @prefix.bytesize - @pos)
+        @prefix.to_slice[@pos, count].copy_to(slice)
+        @pos += count
+        count
       end
 
       def write(slice : Bytes) : Nil

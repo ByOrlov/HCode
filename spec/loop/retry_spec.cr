@@ -40,6 +40,11 @@ describe H2code::Loop::RetryPolicy do
     policy.retryable?(IO::Error.new("connection reset")).should be_true
   end
 
+  it "treats stream stall timeouts as retryable" do
+    policy = H2code::Loop::RetryPolicy.new
+    policy.retryable?(H2code::LLM::StreamTimeoutError.new(60)).should be_true
+  end
+
   it "never retries user cancellation" do
     policy = H2code::Loop::RetryPolicy.new
     policy.retryable?(H2code::Loop::UserCancellationError.new("cancelled")).should be_false

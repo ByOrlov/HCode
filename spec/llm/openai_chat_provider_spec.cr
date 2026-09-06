@@ -129,6 +129,36 @@ describe H2code::LLM::OpenAIChatProvider do
       end
     end
 
+    it "raises StreamTimeoutError when the provider never answers" do
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::Blocking
+
+      provider = TestProvider.new("m", "http://localhost", transport: transport)
+      provider.stream_stall_timeout = 0.3.seconds
+
+      error = expect_raises(H2code::LLM::StreamTimeoutError) do
+        provider.chat([H2code::LLM::Message.user("hi")], nil) { }
+      end
+      (error.message || "").should contain("no data")
+    end
+
+    it "raises StreamTimeoutError when the stream stalls mid-response" do
+      transport = H2code::MockHttpTransport.new
+      transport.mode = H2code::MockHttpTransport::Mode::StallMidStream
+      transport.stream_lines = [sse_text_chunk("partial")]
+
+      provider = TestProvider.new("m", "http://localhost", transport: transport)
+      provider.stream_stall_timeout = 0.3.seconds
+
+      parts = [] of H2code::LLM::MessagePart
+      error = expect_raises(H2code::LLM::StreamTimeoutError) do
+        provider.chat([H2code::LLM::Message.user("hi")], nil) { |p| parts << p }
+      end
+      # The chunks received before the stall were still delivered.
+      parts.select(H2code::LLM::TextPart).map(&.text).join.should eq("partial")
+      (error.message || "").should contain("no data")
+    end
+
     it "uses transport for fetch_models (single-shot request)" do
       transport = H2code::MockHttpTransport.new
       provider = TestProvider.new("m", "http://localhost", transport: transport)

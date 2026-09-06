@@ -14,6 +14,9 @@ module H2code
                      temperature : Float64? = nil,
                      max_tokens : Int32? = nil)
         super(model, endpoint, api_key, temperature, max_tokens)
+        # Local model loading can take minutes before the first token — a
+        # remote-provider-sized stall timeout would cancel legitimate work.
+        @stream_stall_timeout = 5.minutes
       end
 
       def name : String

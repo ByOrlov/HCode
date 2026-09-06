@@ -793,5 +793,16 @@ module H2code
         super(message)
       end
     end
+
+    # Raised when the provider goes silent mid-request: either no first byte
+    # within the stall timeout (server accepted the connection but never
+    # started answering) or the SSE stream stalled after partial output.
+    # Retryable by the agent loop's `RetryPolicy` — the request is re-issued,
+    # which is exactly what a hung connection needs.
+    class StreamTimeoutError < Exception
+      def initialize(timeout_seconds : Number)
+        super("Provider stalled: no data for #{timeout_seconds.to_i}s, aborting request")
+      end
+    end
   end
 end
