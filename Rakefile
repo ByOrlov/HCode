@@ -1,4 +1,15 @@
-require "colorize"
+# colorize is a banner-coloring nicety; fall back to plain strings when the
+# gem is missing (e.g. stock system Ruby without `gem install colorize`) so
+# rake tasks still run.
+begin
+  require "colorize"
+rescue LoadError
+  class String
+    def colorize(_color)
+      self
+    end
+  end
+end
 require "open3"
 
 # Resolve the build version: explicit H2CODE_VERSION wins, then the most
@@ -314,6 +325,22 @@ end
 
 desc "Check locale integrity: valid YAML, key parity with en.yml, duplicate keys, %{placeholder} parity (alias of i18n:check)"
 task :i18n_check => "i18n:check"
+
+# ---------------------------------------------------------------------------
+# Ripgrep detection check (delegates to scripts/rg_check.cr) — verifies rg is
+# found via PATH entries and the Homebrew/cargo fallbacks, including the
+# minimal-PATH case common on macOS (GUI/launchd parent without Homebrew dirs).
+# ---------------------------------------------------------------------------
+
+namespace :rg do
+  desc "Check ripgrep (rg) detection: PATH entries + Homebrew/cargo fallbacks, incl. the minimal-PATH macOS case"
+  task :check do
+    puts "▶ Checking ripgrep detection".colorize(:blue)
+    sh "crystal run scripts/rg_check.cr --warnings none --no-color" do |ok, _res|
+      abort "ripgrep check failed" unless ok
+    end
+  end
+end
 
 desc "Remove build artifacts"
 task :clean do

@@ -1,4 +1,5 @@
 require "./sensitive"
+require "./run_rg"
 
 module H2code
   module Tools
@@ -274,10 +275,13 @@ module H2code
         cmd
       end
 
-      # Run rg with timeout and capped stdout/stderr.
+      # Run rg with timeout and capped stdout/stderr. The binary comes from
+      # RunRg.rg_binary (PATH + Homebrew/cargo fallbacks) so a minimal PATH —
+      # common on macOS when spawned from a GUI/launchd parent — still works;
+      # cmd[0] is only the argv placeholder from build_rg_args.
       private def run_rg(cmd : Array(String)) : RgRunResult
         process = Process.new(
-          cmd[0], cmd[1..],
+          RunRg.rg_binary, cmd[1..],
           output: Process::Redirect::Pipe,
           error: Process::Redirect::Pipe,
         )
