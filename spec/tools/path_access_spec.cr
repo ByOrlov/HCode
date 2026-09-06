@@ -42,6 +42,50 @@ describe H2code::Tools::PathAccess do
     end
   end
 
+  # The Windows helpers below are pure string functions compiled on every
+  # host (they are what the `win32` branches in `resolve` /
+  # `within_directory?` delegate to), so the Windows path handling is
+  # verifiable from a POSIX host. Mirrors the failure mode seen on
+  # Windows: `File::SEPARATOR` is `'/'` on all platforms in Crystal, while
+  # canonical Windows paths use `\` and compare case-insensitively.
+  describe "windows path forms" do
+    pa = H2code::Tools::PathAccess
+
+    describe ".windows_absolute_path?" do
+      it "accepts drive-absolute, drive-slash, UNC and rooted forms" do
+        ["C:\\Users\\orelc\\h2code\\Rakefile", "C:/Users/orelc/h2code/Rakefile",
+         "c:\\f", "d:/f", "\\\\server\\share\\f", "\\Users\\x\\f", "/Users/x/f"].each do |p|
+          pa.windows_absolute_path?(p).should be_true
+        end
+      end
+
+      it "rejects relative and drive-relative forms" do
+        ["Rakefile", "src/main.cr", "../secret.txt", "C:foo\\bar", "~", ""].each do |p|
+          pa.windows_absolute_path?(p).should be_false
+        end
+      end
+    end
+
+    it ".windows_comparison_form folds case and separators" do
+      pa.windows_comparison_form("C:/Users/ORELC/h2code/Rakefile")
+        .should eq("c:\\users\\orelc\\h2code\\rakefile")
+    end
+
+    it "within_directory? matches across separator and case differences (windows core)" do
+      within = ->(c : String, b : String) {
+        pa.within_directory?(
+          pa.windows_comparison_form(c),
+          pa.windows_comparison_form(b),
+          '\\')
+      }
+      within.call("C:\\Users\\orelc\\h2code\\Rakefile", "C:/Users/orelc/h2code").should be_true
+      within.call("c:\\users\\ORELC\\h2code\\src\\main.cr", "C:\\Users\\orelc\\h2code").should be_true
+      within.call("C:\\Users\\orelc\\h2code", "C:/Users/orelc/h2code").should be_true
+      within.call("C:\\Users\\orelc\\h2code-evil\\x", "C:/Users/orelc/h2code").should be_false
+      within.call("C:\\Users\\orelc", "C:/Users/orelc/h2code").should be_false
+    end
+  end
+
   describe ".resolve" do
     it "returns the canonical path for an inside-workspace relative file" do
       H2code::Tools::PathAccess.resolve("src/main.cr", "/work", H2code::Tools::PathAccess::Mode::Write)
