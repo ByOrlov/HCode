@@ -407,7 +407,15 @@ module H2code
             exit(1)
           end
         else
-          lifecycle.create(work_dir)
+          fresh = lifecycle.create(work_dir)
+          # Fresh session + cloud sync on → ping the daemon right away, so
+          # remote clients (PWA) see the new session without waiting for
+          # the daemon's 3s disk rescan (Remote::Sync.notify_session_created).
+          if config.sync.enabled?
+            sid = fresh.read_state.try(&.id) || fresh.meta_id?
+            Remote::Sync.notify_session_created(sid) if sid
+          end
+          fresh
         end
       rescue e : H2code::Session::SessionBusyError
         # Another live h2code process owns the session; two writers on one
@@ -725,7 +733,9 @@ module H2code
 
     # `h2code sync [on|off|code|resync|status]` — headless twin of the TUI `/sync`
     # command. Bare `h2code sync` acts as `sync code` (current QR, no rotation).
-    # Flips `sync.enabled` in config.json and shows the pairing QR/relay.
+    # Flips `sync.enabled` in config.json, shows the pairing QR/relay, and
+    # toggles the running daemon's relay data-transfer mode over its control
+    # socket (on = connect + stream, off = drop the relay connection).
     # The h2code-remote daemon is MANUAL-ONLY (2026-09-03): hcode never
     # spawns or stops it — the daemon is a separate service the user runs
     # himself. `resync [url]` issues a fresh pairing code + QR, optionally
@@ -751,12 +761,12 @@ module H2code
         end
         config.sync.enabled = true
         config.save
-        puts "sync enabled; the h2code-remote daemon is manual-only — start it yourself (separate service)"
+        puts "sync enabled; #{Remote::Sync.set_daemon_sync_mode("on")}"
         puts Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, config.sync.relay_url)
       when "off"
         config.sync.enabled = false
         config.save
-        puts "sync disabled; the h2code-remote daemon (if running) is untouched — stop it manually"
+        puts "sync disabled; #{Remote::Sync.set_daemon_sync_mode("off")}"
       when "code"
         if config.sync.relay_url.empty?
           config.sync.relay_url = Remote::Sync::DEFAULT_RELAY_URL
@@ -786,6 +796,9 @@ module H2code
         daemon = Remote::Sync.daemon_running? ? "running" : "stopped"
         puts "cloud sync: #{config.sync.enabled? ? "on" : "off"}"
         puts "daemon: #{daemon} (manual — hcode never starts/stops it)"
+        if st = Remote::Sync.daemon_sync_status
+          puts "relay transfer: #{st[0]} (#{st[1] ? "uplink running" : "uplink stopped"})"
+        end
         puts "relay: #{config.sync.relay_url}"
         puts "bridge: #{Remote::Sync.bridge_url}" if Remote::Sync.daemon_running?
       else
@@ -1071,6 +1084,11 @@ module H2code
         store.adopt(new_store)
         store.ensure_wire
         app.session_id = store.read_state.try(&.id) || ""
+        # `/new` — same immediate daemon ping as at TUI startup (see run):
+        # the new session must appear in the PWA at once, not on rescan.
+        if config.sync.enabled? && !app.session_id.empty?
+          Remote::Sync.notify_session_created(app.session_id)
+        end
         H2code::Tools::PlanMode.plan_service = H2code::Tools::AgentPlanService.new(store.session_dir, "main")
         # Restart the cron scheduler against the fresh session store.
         cron_service.stop
@@ -1827,8 +1845,8 @@ module H2code
         Commands:
           h2code sync [on|off|code|resync|status]   Cloud sync management
               sync                     Show current pairing QR (same as `sync code`)
-              sync on                  Enable sync, start daemon, show pairing QR
-              sync off                 Stop daemon and disable sync
+              sync on                  Enable sync, connect daemon to relay, show pairing QR
+              sync off                 Disable sync, drop daemon's relay connection
               sync code                Show current pairing QR
               sync resync [relay-url]  New pairing code + QR (e.g. for a new relay)
               sync status              Show sync status

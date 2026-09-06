@@ -22,6 +22,7 @@ require "./json_rpc"
 require "./session"
 require "./approval"
 require "./plan_review"
+require "./question"
 require "./event_translator"
 
 module H2code
@@ -580,6 +581,10 @@ module H2code
         H2code::Tools::PlanMode.permission_mode = H2code::Tools::PermissionModeRef.new(
           auto: permission.mode.auto?)
         H2code::Tools::PlanMode.plan_review_service = PlanReviewHandler.new(@rpc, session_id)
+        # AskUserQuestion over the same reverse-RPC channel (`session/
+        # request_question`): without a QuestionService the tool fails with
+        # "connected client does not support interactive questions".
+        H2code::Tools::AskUserQuestion.service = QuestionHandler.new(@rpc, session_id)
 
         acp_session
       end

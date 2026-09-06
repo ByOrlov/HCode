@@ -118,6 +118,13 @@ module H2code
 
       private def read_available : Nil
         loop do
+          # On POSIX raw mode a read() with an empty queue returns 0, but on
+          # Windows a console read (ReadConsoleW under the hood) blocks until
+          # the NEXT key press. Draining until a read returns 0 would freeze
+          # the input loop there, so only read chunks while input is actually
+          # pending (zero-timeout readiness check) and stop when it runs dry.
+          break unless @wait.stdin_readable?(Time::Span.zero)
+
           buf = uninitialized UInt8[256]
           slice = buf.to_slice
           bytes_read = read_stdin_chunk(slice)

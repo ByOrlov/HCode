@@ -371,7 +371,9 @@ module H2code
       end
 
       # `/sync [on|off|code|status]` — cloud sync with the PWA. `on`
-      # enables it in config.json and prints the pairing QR; bare `/sync`
+      # enables it in config.json, tells the running daemon to connect to
+      # the relay (control socket) and prints the pairing QR; `off`
+      # disables it and drops the daemon's relay connection. Bare `/sync`
       # acts as `/sync code` (current QR, no rotation). The h2code-remote
       # daemon is MANUAL-ONLY (2026-09-03): hcode never spawns or stops
       # it — the daemon is a separate service. Auth is code-only
@@ -386,11 +388,11 @@ module H2code
           end
           cfg.sync.enabled = true
           cfg.save
-          emit_to_log(Message.new("system", "Sync enabled. The h2code-remote daemon is manual-only — start it yourself (separate service)."))
+          emit_to_log(Message.new("system", "Sync enabled. #{Remote::Sync.set_daemon_sync_mode("on")}"))
           emit_to_log(Message.new("system", Remote::Sync.qr_banner(Remote::Sync.read_or_create_code, cfg.sync.relay_url)))
         when "off"
           cfg.try { |c| c.sync.enabled = false; c.save }
-          emit_to_log(Message.new("system", "Sync disabled. The h2code-remote daemon (if running) is untouched — stop it manually."))
+          emit_to_log(Message.new("system", "Sync disabled. #{Remote::Sync.set_daemon_sync_mode("off")}"))
         when "code", ""
           # Bare /sync = /sync code: QR of the current pairing code (no
           # rotation; a fresh code comes from `h2code sync resync` only).
@@ -408,7 +410,12 @@ module H2code
         sync = cfg.try(&.sync) || Config::SyncConfig.new
         state = sync.enabled? ? "on" : "off"
         daemon = Remote::Sync.daemon_running? ? "running (#{Remote::Sync.bridge_url})" : "stopped"
-        "Cloud sync: #{state}\nDaemon: #{daemon}\nRelay: #{sync.relay_url}"
+        transfer = if st = Remote::Sync.daemon_sync_status
+                     "Relay transfer: #{st[0]} (#{st[1] ? "uplink running" : "uplink stopped"})"
+                   else
+                     "Relay transfer: unknown (daemon not answering)"
+                   end
+        "Cloud sync: #{state}\nDaemon: #{daemon}\n#{transfer}\nRelay: #{sync.relay_url}"
       end
 
       private def cmd_settings : Nil

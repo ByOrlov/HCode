@@ -7,6 +7,7 @@ require "random/secure"
 require "process"
 require "file_utils"
 require "socket"
+require "json"
 require "./qr"
 
 module H2code
@@ -126,7 +127,108 @@ module H2code
       # TUI launch and the start/stop wiring in `h2code sync` / `/sync`
       # were removed after they spammed daemon.log with lock errors from
       # repeated spawn attempts. hcode only reads daemon state (pid file)
-      # for `sync status` and manages the pairing code/QR.
+      # for `sync status` and manages the pairing code/QR — plus the relay
+      # data-transfer mode over the control socket below (2026-09-05):
+      # `/sync on|off` toggles the RUNNING daemon's relay connection, it
+      # never starts or stops the daemon itself.
+
+      # Daemon control socket (`$H2CODE_HOME/remote/control.sock`,
+      # DaemonControl in h2code-remote): runtime channel for
+      # `/sync on|off` (TUI) and `h2code sync on|off`.
+      def self.control_socket_path : String
+        File.join(state_dir, "control.sock")
+      end
+
+      # Relay data-transfer mode file the daemon persists (`on`/`off`,
+      # default `on`). Written directly when the daemon is not running so
+      # its next start honors the mode.
+      def self.sync_mode_path : String
+        File.join(state_dir, "sync.mode")
+      end
+
+      # Switch the running daemon's relay data-transfer mode: `off` drops
+      # its relay connection (local bridge keeps working), `on` reconnects
+      # and resumes streaming. When the daemon is not running (or its
+      # socket is stale) the mode file is written directly instead.
+      # Returns human-readable feedback for the caller.
+      def self.set_daemon_sync_mode(mode : String) : String
+        begin
+          sock = UNIXSocket.new(control_socket_path)
+        rescue ex
+          File.write(sync_mode_path, mode)
+          return "daemon not running — relay sync #{mode} saved, applied when it starts"
+        end
+        begin
+          sock.read_timeout = 2.seconds
+          sock << {"op" => "sync", "mode" => mode}.to_json << '\n'
+          sock.flush
+          reply = JSON.parse(sock.read_line)
+          if reply["ok"]?.try(&.as_bool?)
+            relay = reply["relay"]?.try(&.as_bool?) ? "uplink running" : "uplink stopped"
+            "daemon: relay sync #{reply["mode"]?.try(&.to_s)} (#{relay})"
+          else
+            "daemon refused: #{reply["error"]?.try(&.to_s) || "unknown error"}"
+          end
+        rescue ex
+          "daemon did not answer — relay sync mode unchanged"
+        ensure
+          begin
+            sock.close
+          rescue
+          end
+        end
+      end
+
+      # Tell the running daemon a fresh session just appeared (TUI startup,
+      # `/new`): it pushes `session.created` to connected clients
+      # immediately instead of waiting for its 3s disk rescan. Fire-and-
+      # forget — no daemon (or a silent one) is not an error, the rescan
+      # backstops the announcement anyway.
+      def self.notify_session_created(session_id : String) : Nil
+        begin
+          sock = UNIXSocket.new(control_socket_path)
+        rescue ex
+          return # daemon not running
+        end
+        begin
+          sock.read_timeout = 1.second
+          sock << {"op" => "session.created", "id" => session_id}.to_json << '\n'
+          sock.flush
+          sock.read_line # drain the {"ok":true} reply
+        rescue ex
+          # daemon busy/dead — the disk rescan will announce the session
+        ensure
+          begin
+            sock.close
+          rescue
+          end
+        end
+      end
+
+      # Current daemon relay state `{mode, connected}`, or nil when the
+      # daemon is not running / not answering.
+      def self.daemon_sync_status : Tuple(String, Bool)?
+        begin
+          sock = UNIXSocket.new(control_socket_path)
+        rescue ex
+          return nil
+        end
+        begin
+          sock.read_timeout = 2.seconds
+          sock << {"op" => "status"}.to_json << '\n'
+          sock.flush
+          reply = JSON.parse(sock.read_line)
+          return nil unless reply["ok"]?.try(&.as_bool?)
+          {reply["mode"]?.try(&.to_s) || "on", reply["relay"]?.try(&.as_bool?) || false}
+        rescue ex
+          nil
+        ensure
+          begin
+            sock.close
+          rescue
+          end
+        end
+      end
 
       # Full QR banner text: half-block rows plus the formatted code. The QR
       # payload is the pairing URL — the app scans it and learns both the
