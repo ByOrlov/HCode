@@ -1,11 +1,18 @@
 require "colorize"
+require "open3"
 
 # Resolve the build version: explicit H2CODE_VERSION wins, then the most
 # recent git tag (`git describe --tags --abbrev=0`), then "0.0.0-dev".
+# git is invoked via Open3 (no shell): a backtick-style `2>/dev/null`
+# redirect goes through cmd.exe on Windows, which fails on the Unix
+# /dev/null path and silently skips the git call entirely.
 def h2code_build_version
   return ENV["H2CODE_VERSION"] if ENV.key?("H2CODE_VERSION")
-  tag = `git describe --tags --abbrev=0 2>/dev/null`.strip
+  tag, _ = Open3.capture2("git", "describe", "--tags", "--abbrev=0", err: File::NULL)
+  tag = tag.strip
   tag.empty? ? "0.0.0-dev" : tag
+rescue Errno::ENOENT, RuntimeError
+  "0.0.0-dev"
 end
 
 MINIAUDIO_DIR = File.expand_path("vendor/miniaudio", __dir__)
