@@ -58,7 +58,9 @@ module H2code
     struct TranscriptionConfig
       include JSON::Serializable
 
-      property? enabled : Bool = false
+      # Enabled by default: voice recording works out of the box whenever
+      # the h2voice server is present; `"enabled": false` opts out.
+      property? enabled : Bool = true
       property socket : String = "~/.h2voice/voice.sock"
       property engine : String = "auto"
       # Default voice language ("auto" = detect on the server; detection can
@@ -66,7 +68,7 @@ module H2code
       property language : String = "auto"
       property max_duration_sec : Int32 = 120
 
-      def initialize(@enabled : Bool = false,
+      def initialize(@enabled : Bool = true,
                      @socket : String = "~/.h2voice/voice.sock",
                      @engine : String = "auto",
                      @language : String = "auto",
@@ -413,8 +415,12 @@ module H2code
           config.transcription.engine = tr["engine"]?.try(&.as_s?) || config.transcription.engine
           config.transcription.language = tr["language"]?.try(&.as_s?) || config.transcription.language
           config.transcription.max_duration_sec = tr["max_duration_sec"]?.try(&.as_i?) || config.transcription.max_duration_sec
-          # Explicit `false` must survive — an `if v = ...` guard would drop it.
-          config.transcription.enabled = tr["enabled"]?.try(&.as_bool?) == true
+          # Explicit `false` must survive; a missing key keeps the default
+          # (enabled). An `if v = ...` guard would drop the explicit false —
+          # in Crystal `false` is falsey — so test for nil instead.
+          unless (v = tr["enabled"]?.try(&.as_bool?)).nil?
+            config.transcription.enabled = v
+          end
         end
 
         if notif = root["notifications"]?.try(&.as_h?)

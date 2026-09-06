@@ -14,6 +14,19 @@ module H2code
       MAX_OUTPUT_BYTES  = 10 * 1024 * 1024 # 10 MiB
       MAX_STDERR_BYTES  = 1 * 1024 * 1024  # 1 MiB
 
+      @@rg_binary : String?
+
+      # Hardcoded fallback locations checked when `rg` is not on PATH —
+      # common on macOS when the parent process has a minimal environment
+      # (IDE plugin, launchd) that misses the Homebrew/cargo dirs the user's
+      # interactive shell sets up.
+      FALLBACK_RG_PATHS = [
+        "/opt/homebrew/bin/rg", # Homebrew on Apple Silicon
+        "/usr/local/bin/rg",    # Homebrew on Intel
+        "~/.cargo/bin/rg",      # cargo install ripgrep
+        "~/.local/bin/rg",      # cargo/user install (newer layouts)
+      ]
+
       # VCS metadata directories excluded from search. Mirrors
       # `VCS_DIRECTORIES_TO_EXCLUDE` in `support/run-rg.ts`.
       VCS_DIRECTORIES_TO_EXCLUDE = [".git", ".svn", ".hg", ".bzr", ".jj", ".sl"]
@@ -36,6 +49,33 @@ module H2code
         buffer_truncated : Bool,
         timed_out : Bool
 
+      # Resolve the rg binary: PATH entries first, then hardcoded fallback
+      # locations. Returns plain "rg" when nothing is found so that
+      # `Process.new` raises `File::NotFoundError` and the caller reports
+      # the recognizable "install ripgrep" message.
+      def self.resolve_rg_binary(path_env : String?,
+                                 fallbacks : Array(String) = FALLBACK_RG_PATHS) : String
+        unless path_env.nil? || path_env.empty?
+          sep = {{ flag?(:win32) ? ";" : ":" }}
+          path_env.split(sep).each do |dir|
+            next if dir.empty?
+            candidate = File.join(dir, "rg")
+            return candidate if File.file?(candidate) && File.executable?(candidate)
+          end
+        end
+        fallbacks.each do |candidate|
+          expanded = candidate.starts_with?('~') ? File.expand_path(candidate, home: ENV["HOME"]) : candidate
+          return expanded if File.file?(expanded) && File.executable?(expanded)
+        end
+        "rg"
+      end
+
+      # Memoized binary used by `run`. `ENV["PATH"]` is read once — fine,
+      # PATH doesn't change mid-process in practice.
+      def self.rg_binary : String
+        @@rg_binary ||= resolve_rg_binary(ENV["PATH"]?)
+      end
+
       # Run `rg` with `args`. Returns the captured stdout/stderr (capped at
       # MAX_OUTPUT_BYTES / MAX_STDERR_BYTES) and an `exit_code`. On timeout the
       # process is SIGTERM'd, then SIGKILL'd after `SIGTERM_GRACE_S`. When
@@ -45,7 +85,7 @@ module H2code
                    timeout_s : Int32 = DEFAULT_TIMEOUT_S,
                    aborted? : -> Bool = -> { false }) : Result
         process = Process.new(
-          "rg",
+          rg_binary,
           args,
           shell: false,
           chdir: chdir,

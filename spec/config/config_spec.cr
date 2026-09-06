@@ -336,10 +336,21 @@ describe H2code::Config::Config do
 
     it "defaults the transcription section" do
       config = H2code::Config::Config.parse_json(%({}))
-      config.transcription.enabled?.should be_false
+      config.transcription.enabled?.should be_true
       config.transcription.socket.should eq("~/.h2voice/voice.sock")
       config.transcription.engine.should eq("auto")
       config.transcription.max_duration_sec.should eq(120)
+    end
+
+    it "keeps transcription enabled when the section omits the flag" do
+      config = H2code::Config::Config.parse_json(%({"transcription":{"socket":"/tmp/voice.sock"}}))
+      config.transcription.enabled?.should be_true
+      config.transcription.socket.should eq("/tmp/voice.sock")
+    end
+
+    it "survives an explicit transcription opt-out" do
+      config = H2code::Config::Config.parse_json(%({"transcription":{"enabled":false}}))
+      config.transcription.enabled?.should be_false
     end
 
     it "maps H2CODE_VOICE_SOCKET to the transcription socket" do

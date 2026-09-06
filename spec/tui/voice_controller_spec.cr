@@ -184,9 +184,11 @@ describe H2code::TUI::App do
     end
   end
 
-  it "does not start a session when transcription is disabled" do
+  it "does not start a session when transcription is explicitly disabled" do
     app = H2code::TUI::App.new
-    app.app_config = H2code::Config::Config.new
+    config = H2code::Config::Config.new
+    config.transcription.enabled = false
+    app.app_config = config
     app.voice_presence = FakeVoicePresence.new(true)
     app.toggle_voice_recording
     app.voice_active?.should be_false
@@ -194,9 +196,11 @@ describe H2code::TUI::App do
     app.@messages.last.content.should contain("[transcription]")
   end
 
-  it "advises installing H2 Voice when unconfigured and absent from the system" do
+  it "advises installing H2 Voice when transcription is off and H2 Voice is absent" do
     app = H2code::TUI::App.new
-    app.app_config = H2code::Config::Config.new
+    config = H2code::Config::Config.new
+    config.transcription.enabled = false
+    app.app_config = config
     app.voice_presence = FakeVoicePresence.new(false)
     app.toggle_voice_recording
     app.voice_active?.should be_false
@@ -317,7 +321,9 @@ describe H2code::TUI::App do
 
   it "keeps spaces normal when transcription is disabled" do
     app = H2code::TUI::App.new
-    app.app_config = H2code::Config::Config.new
+    config = H2code::Config::Config.new
+    config.transcription.enabled = false
+    app.app_config = config
     app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
     app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
     app.voice_active?.should be_false
