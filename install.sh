@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # H2Code installer — macOS / Linux.
 # Usage:  curl -fsSL https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.sh | bash
+#         install.sh [path/to/h2code]   — install a locally built binary instead of
+#                                         downloading a release asset (used by `rake install`)
 set -euo pipefail
 
 REPO="ByOrlov/H2Code"
@@ -29,25 +31,46 @@ esac
 ASSET="h2code-${arch}-${os}.tar.gz"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
+# --- Local binary mode --------------------------------------------------------
+# When a path to an existing file is passed, skip the release download and
+# install that binary instead (used by `rake install` from a source checkout).
+LOCAL_BIN=""
+if [ "${1:-}" != "" ]; then
+  if [ ! -f "$1" ]; then
+    err "Local binary not found: $1"
+    exit 1
+  fi
+  LOCAL_BIN="$1"
+fi
+
 bold "Installing H2Code for ${arch}-${os}…"
-info "Release asset: ${ASSET}"
+if [ -n "$LOCAL_BIN" ]; then
+  info "Source:        local build (${LOCAL_BIN})"
+else
+  info "Release asset: ${ASSET}"
+fi
 info "Install dir:   ${INSTALL_DIR}"
 
 # --- Download -----------------------------------------------------------------
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-info "Downloading ${URL}…"
-if ! curl -fSL --retry 3 -o "${TMP}/${ASSET}" "$URL"; then
-  err "Download failed."
-  err "If you're on ${arch}-${os}, the asset may not be published yet."
-  err "Check available assets at: https://github.com/${REPO}/releases/latest"
-  exit 1
-fi
+SRC_BIN="${TMP}/${BIN_NAME}"
+if [ -n "$LOCAL_BIN" ]; then
+  SRC_BIN="$LOCAL_BIN"
+else
+  info "Downloading ${URL}…"
+  if ! curl -fSL --retry 3 -o "${TMP}/${ASSET}" "$URL"; then
+    err "Download failed."
+    err "If you're on ${arch}-${os}, the asset may not be published yet."
+    err "Check available assets at: https://github.com/${REPO}/releases/latest"
+    exit 1
+  fi
 
-# --- Verify + extract ---------------------------------------------------------
-info "Extracting…"
-tar -xzf "${TMP}/${ASSET}" -C "$TMP"
+  # --- Verify + extract ---------------------------------------------------------
+  info "Extracting…"
+  tar -xzf "${TMP}/${ASSET}" -C "$TMP"
+fi
 
 # --- Runtime dependencies -----------------------------------------------------
 # H2Code links dynamically against OpenSSL (libssl/libcrypto), libyaml and pcre2.
@@ -154,7 +177,7 @@ esac
 
 # --- Install ------------------------------------------------------------------
 mkdir -p "$INSTALL_DIR"
-mv -f "${TMP}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+mv -f "${SRC_BIN}" "${INSTALL_DIR}/${BIN_NAME}"
 chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 info "Installed ${INSTALL_DIR}/${BIN_NAME}"
 

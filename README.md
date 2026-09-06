@@ -100,6 +100,9 @@ cd H2Code
 shards install
 rake build            # → ./h2code (release flags)
 
+# Or build + install in one go (same as install.sh: deps, ~/.h2code/bin, PATH)
+rake install
+
 # Smoke-test your credentials
 ./h2code --hi
 
