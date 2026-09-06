@@ -233,6 +233,10 @@ module H2code
       @session_search_cancel_check : (-> Bool)? = nil
       @session_picker_mode : Symbol = :resume
       @show_welcome : Bool = true
+      # Random startup tip (see H2code::Tips), rendered right under the
+      # welcome box in the active-zone green with a `│` bar. nil = no tip
+      # (disabled in config or no tips files found).
+      property startup_tip : String? = nil
       property? debug_zones : Bool = false
       property on_debug_zones_change : (Bool -> Nil)? = nil
       @session_id : String = ""

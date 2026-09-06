@@ -290,6 +290,25 @@ describe H2code::Config::Config do
       end
     end
 
+    it "round-trips the show_tips ui flag (explicit false survives)" do
+      config = H2code::Config::Config.new
+      config.show_tips?.should be_true
+
+      config.show_tips = false
+      path = File.join(Dir.tempdir, "h2code-config-test-#{Random::Secure.hex(8)}.json")
+      begin
+        config.save(path)
+        reloaded = H2code::Config::Config.parse_json(File.read(path))
+        reloaded.show_tips?.should be_false
+
+        # Missing key keeps the default (enabled).
+        reloaded = H2code::Config::Config.parse_json(%({"ui":{}}))
+        reloaded.show_tips?.should be_true
+      ensure
+        File.delete(path) rescue nil
+      end
+    end
+
     it "round-trips permission.sudo_mode and rejects unknown values" do
       config = H2code::Config::Config.new
       config.sudo_mode.should eq("off")

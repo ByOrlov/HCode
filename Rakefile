@@ -342,6 +342,29 @@ namespace :rg do
   end
 end
 
+# ---------------------------------------------------------------------------
+# Startup tips integrity check (delegates to scripts/tips_check.cr) — verifies
+# tips/*.json: one file per supported locale, valid JSON with non-empty
+# code/text, and tip-code parity across languages.
+# ---------------------------------------------------------------------------
+
+namespace :tips do
+  desc "Check tips integrity: valid JSON, one file per locale, tip-code parity with en.json"
+  task :check do
+    puts "▶ Checking tips integrity".colorize(:blue)
+    sh "crystal run scripts/tips_check.cr --warnings none --no-color" do |ok, _res|
+      abort "tips check failed" unless ok
+    end
+  end
+end
+
+desc "Check tips integrity: valid JSON, one file per locale, tip-code parity with en.json (alias of tips:check)"
+task :tips_check => "tips:check"
+
+# Aggregated pre-commit validation: locale + tips data integrity.
+desc "Run pre-commit checks (i18n + tips integrity)"
+task :precommit => ["i18n:check", "tips:check"]
+
 desc "Remove build artifacts"
 task :clean do
   rm_f "h2code"

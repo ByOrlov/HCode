@@ -195,6 +195,17 @@ try {
         Move-Item -Path $Src -Destination $Dest -Force
         Write-Info "Installed $Dest"
 
+        # Startup tips data (tips/*.json, read from disk — see src/tips/tips.cr).
+        # Only present when the release archive bundles them. Placed next to the
+        # binary, which is one of the runtime tips lookup paths.
+        $TipsSrc = Join-Path $Tmp.FullName 'tips'
+        if (Test-Path $TipsSrc) {
+            $TipsDir = Join-Path $InstallDir 'tips'
+            New-Item -ItemType Directory -Path $TipsDir -Force | Out-Null
+            Copy-Item -Path (Join-Path $TipsSrc '*.json') -Destination $TipsDir -Force
+            Write-Info "Installed tips to $TipsDir"
+        }
+
         # --- Runtime dependencies -------------------------------------------------
         # h2code.exe links dynamically against OpenSSL (libcrypto/libssl), libyaml
         # and pcre2. These DLLs are not present on a stock Windows install, so we

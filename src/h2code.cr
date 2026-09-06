@@ -100,6 +100,7 @@ require "./notify/player"
 require "./notify/webhook"
 require "./notify/dispatcher"
 require "./config/config"
+require "./tips/tips"
 require "./transcription/presence"
 require "./transcription/client"
 require "./i18n/i18n"
@@ -894,6 +895,9 @@ module H2code
       dispatcher = Notify::Dispatcher.from_config(config.notifications)
       app = TUI::App.new(dispatcher: dispatcher)
       app.app_config = config
+      # Random startup tip (shown under the welcome box) — data-driven, read
+      # from tips/*.json next to the config (see H2code::Tips).
+      app.startup_tip = H2code::Tips.random_tip(I18n.resolve_locale(config.language)) if config.show_tips?
       app.model = agent.provider.model_name
       app.provider_name = config.provider_name.to_s
       app.permission_mode = config.permission_mode

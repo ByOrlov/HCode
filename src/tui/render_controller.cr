@@ -167,6 +167,15 @@ module H2code
           @log_lines_cache.clear
           if @show_welcome
             @log_lines_cache.concat(render_welcome_box(cols))
+            if tip = @startup_tip
+              # Startup tip: dark green `│` bar (no indent), gray text.
+              @log_lines_cache << ""
+              bar = ANSI.color(@theme.colors.secondary, nil)
+              gray = ANSI.color(@theme.colors.dim, nil)
+              wrap_text(tip, cols - 2).each do |line|
+                @log_lines_cache << "#{bar}│#{ANSI.reset}#{gray} #{line}#{ANSI.reset}"
+              end
+            end
             @log_lines_cache << ""
           end
           @messages.each do |msg|

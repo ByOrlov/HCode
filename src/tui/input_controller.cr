@@ -584,6 +584,8 @@ module H2code
           cmd_sudo(args)
         when "/sounds"
           cmd_sounds(args)
+        when "/tips"
+          cmd_tips(args)
         when "/volume"
           cmd_volume(args)
         when "/effort"

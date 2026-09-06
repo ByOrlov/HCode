@@ -158,6 +158,15 @@ mv -f "${TMP}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 info "Installed ${INSTALL_DIR}/${BIN_NAME}"
 
+# Startup tips data (tips/*.json, read from disk next to config.json — see
+# src/tips/tips.cr). Only present when the release archive bundles them.
+if [ -d "${TMP}/tips" ]; then
+  TIPS_DIR="${H2CODE_HOME:-$HOME/.h2code}/tips"
+  mkdir -p "$TIPS_DIR"
+  cp -f "${TMP}"/tips/*.json "$TIPS_DIR/"
+  info "Installed tips to ${TIPS_DIR}"
+fi
+
 # --- PATH ---------------------------------------------------------------------
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) : already on PATH ;;

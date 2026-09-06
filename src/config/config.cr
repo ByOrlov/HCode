@@ -122,6 +122,9 @@ module H2code
       property proxy : String? = nil
       property language : String? = nil
       property? debug_zones : Bool = false
+      # Show a random tip under the welcome box at startup (see H2code::Tips).
+      # Toggled via `/tips on|off`.
+      property? show_tips : Bool = true
       # --- Поведенческие флаги (раньше читались из ENV напрямую) ---
       property? debug : Bool = false
       property? cron_enabled : Bool = true
@@ -403,6 +406,11 @@ module H2code
         if ui = root["ui"]?.try(&.as_h?)
           config.language = ui["language"]?.try(&.as_s?)
           config.debug_zones = ui["debug_zones"]?.try(&.as_bool?) || false
+          # Explicit `false` must survive; a missing key keeps the default
+          # (enabled). See the transcription `enabled` note above.
+          unless (v = ui["show_tips"]?.try(&.as_bool?)).nil?
+            config.show_tips = v
+          end
         end
 
         if sync = root["sync"]?.try(&.as_h?)
@@ -626,6 +634,7 @@ module H2code
                   json.field("language", lang)
                 end
                 json.field("debug_zones", @debug_zones)
+                json.field("show_tips", @show_tips)
               end
             end
 

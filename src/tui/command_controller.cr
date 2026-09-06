@@ -665,6 +665,36 @@ module H2code
         end
       end
 
+      # Toggle the startup tip shown under the welcome box. Toggling also
+      # applies immediately while the welcome box is still visible (the tip
+      # lives in the log cache, so it must be invalidated).
+      private def cmd_tips(args : String) : Nil
+        case args.strip.downcase
+        when "on"
+          if cfg = @app_config
+            cfg.show_tips = true
+            cfg.save
+          end
+          @startup_tip = H2code::Tips.random_tip(I18n.resolve_locale(@app_config.try(&.language)))
+          @log_cache_dirty = true
+          emit_to_log(Message.new("system", H2code.t("ui.tip_on")))
+        when "off"
+          if cfg = @app_config
+            cfg.show_tips = false
+            cfg.save
+          end
+          @startup_tip = nil
+          @log_cache_dirty = true
+          emit_to_log(Message.new("system", H2code.t("ui.tip_off")))
+        when ""
+          enabled = @app_config.try(&.show_tips?) || false
+          state = H2code.t(enabled ? "ui.tip_on_label" : "ui.tip_off_label")
+          emit_to_log(Message.new("system", H2code.t("ui.tip_status", state: state)))
+        else
+          emit_to_log(Message.new("error", H2code.t("ui.tip_usage")))
+        end
+      end
+
       private def cmd_volume(args : String) : Nil
         val = args.strip.to_i?
         if val.nil? || val < 0 || val > 100
