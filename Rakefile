@@ -56,13 +56,23 @@ def setup_msvc_environment
   return unless install_path
   vcvarsall = "#{install_path}/VC/Auxiliary/Build/vcvarsall.bat"
   return unless File.file?(vcvarsall)
-  # Run vcvarsall and dump the resulting environment, then merge it in.
-  output = `cmd /c "#{vcvarsall}" x64 >nul 2>nul && set`
+  # `call` runs vcvarsall inside the SAME cmd.exe instance that later executes
+  # `set`. A bare `cmd /c "vcvarsall" ... && set` would lose the variables:
+  # `&& set` runs in the outer shell, while vcvarsall only modified the child
+  # cmd process which has already exited — leaving INCLUDE/LIB unset and
+  # cl.exe failing with C1083 (stdio.h not found).
+  output = `call "#{vcvarsall}" x64 >nul 2>nul & set`
   output.each_line do |line|
     key, val = line.chomp.split("=", 2)
     next unless key && val
-    ENV[key] = val
+    # Console output arrives in the OEM codepage; keep invalid bytes from
+    # aborting ENV[]= for values with non-ASCII characters.
+    ENV[key] = val.scrub
   end
+  return if ENV["INCLUDE"] && !ENV["INCLUDE"].empty?
+  warn "warning: vcvarsall ran but did not set INCLUDE — the Windows SDK may be missing.\n" \
+       "Install the \"Desktop development with C++\" workload (includes the Windows SDK),\n" \
+       "or build from the \"Developer Command Prompt for VS\"."
 end
 
 # Full linker flags for miniaudio: the object/archive path plus platform-specific
