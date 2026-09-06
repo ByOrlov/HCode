@@ -826,7 +826,7 @@ module H2code
           meter_idx = (Math.sqrt(@voice_level) * LEVEL_BLOCKS.size).clamp(0..(LEVEL_BLOCKS.size - 1)).to_i
           meter = LEVEL_BLOCKS[meter_idx]
           lines << "#{lead}#{ec}#{bullet_frame}#{r} #{ec}#{ANSI.bold}REC#{r} #{tc}#{format_voice_time(voice_elapsed_ms)}#{r} #{pc}#{meter}#{r}"
-          lines << "#{lead}  #{dc}Ctrl+R / Esc / Space — stop and transcribe#{r}"
+          lines << "#{lead}  #{dc}Ctrl+R / Space — stop and transcribe · Esc — cancel#{r}"
         else
           sp = Spinner::FRAMES[@spin_phase % Spinner::FRAMES.size]
           engine = @voice_engine.empty? ? "" : " · #{@voice_engine}"
@@ -846,12 +846,14 @@ module H2code
 
       # Header for a finished voice recording: "● Voice message · 00:07 ·
       # gigaam" (duration/engine/language from the meta JSON stored in
-      # tool_args) or "✗ Recording failed" when the session errored.
+      # tool_args), "○ Cancelled · 00:04" for a discarded recording, or
+      # "✗ Recording failed" when the session errored.
       private def voice_tool_header(args : String?, has_result : Bool, is_error : Bool) : String
         return "#{ANSI.color(@theme.colors.error, nil)}✗ #{ANSI.reset}#{ANSI.color(@theme.colors.error, nil)}#{ANSI.bold}Recording failed#{ANSI.reset}" if is_error
 
         duration = ""
         engine = ""
+        cancelled = false
         if args
           begin
             parsed = JSON.parse(args)
@@ -859,8 +861,15 @@ module H2code
               duration = format_voice_time(ms)
             end
             engine = parsed["engine"]?.try(&.to_s) || ""
+            cancelled = parsed["cancelled"]?.try(&.as_bool?) || false
           rescue JSON::ParseException
           end
+        end
+        if cancelled
+          bullet = "#{ANSI.color(@theme.colors.dim, nil)}○ #{ANSI.reset}"
+          label = "#{ANSI.color(@theme.colors.dim, nil)}Cancelled#{ANSI.reset}"
+          detail = duration.empty? ? "" : "#{ANSI.color(@theme.colors.dim, nil)} · #{duration}#{ANSI.reset}"
+          return "#{bullet}#{label}#{detail}"
         end
         bullet = "#{ANSI.color(@theme.colors.success, nil)}● #{ANSI.reset}"
         label = "#{ANSI.color(@theme.colors.primary, nil)}#{ANSI.bold}Voice message#{ANSI.reset}"

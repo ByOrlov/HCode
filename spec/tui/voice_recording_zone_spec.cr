@@ -7,7 +7,7 @@ require "../../src/tui/app"
 #
 # A pending RECORDING tool call lives in the ACTIVE zone like any running
 # tool. render_recording_tool draws TWO lines while capturing (the REC timer
-# + the "Ctrl+R / Esc / Space" hint). The transition to transcribing used to
+# + the "Ctrl+R / Space / Esc" hint). The transition to transcribing used to
 # drop the hint line, shrinking the active zone mid-flight: SyncBugsCount
 # fired and, once the transcript is taller than the screen, the
 # viewport-shrink full-repaint path rewrote rows that already sat in the

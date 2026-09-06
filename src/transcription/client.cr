@@ -5,7 +5,7 @@ module H2code
   module Transcription
     # One event from the /v1/record/start SSE stream (see VOICE_PROTOCOL.md
     # in the h2voice repo). `type` is one of: started, level, stopped,
-    # transcribing, result, error.
+    # cancelled, transcribing, result, error.
     struct RecordEvent
       property kind : String
       property text : String = ""
@@ -20,7 +20,8 @@ module H2code
       def initialize(@kind : String)
       end
 
-      # SSE event type: started | level | stopped | transcribing | result | error.
+      # SSE event type: started | level | stopped | cancelled | transcribing |
+      # result | error.
       def type : String
         @kind
       end
@@ -114,6 +115,20 @@ module H2code
       def record_stop : Bool
         with_client do |client|
           resp = client.post("/v1/record/stop")
+          resp.status.success?
+        end
+      rescue IO::Error
+        false
+      end
+
+      # POST /v1/record/cancel (protocol 0.3.0). Aborts the capture without
+      # transcription: the server discards the audio and the terminal
+      # `cancelled` event arrives on the start stream. Returns true when the
+      # server accepted the cancel. False when no session was active (409),
+      # the server predates the endpoint (404) or it is unreachable.
+      def record_cancel : Bool
+        with_client do |client|
+          resp = client.post("/v1/record/cancel")
           resp.status.success?
         end
       rescue IO::Error

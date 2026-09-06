@@ -3,10 +3,12 @@ require "../../src/tui/diff"
 require "../../src/tui/app"
 
 # Interactive h2voice mock: the /v1/record/start SSE stream stays open after
-# `started`, and /v1/record/stop finishes the session by writing the
-# transcribing + result events onto that stream — mirroring the real server.
+# `started`; /v1/record/stop finishes the session by writing the
+# transcribing + result events onto that stream, /v1/record/cancel by
+# writing a single `cancelled` event — mirroring the real server.
 class VoiceSessionMock
   property stop_requests : Int32 = 0
+  property cancel_requests : Int32 = 0
   # When true the SSE stream is closed right after `started` — the server
   # dying mid-session, no result or error event ever arrives.
   property? drop_stream : Bool = false
@@ -55,6 +57,17 @@ class VoiceSessionMock
       if sse = @sse
         sse << sse(%({"type":"transcribing","engine":"gigaam","language":"ru"}))
         sse << sse(%({"type":"result","text":"привет из теста","duration_ms":4200,"engine":"gigaam","language":"ru"}))
+        sse.flush
+        sse.close
+      end
+    when "/v1/record/cancel"
+      @cancel_requests += 1
+      body = %({"status":"cancelled","duration_ms":4200})
+      client << "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: #{body.bytesize}\r\n\r\n#{body}"
+      client.flush
+      client.close
+      if sse = @sse
+        sse << sse(%({"type":"cancelled","duration_ms":4200}))
         sse.flush
         sse.close
       end
@@ -127,7 +140,7 @@ describe H2code::TUI::App do
       lines, _editor_line, log_size = app.build_rendered_lines(80)
       active = lines[log_size..].map { |l| l.gsub(/\e\[[0-9;]*m/, "") }
       active.join('\n').should contain("REC")
-      active.join('\n').should contain("Ctrl+R / Esc / Space — stop and transcribe")
+      active.join('\n').should contain("Ctrl+R / Space — stop and transcribe · Esc — cancel")
 
       # Ctrl+R #2: stop → transcribing → result. The transcription is fed
       # into the normal message path (agent idle → immediate turn), and the
@@ -152,6 +165,49 @@ describe H2code::TUI::App do
       log.join('\n').should contain("привет из теста")
 
       submitted.should eq(["привет из теста"])
+    ensure
+      mock.close
+    end
+  end
+
+  it "cancels a recording via Esc without transcribing (protocol 0.3.0)" do
+    mock = VoiceSessionMock.new
+    begin
+      app = H2code::TUI::App.new
+      config = H2code::Config::Config.new
+      config.transcription = H2code::Config::TranscriptionConfig.new(
+        enabled: true, socket: mock.socket_path, engine: "auto", language: "ru")
+      app.app_config = config
+      submitted = [] of String
+      app.run_turn_cb = ->(text : String, _persisted : Bool) do
+        submitted << text
+        nil
+      end
+
+      app.toggle_voice_recording
+      voice_wait_until { app.voice_recording? }.should be_true
+
+      # Escape: cancel instead of stop — no stop request, no transcription.
+      app.cancel_voice_recording
+      voice_wait_until { !app.voice_active? }.should be_true
+      mock.cancel_requests.should eq(1)
+      mock.stop_requests.should eq(0)
+
+      done = app.@messages.find { |t| t.role == "tool" && t.tool_name == "RECORDING" }
+      done.should_not be_nil
+      if m = done
+        m.is_error?.should be_false
+        m.tool_result.should eq("")
+        meta = JSON.parse(m.tool_args.to_s)
+        meta["cancelled"].as_bool.should be_true
+        meta["duration_ms"].as_i64.should eq(4200)
+      end
+
+      lines, _editor_line, log_size = app.build_rendered_lines(80)
+      log = lines[0...log_size].map { |l| l.gsub(/\e\[[0-9;]*m/, "") }
+      log.join('\n').should contain("Cancelled · 00:04")
+
+      submitted.should be_empty
     ensure
       mock.close
     end

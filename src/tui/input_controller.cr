@@ -168,9 +168,17 @@ module H2code
           return
         end
 
-        # While a voice recording is in flight, Escape and Space stop it
-        # (same as Ctrl+R) instead of their normal editing behavior.
-        if voice_recording? && (key.key.escape? || (key.key.char? && key.char == ' '))
+        # While a voice recording is in flight, Escape cancels it (audio
+        # discarded, no transcription) while Space stops it with
+        # transcription (same as Ctrl+R) — both instead of their normal
+        # editing behavior.
+        if voice_recording? && key.key.escape?
+          cancel_voice_recording
+          @dirty = true
+          return
+        end
+
+        if voice_recording? && key.key.char? && key.char == ' '
           toggle_voice_recording
           @dirty = true
           return

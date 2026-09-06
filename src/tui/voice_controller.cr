@@ -4,9 +4,11 @@ module H2code
     # VOICE_PROTOCOL.md). Ctrl+R or a double-Space press starts a recording
     # session: the TUI shows a pending "RECORDING" tool entry (active zone,
     # animated), while a detached fiber consumes the server's SSE stream.
-    # Ctrl+R, Escape or Space stops the capture; the server transcribes and
+    # Ctrl+R or Space stops the capture; the server transcribes and
     # the final text is delivered as a normal user
     # message (queued when the agent is busy, sent immediately when idle).
+    # Escape cancels instead (protocol 0.3.0): the audio is discarded, no
+    # transcription runs.
     module VoiceController
       # Tool name shown in the transcript for a voice recording.
       RECORDING_TOOL = "RECORDING"
@@ -22,15 +24,43 @@ module H2code
         @voice_recording && voice_active?
       end
 
-      # Ctrl+R / Esc / Space handler. Toggle: start when idle, stop-and-
+      # Ctrl+R / Space handler. Toggle: start when idle, stop-and-
       # transcribe while a session is in flight (ignored during the stop→result
       # gap). Public so embedded drivers and specs can drive the same action as
-      # the key.
+      # the key. Escape is NOT wired here — it cancels via
+      # cancel_voice_recording instead of stopping.
       def toggle_voice_recording : Nil
         if voice_active?
           stop_voice_recording
         else
           start_voice_recording
+        end
+      end
+
+      # Escape handler: abort the capture without transcription (the server
+      # discards the audio; the terminal `cancelled` SSE event finalizes the
+      # entry). Public so embedded drivers and specs can drive the same action
+      # as the key.
+      def cancel_voice_recording : Nil
+        return unless voice_recording?
+        cfg = voice_config
+        client = Transcription::Client.from_config(cfg) if cfg
+        @voice_recording = false
+        # Freeze the recorded duration like stop does, so the cancelled
+        # header can show how much audio was thrown away.
+        @voice_recorded_ms = voice_elapsed_ms
+        @dirty = true
+        spawn do
+          begin
+            # Fall back to stop when the server rejects the cancel (404 on a
+            # pre-0.3.0 server, or 409 race): leaving the mic capturing
+            # forever is worse than transcribing audio the user discarded.
+            unless client.try(&.record_cancel)
+              client.try(&.record_stop)
+            end
+          rescue ex : IO::Error
+            # The SSE stream will surface the failure; cancel is best-effort.
+          end
         end
       end
 
@@ -158,15 +188,22 @@ module H2code
                   "language" => evt.language}.to_json
           voice_finish(result: evt.text, meta: meta)
           deliver_transcription(evt.text)
+        when "cancelled"
+          # Terminal event of /v1/record/cancel: the audio was discarded
+          # server-side, nothing to transcribe or deliver.
+          duration = evt.duration_ms > 0 ? evt.duration_ms : voice_elapsed_ms
+          voice_finish(cancelled: true,
+                       meta: {"cancelled" => true, "duration_ms" => duration}.to_json)
         when "error"
           voice_finish(error: "#{evt.code}: #{evt.message}")
         end
       end
 
       # Terminal path for the voice tool message: attach the result (or the
-      # error) so it migrates from the active zone into the log.
+      # error, or the cancelled marker) so it migrates from the active zone
+      # into the log.
       private def voice_finish(*, result : String? = nil, meta : String? = nil,
-                               error : String? = nil) : Nil
+                               error : String? = nil, cancelled : Bool = false) : Nil
         @voice_recording = false
         @voice_level = 0.0
         idx = @voice_msg_idx
@@ -175,6 +212,11 @@ module H2code
             msg.is_error = true
             msg.tool_result = err
             msg.tool_args = nil
+          elsif cancelled
+            # Empty (but non-nil) result: the entry counts as finished, the
+            # header reads "Cancelled", and no result body is rendered.
+            msg.tool_result = ""
+            msg.tool_args = meta
           else
             msg.tool_result = result.to_s
             msg.tool_args = meta

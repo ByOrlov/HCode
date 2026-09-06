@@ -165,6 +165,25 @@ describe H2code::Transcription::Client do
     end
   end
 
+  it "reports record_cancel success, 409 and failure" do
+    VoiceMockServer.start do |mock|
+      mock.route("/v1/record/cancel", 200, ["Content-Type: application/json"], %({"status":"cancelled","duration_ms":2130}))
+      client = H2code::Transcription::Client.new(mock.socket_path)
+      client.record_cancel.should be_true
+
+      missing = H2code::Transcription::Client.new("/nonexistent/h2voice-mock.sock")
+      missing.record_cancel.should be_false
+    end
+
+    # 409 not_recording (and 404 from pre-0.3.0 servers) must read as false
+    # so the caller can fall back to record_stop.
+    VoiceMockServer.start do |mock|
+      mock.route("/v1/record/cancel", 409, ["Content-Type: application/json"], %({"status":"not_recording"}))
+      client = H2code::Transcription::Client.new(mock.socket_path)
+      client.record_cancel.should be_false
+    end
+  end
+
   it "expands ~ and honours env overrides in from_config" do
     home = ENV["HOME"]? || "/tmp"
     cfg = H2code::Config::TranscriptionConfig.new(enabled: true, socket: "~/../h2voice/voice.sock")
