@@ -319,14 +319,28 @@ describe H2code::TUI::App do
     end
   end
 
-  it "keeps spaces normal when transcription is disabled" do
+  it "shows an error on a double-Space tap when transcription is disabled" do
     app = H2code::TUI::App.new
     config = H2code::Config::Config.new
     config.transcription.enabled = false
     app.app_config = config
+    app.voice_presence = FakeVoicePresence.new(true)
+
+    # First tap: not consumed (the space is typed normally), but armed. In
+    # the real flow handle_key inserts the space into the editor after
+    # handle_space_tap returns false — mirror that here.
     app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
-    app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_false
-    app.voice_active?.should be_false
+    app.@last_space_at.should_not be_nil
+    app.@editor.handle_input(H2code::TUI::KeyEvent.char(' '))
+
+    # Second tap: consumed even though voice is disabled — start_voice_
+    # recording emits the config error instead of silently doing nothing,
+    # and the typed space is removed just like on the enabled path.
+    app.handle_space_tap(H2code::TUI::KeyEvent.char(' ')).should be_true
     app.@last_space_at.should be_nil
+    app.voice_active?.should be_false
+    app.@editor.text.should eq("")
+    app.@messages.last.role.should eq("error")
+    app.@messages.last.content.should contain("[transcription]")
   end
 end

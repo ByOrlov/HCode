@@ -285,14 +285,14 @@ module H2code
       # typed between them — the editor character right before the cursor must
       # be the first press's space. The first press was already inserted into
       # the editor by normal editing, so it is removed when the second one
-      # fires. Returns true when the key was consumed; returns false (recording
-      # nothing, not toggling) when the transcription config is missing or
-      # disabled so spaces keep typing normally. Public so specs can drive the
+      # fires. Returns true when the key was consumed; returns false when this
+      # press is not the second of a pair (it is then typed normally). The
+      # config is deliberately not checked here: start_voice_recording emits
+      # the disabled/missing-[transcription] error, so the double tap surfaces
+      # it instead of silently doing nothing. Public so specs can drive the
       # same path as handle_key.
       def handle_space_tap(key : KeyEvent) : Bool
         return false if !key.key.char? || key.char != ' ' || key.ctrl? || key.alt?
-        return false unless cfg = voice_config
-        return false unless cfg.enabled?
         now = Time.monotonic
         last = @last_space_at
         if last && (now - last).total_milliseconds <= DOUBLE_SPACE_MS &&
