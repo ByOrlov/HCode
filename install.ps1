@@ -1,13 +1,19 @@
 # H2Code installer -- Windows (PowerShell).
 # Usage:  irm https://raw.githubusercontent.com/ByOrlov/H2Code/master/install.ps1 | iex
+#         powershell -File install.ps1 -LocalBinary h2code.exe   -- install a locally
+#         built binary instead of downloading a release asset (used by `rake install`)
 #Requires -Version 5.1
-[CmdletBinding()] param()
+[CmdletBinding()] param([string]$LocalBinary)
 
 $ErrorActionPreference = 'Stop'
 
 $Repo = 'ByOrlov/H2Code'
 $InstallDir = if ($env:H2CODE_INSTALL_DIR) { $env:H2CODE_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'h2code\bin' }
 $BinName = 'h2code.exe'
+
+# When driven from a console (rake install), skip the "Press Enter to close"
+# pauses — they exist so a double-clicked window doesn't vanish instantly.
+$ScriptMode = [bool]$LocalBinary
 
 function Write-Info($msg) { Write-Host "  $msg" }
 function Write-Err($msg)  { Write-Host "[x] $msg" -ForegroundColor Red }
@@ -17,8 +23,10 @@ function Write-Err($msg)  { Write-Host "[x] $msg" -ForegroundColor Red }
 # PowerShell" / irm|iex all tear down the window as soon as we exit).
 function Fail($msg) {
     Write-Err $msg
-    Write-Host ""
-    Read-Host "Press Enter to close" | Out-Null
+    if (-not $ScriptMode) {
+        Write-Host ""
+        Read-Host "Press Enter to close" | Out-Null
+    }
     exit 1
 }
 
@@ -167,30 +175,43 @@ try {
     $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
 
     Write-Host "Installing H2Code for ${arch}-windows..." -ForegroundColor White
-    Write-Info "Release asset: $Asset"
+    if ($LocalBinary) {
+        Write-Info "Source:        local build ($LocalBinary)"
+    } else {
+        Write-Info "Release asset: $Asset"
+    }
     Write-Info "Install dir:   $InstallDir"
 
     # --- Download -----------------------------------------------------------------
     $Tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "h2code-$(New-Guid)") -Force
     try {
-        $ZipPath = Join-Path $Tmp.FullName $Asset
-        Write-Info "Downloading $Url..."
-        try {
-            Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
-        } catch {
-            Write-Err "Download failed: $_"
-            Write-Err "If you're on ${arch}-windows, the asset may not be published yet."
-            Write-Err "Check available assets at: https://github.com/$Repo/releases/latest"
-            Fail "Installation aborted."
-        }
+        if ($LocalBinary) {
+            # Local binary mode (rake install from a source checkout): skip the
+            # release download and install the given binary instead.
+            if (-not (Test-Path $LocalBinary)) {
+                Fail "Local binary not found: $LocalBinary"
+            }
+            $Src = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LocalBinary)
+        } else {
+            $ZipPath = Join-Path $Tmp.FullName $Asset
+            Write-Info "Downloading $Url..."
+            try {
+                Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
+            } catch {
+                Write-Err "Download failed: $_"
+                Write-Err "If you're on ${arch}-windows, the asset may not be published yet."
+                Write-Err "Check available assets at: https://github.com/$Repo/releases/latest"
+                Fail "Installation aborted."
+            }
 
-        # --- Verify + extract -----------------------------------------------------
-        Write-Info "Extracting..."
-        Expand-Archive -Path $ZipPath -DestinationPath $Tmp.FullName -Force
+            # --- Verify + extract -----------------------------------------------------
+            Write-Info "Extracting..."
+            Expand-Archive -Path $ZipPath -DestinationPath $Tmp.FullName -Force
+            $Src = Join-Path $Tmp.FullName $BinName
+        }
 
         # --- Install --------------------------------------------------------------
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        $Src = Join-Path $Tmp.FullName $BinName
         $Dest = Join-Path $InstallDir $BinName
         Move-Item -Path $Src -Destination $Dest -Force
         Write-Info "Installed $Dest"
@@ -251,7 +272,9 @@ try {
     if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
         Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkGray
     }
-    Write-Host ""
-    Read-Host "Press Enter to close" | Out-Null
+    if (-not $ScriptMode) {
+        Write-Host ""
+        Read-Host "Press Enter to close" | Out-Null
+    }
     exit 1
 }

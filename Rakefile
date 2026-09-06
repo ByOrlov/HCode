@@ -157,20 +157,21 @@ task :build_release do
   build_h2code(release: true)
 end
 
-# `rake install` — same flow as install.sh (runtime deps, ~/.h2code/bin, PATH),
+# `rake install` — same flow as the installers (runtime deps, install dir, PATH),
 # but installs a binary built from this checkout instead of a release asset.
-# The dependency/PATH logic lives in install.sh (single source of truth);
-# the built ./h2code is passed to it as a local binary.
-desc "Build (release) and install to ~/.h2code/bin — same as install.sh, but from this checkout"
+# The dependency/PATH logic lives in install.sh / install.ps1 (single source of
+# truth); the built binary is passed to them as a local binary.
+desc "Build (release) and install (~/.h2code/bin on Unix, %LOCALAPPDATA%\\h2code\\bin on Windows)"
 task :install do
-  if windows?
-    abort "rake install is not supported on Windows — build with `rake build` or use install.ps1"
-  end
   unless system("crystal", "--version", out: File::NULL, err: File::NULL)
     abort "Crystal not found. Install it first: https://crystal-lang.org/install/"
   end
   Rake::Task["build_release"].invoke
-  sh "bash install.sh ./h2code"
+  if windows?
+    sh "powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -LocalBinary \"#{File.expand_path("h2code.exe", __dir__)}\""
+  else
+    sh "bash install.sh ./h2code"
+  end
 end
 
 namespace :build do
