@@ -157,6 +157,22 @@ task :build_release do
   build_h2code(release: true)
 end
 
+# `rake install` — same flow as install.sh (runtime deps, ~/.h2code/bin, PATH),
+# but installs a binary built from this checkout instead of a release asset.
+# The dependency/PATH logic lives in install.sh (single source of truth);
+# the built ./h2code is passed to it as a local binary.
+desc "Build (release) and install to ~/.h2code/bin — same as install.sh, but from this checkout"
+task :install do
+  if windows?
+    abort "rake install is not supported on Windows — build with `rake build` or use install.ps1"
+  end
+  unless system("crystal", "--version", out: File::NULL, err: File::NULL)
+    abort "Crystal not found. Install it first: https://crystal-lang.org/install/"
+  end
+  Rake::Task["build_release"].invoke
+  sh "bash install.sh ./h2code"
+end
+
 namespace :build do
   desc "Build every binary: h2code, ameba, lines_demo, mock_h2code, mockfast_h2code, mockshort_h2code"
   task :all => [:h2code, :ameba, :lines_demo, :mock_h2code, :mockfast_h2code, :mockshort_h2code]
